@@ -1,3 +1,8 @@
+-=(CDi_Senhor notes)=-
+
+Tested: Working Video 720p, 1080p & Sound
+
+___
 # CDi_MiSTer
 
 A repo dedicated to create an FPGA implementation of the Philips CD-i to be usable for the MiSTer FPGA project.
