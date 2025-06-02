@@ -281,14 +281,18 @@ class CDi {
         png_destroy_write_struct(&png, &info);
     }
 
+    uint16_t phase_accumulator;
+
     void clock() {
         for (int i = 0; i < 2; i++) {
 
             // clk_sys is 30 MHz
             dut.rootp->emu__DOT__clk_sys = (sim_time & 1);
 
-            // clk_audio is 22.2264
-            dut.rootp->emu__DOT__clk_audio = (sim_time & 1);
+            // clk_audio is 22.2264 MHz
+            phase_accumulator += 24277;
+            dut.rootp->emu__DOT__clk_audio = (phase_accumulator & 0x8000) ? 1 : 0;
+
             dut.eval();
 #ifdef TRACE
             if (do_trace) {
@@ -549,7 +553,7 @@ class CDi {
             dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_x == 0) {
             char filename[100];
 
-            if (pixel_index > 100) {
+            if (pixel_index > 400) {
                 auto current = std::chrono::system_clock::now();
                 std::chrono::duration<double> elapsed_seconds = current - start;
                 sprintf(filename, "%d/video_%03d.png", instanceid, frame_index);
