@@ -40,14 +40,13 @@ Core Utilization:
 
 Expected synthesis times with Quartus 17.0.2
 
-    AMD Ryzen 7 3700X 8-Core    14 minutes
+    AMD Ryzen 7 3700X 8-Core                   14 minutes
+    Intel(R) Core(TM) i5-8265U CPU @ 1.60GHz   25 minutes
 
 ### TODOs
 
 * Broken audio with "Lost Eden"
 * Slow motion with VCDs is behaving incorrect
-* Unify save file name (.chd and .cue and subfolder) https://github.com/MiSTer-devel/CDi_MiSTer/issues/11
-* Multi disc titles that share one NvRAM
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
 * Problems with "Les Guignols de l’Info"?
