@@ -244,7 +244,7 @@ module emu (
         "jn,B,A,Y;",
         // so all options will get default values on first start.
         "I,",
-        "NvRAM saved,",
+        "NvRAM saved;",
         "V,v",
         `BUILD_DATE
     };
