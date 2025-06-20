@@ -201,7 +201,7 @@ module cditop (
         .hps_rtc(hps_rtc)
     );
 
-    wire vdsc_int;
+    wire vdsc_int  /*verilator public_flat_rd*/;
 
     // VSD is set if EV-bit is set and the backdrop is shown
     // A real CDI 210/05 uses VSA because of analog
