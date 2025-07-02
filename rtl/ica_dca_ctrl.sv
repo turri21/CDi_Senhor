@@ -46,16 +46,15 @@ module ica_dca_ctrl (
     bit [3:0] dca_burst_cnt;
     bit [31:0] instruction;
 
+    bit [4:0] stall_cnt;
+
     enum bit [3:0] {
         IDLE,
         ICA_READ0,
         ICA_READ1,
         ICA_WAIT_FOR_ACK,
         ICA_EXECUTE,
-        ICA_STALL1,
-        ICA_STALL2,
-        ICA_STALL3,
-        ICA_STALL4,
+        ICA_STALL,
         DCA_READ0,
         DCA_READ1,
         DCA_READ2,
@@ -106,16 +105,14 @@ module ica_dca_ctrl (
             dca_misaligned <= 0;
 
             disp_params.cm <= 0;
-            disp_params.mf1 <= 0;
-            disp_params.mf2 <= 0;
-            disp_params.ft1 <= 0;
-            disp_params.ft2 <= 0;
+            disp_params.mf <= kMosaicFactor2;
+            disp_params.ft <= kBitmap;
             instruction <= 0;
         end else begin
 
             case (state)
                 IDLE: begin
-                    if (!ica_ended && !hblank) begin
+                    if (!ica_ended) begin
                         state <= ICA_READ0;
                         address <= ica_pointer;
                         // Read one instruction of 4 byte
@@ -174,12 +171,12 @@ module ica_dca_ctrl (
                     end
                 end
                 ICA_EXECUTE: begin
-                    state <= ICA_STALL1;
+                    state <= ICA_STALL;
                 end
-                ICA_STALL1: state <= ICA_STALL2;
-                ICA_STALL2: state <= ICA_STALL3;
-                ICA_STALL3: state <= ICA_STALL4;
-                ICA_STALL4: state <= IDLE;
+                ICA_STALL: begin
+                    stall_cnt <= stall_cnt + 1;
+                    if (stall_cnt == 0) state <= IDLE;
+                end
 
                 DCA_READ0: begin
                     if (burstdata_valid) begin
@@ -249,7 +246,7 @@ module ica_dca_ctrl (
                     end
                     1: begin
                         // no operation
-                        // `dp(("%s NOP", unit_name);
+                        // `dp(("%s NOP", unit_name));
                     end
                     2: begin
                         // reload dcp
@@ -294,10 +291,8 @@ module ica_dca_ctrl (
 
                         if (instruction[27]) begin
                             disp_params.cm <= instruction[4];
-                            disp_params.mf1 <= instruction[3];
-                            disp_params.mf2 <= instruction[2];
-                            disp_params.ft1 <= instruction[1];
-                            disp_params.ft2 <= instruction[0];
+                            disp_params.mf <= mosaic_factor_e'(instruction[3:2]);
+                            disp_params.ft <= file_type_e'(instruction[1:0]);
                             disp_params.strobe <= 1;
 
                             `dp(("%s RELOAD DISPLAY PARAMETERS %b", unit_name, instruction[4:0]));

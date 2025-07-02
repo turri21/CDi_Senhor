@@ -12,7 +12,7 @@ function string coding_method_name(bit [3:0] coding, bit plane_b);
     if (plane_b) begin
         case (coding)
             4'b0000: coding_method_name = "OFF";
-            4'b0001: coding_method_name = "CLUT8";
+            4'b0001: coding_method_name = "RGB555";
             4'b0011: coding_method_name = "CLUT7";
             4'b0100: coding_method_name = "CLUT7+7";
             4'b0101: coding_method_name = "DYUV";
@@ -22,7 +22,7 @@ function string coding_method_name(bit [3:0] coding, bit plane_b);
     end else begin
         case (coding)
             4'b0000: coding_method_name = "OFF";
-            4'b0001: coding_method_name = "RGB555";
+            4'b0001: coding_method_name = "CLUT8";
             4'b0011: coding_method_name = "CLUT7";
             4'b0101: coding_method_name = "DYUV";
             4'b1011: coding_method_name = "CLUT4";
@@ -69,8 +69,7 @@ module mcd212 (
 
     input [1:0] debug_force_video_plane,
     input [1:0] debug_limited_to_full,
-    input disable_cpu_starve,
-    input debug_ica_at_vblank
+    input disable_cpu_starve
 );
 
     // Memory Swapping according to chapter 3.4
@@ -121,7 +120,7 @@ module mcd212 (
     // TODO A hack is applied here
     // Even and odd fields are swapped to revert a hack in video timing
     // to fix the flickering OSD
-    wire ica_parity  /*verilator public_flat_rd*/ = !command_register_dcr1.sm | !vt_field_parity;
+    wire ica_parity  /*verilator public_flat_rd*/ = !command_register_dcr1.sm | vt_field_parity;
 
     // Always switches between 1 and 0.
     // If interlacing is enabled, it is consistent with the real parity
@@ -429,13 +428,30 @@ module mcd212 (
 
     wire [8:0] video_y;
     wire [12:0] video_x;
-    wire new_frame  /*verilator public_flat_rd*/;
+    bit new_frame  /*verilator public_flat_rd*/;
     wire new_line  /*verilator public_flat_rd*/;
     wire new_pixel;
     wire new_pixel_lores;
     wire new_pixel_hires;
     bit hblank_vt;
     bit hblank_vt_q;
+
+    bit vblank_latched;
+    bit vblank_q;
+
+    always_ff @(posedge clk) begin
+        new_frame <= 0;
+        vblank_q  <= vblank;
+
+        // VBlank has started? Keep track of that
+        if (vblank && !vblank_q) vblank_latched <= 1;
+
+        // When VBlank has started and DCA has finished, begin with ICA immediately
+        if (vblank_latched && !ica0_as && !ica1_as) begin
+            vblank_latched <= 0;
+            new_frame <= 1;
+        end
+    end
 
     // we should have 8-9 refresh cycles per horizontal line
     // to fulfill 8192 refreshes per 64ms 
@@ -465,13 +481,11 @@ module mcd212 (
         .vsync(vsync),
         .hblank(hblank_vt),
         .vblank(vblank),
-        .new_frame(new_frame),
         .new_line(new_line),
         .new_pixel(new_pixel),
         .new_pixel_lores(new_pixel_lores),
         .new_pixel_hires(new_pixel_hires),
-        .display_active(display_active),
-        .debug_ica_at_vblank(debug_ica_at_vblank)
+        .display_active(display_active)
     );
 
 
@@ -498,21 +512,15 @@ module mcd212 (
         bit [5:0] adr;
     } command_register_dcr2;
 
-    struct packed {
-        bit mf1;
-        bit mf2;
-        bit ft1;
-        bit ft2;
-        bit [5:0] adr;
-    } display_decoder_register_ddr1;
 
-    struct packed {
-        bit mf1;
-        bit mf2;
-        bit ft1;
-        bit ft2;
+    typedef struct packed {
+        mosaic_factor_e mf;
+        file_type_e ft;
         bit [5:0] adr;
-    } display_decoder_register_ddr2;
+    } s_display_decoder_register_t;
+
+    s_display_decoder_register_t display_decoder_register_ddr1;
+    s_display_decoder_register_t display_decoder_register_ddr2;
 
     struct packed {
         bit di1;
@@ -536,18 +544,14 @@ module mcd212 (
         end else begin
 
             if (ica0_disp_param_out.strobe) begin
-                display_decoder_register_ddr1.mf1 <= ica0_disp_param_out.mf1;
-                display_decoder_register_ddr1.mf2 <= ica0_disp_param_out.mf2;
-                display_decoder_register_ddr1.ft1 <= ica0_disp_param_out.ft1;
-                display_decoder_register_ddr1.ft2 <= ica0_disp_param_out.ft2;
+                display_decoder_register_ddr1.mf <= ica0_disp_param_out.mf;
+                display_decoder_register_ddr1.ft <= ica0_disp_param_out.ft;
                 command_register_dcr1.cm1 <= ica0_disp_param_out.cm;
             end
 
             if (ica1_disp_param_out.strobe) begin
-                display_decoder_register_ddr2.mf1 <= ica1_disp_param_out.mf1;
-                display_decoder_register_ddr2.mf2 <= ica1_disp_param_out.mf2;
-                display_decoder_register_ddr2.ft1 <= ica1_disp_param_out.ft1;
-                display_decoder_register_ddr2.ft2 <= ica1_disp_param_out.ft2;
+                display_decoder_register_ddr2.mf <= ica1_disp_param_out.mf;
+                display_decoder_register_ddr2.ft <= ica1_disp_param_out.ft;
                 command_register_dcr2.cm2 <= ica1_disp_param_out.cm;
             end
 
@@ -724,7 +728,7 @@ module mcd212 (
         .burstdata_valid(file0_burstdata_valid),
         .vsr_in(ica0_vsr),
         .out(file0_out),
-        .read_pixels(!vblank && image_coding_method_register.cm13_10_planea != 0)
+        .read_pixels(!vblank)
     );
 
 
@@ -743,7 +747,7 @@ module mcd212 (
         .burstdata_valid(file1_burstdata_valid),
         .vsr_in(ica1_vsr),
         .out(file1_out),
-        .read_pixels(!vblank && image_coding_method_register.cm23_20_planeb != 0)
+        .read_pixels(!vblank)
     );
 
     pixelstream dyuv0_in (.clk);
@@ -774,7 +778,8 @@ module mcd212 (
         .st(control_register_crsr1w.st),
         .src(rle0_in),
         .dst(rle0_out),
-        .passthrough(!display_decoder_register_ddr1.ft1)
+        .ft(display_decoder_register_ddr1.ft),
+        .mf(display_decoder_register_ddr1.mf)
     );
 
     clut_rle rle1 (
@@ -783,7 +788,8 @@ module mcd212 (
         .st(control_register_crsr1w.st),
         .src(rle1_in),
         .dst(rle1_out),
-        .passthrough(!display_decoder_register_ddr2.ft1)
+        .ft(display_decoder_register_ddr2.ft),
+        .mf(display_decoder_register_ddr1.mf)
     );
 
 
@@ -854,6 +860,8 @@ module mcd212 (
     end
 
     always_ff @(posedge clk) begin
+        rgb555 <= {synchronized_pixel0, synchronized_pixel1};
+
         if (new_line) begin
             synchronized_pixel0 <= 0;
             synchronized_pixel1 <= 0;
@@ -865,13 +873,13 @@ module mcd212 (
             if (image_coding_method_register.cm13_10_planea == 4'b1011 && new_pixel_hires && !new_pixel_lores)
                 synchronized_pixel0[7:4] <= {
                     // Bit 3 must be forced to 0, when RLE is active
-                    synchronized_pixel0[3] && !display_decoder_register_ddr1.ft1,
+                    synchronized_pixel0[3] && display_decoder_register_ddr1.ft != kRunLength,
                     synchronized_pixel0[2:0]
                 };
             if (image_coding_method_register.cm23_20_planeb == 4'b1011 && new_pixel_hires && !new_pixel_lores)
                 synchronized_pixel1[7:4] <= {
                     // Bit 3 must be forced to 0, when RLE is active
-                    synchronized_pixel1[3] && !display_decoder_register_ddr2.ft1,
+                    synchronized_pixel1[3] && display_decoder_register_ddr2.ft != kRunLength,
                     synchronized_pixel1[2:0]
                 };
         end
@@ -915,6 +923,13 @@ module mcd212 (
         bit r;
         bit g;
         bit b;
+    } cursor_color;
+
+    struct packed {
+        bit y;  // 1 full brightness, 0 half brightness
+        bit r;
+        bit g;
+        bit b;
     } backdrop_color_register;
 
     struct packed {
@@ -942,6 +957,16 @@ module mcd212 (
     bit inside_cursor_window;
     bit plane_b_in_front_of_a;
 
+    // Counts 0 to 11 to keep track of 12 frame periods
+    bit [3:0] cursor_blink_framecnt;
+    // Counts 12 frame periods the cursor is in the current state
+    bit [2:0] cursor_blink_periodcnt;
+    // If 1, then the cursor is either blinked off or complementary
+    // If 0, the cursor is shown like normal
+    bit cursor_blink_state;
+
+    localparam CURSOR_BLINK_PERIOD = 12;
+
     // mouse cursor
     always_ff @(posedge clk) begin
         if (hblank) active_pixel <= 0;
@@ -963,12 +988,49 @@ module mcd212 (
                                     (active_pixel >= cursor_position_reg.x) && (active_pixel < cursor_position_reg.x + 32);
             cursor_pixel <= active_cursor_line[4'((cursor_position_reg.x-active_pixel-10'd1)>>1)];
         end
+
+        if (new_frame) begin
+            if (cursor_control_register.cof == 0 || cursor_control_register.con == 0) begin
+                // Handle COF=0 or CON=0 as reset condition
+                cursor_blink_framecnt <= 0;
+                cursor_blink_state <= 0;
+                cursor_blink_periodcnt <= 0;
+            end else if (cursor_blink_framecnt == CURSOR_BLINK_PERIOD - 1) begin
+                cursor_blink_framecnt <= 0;
+
+                if (cursor_blink_periodcnt == cursor_control_register.cof - 1 && cursor_blink_state) begin
+                    cursor_blink_state <= 0;
+                    cursor_blink_periodcnt <= 0;
+                end else if (cursor_blink_periodcnt == cursor_control_register.con - 1 && !cursor_blink_state) begin
+                    cursor_blink_state <= 1;
+                    cursor_blink_periodcnt <= 0;
+                end else begin
+                    cursor_blink_periodcnt <= cursor_blink_periodcnt + 1;
+                end
+            end else begin
+                cursor_blink_framecnt <= cursor_blink_framecnt + 1;
+            end
+
+        end
+
+        // If blink type is on/off, force cursor_pixel to 0
+        if (!cursor_control_register.blkc && cursor_blink_state) cursor_pixel <= 0;
+    end
+
+    // Cursor complementary colors
+    always_comb begin
+        cursor_color.y = cursor_control_register.y;
+        cursor_color.r = cursor_control_register.r ^ cursor_blink_state;
+        cursor_color.g = cursor_control_register.g ^ cursor_blink_state;
+        cursor_color.b = cursor_control_register.b ^ cursor_blink_state;
     end
 
     // color mixing
     rgb888_s plane_a;
     rgb888_s plane_b;
     rgb888_s vidout;
+
+    rgb555_s rgb555;
 
     function clut_entry_s RGB888ToClut(input rgb888_s rgb);
         RGB888ToClut.r = rgb.r[7:2];
@@ -983,8 +1045,27 @@ module mcd212 (
 
     bit [1:0] region_flags = 0;
 
-    wire plane_a_dyuv_active = image_coding_method_register.cm13_10_planea == 4'b0101;
-    wire plane_b_dyuv_active = image_coding_method_register.cm23_20_planeb == 4'b0101;
+    bit plane_a_dyuv_active;
+    bit plane_b_dyuv_active;
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            plane_a_dyuv_active <= 0;
+            plane_b_dyuv_active <= 0;
+        end else begin
+            // Kether is currently the only known title which switches to OFF coding mid frame.
+            // To avoid changing the pixel stream demux and causing alignment
+            // issues, the demux switch is only configured when not OFF.
+            // This might not be accurate and cause issues with other titles
+            // doing that and also switching coding in the meantime.
+            // If VSR is set again, then there might not be an issue
+
+            if (image_coding_method_register.cm13_10_planea != 0 || image_coding_method_register.cm23_20_planeb == 4'b0001)
+                plane_a_dyuv_active <= image_coding_method_register.cm13_10_planea == 4'b0101;
+            if (image_coding_method_register.cm23_20_planeb != 0)
+                plane_b_dyuv_active <= image_coding_method_register.cm23_20_planeb == 4'b0101;
+        end
+    end
 
     // Ignore Color Key for DYUV. Use it only for CLUT!
     wire plane_a_color_key_match = (clut_out0 == trans_color_plane_a) && !plane_a_dyuv_active;
@@ -1012,11 +1093,19 @@ module mcd212 (
             b = dyuv0_out.b;
         end
 
-        plane_a.r = WeightCalc(r, weight_a);
-        plane_a.g = WeightCalc(g, weight_a);
-        plane_a.b = WeightCalc(b, weight_a);
+        if (image_coding_method_register.cm13_10_planea != 0) begin
+            plane_a.r = WeightCalc(r, weight_a);
+            plane_a.g = WeightCalc(g, weight_a);
+            plane_a.b = WeightCalc(b, weight_a);
+        end else begin
+            // According to 8.1 PLANES, OFF is black level of 16
+            // On a real CD-i it is much blacker than 16. I assume 0
+            plane_a.r = 0;
+            plane_a.g = 0;
+            plane_a.b = 0;
+        end
 
-        if (image_coding_method_register.cm13_10_planea != 0 && command_register_dcr1.ic1) begin
+        if (command_register_dcr1.ic1) begin
             // Use only the lower 3 bits first as the highest bit just inverts the result
 
             assert (transparency_control_register.ta[2:0] != 3'b010);  // Transparency Bit?
@@ -1053,6 +1142,7 @@ module mcd212 (
         bit plane_b_transparent;  // Because logic in datasheet is also inverted
         bit [7:0] r, g, b;
         plane_b_transparent = 1;
+
         r = {clut_out1.r, 2'b00};
         g = {clut_out1.g, 2'b00};
         b = {clut_out1.b, 2'b00};
@@ -1063,11 +1153,25 @@ module mcd212 (
             b = dyuv1_out.b;
         end
 
-        plane_b.r = WeightCalc(r, weight_b);
-        plane_b.g = WeightCalc(g, weight_b);
-        plane_b.b = WeightCalc(b, weight_b);
+        if (image_coding_method_register.cm23_20_planeb == 4'b0001) begin  // RGB555
+            r = {rgb555.r, 3'b000};
+            g = {rgb555.g, 3'b000};
+            b = {rgb555.b, 3'b000};
+        end
 
-        if (image_coding_method_register.cm23_20_planeb != 0 && command_register_dcr2.ic2) begin
+        if (image_coding_method_register.cm23_20_planeb != 0) begin
+            plane_b.r = WeightCalc(r, weight_b);
+            plane_b.g = WeightCalc(g, weight_b);
+            plane_b.b = WeightCalc(b, weight_b);
+        end else begin
+            // According to 8.1 PLANES, OFF is black level of 16
+            // On a real CD-i it is much blacker than 16. I assume 0
+            plane_b.r = 0;
+            plane_b.g = 0;
+            plane_b.b = 0;
+        end
+
+        if (command_register_dcr2.ic2) begin
             // Use only the lower 3 bits first as the highest bit just inverts the result
 
             assert (transparency_control_register.tb[2:0] != 3'b010);  // Transparency Bit?
@@ -1098,7 +1202,6 @@ module mcd212 (
                 plane_b_transparent = 0;
         end
         plane_b_visible = !plane_b_transparent;
-
     end
 
     function automatic [7:0] clamped_mix(input [7:0] a, input [7:0] b);
@@ -1169,11 +1272,11 @@ module mcd212 (
 
         // cursor
         if (cursor_pixel && inside_cursor_window && cursor_control_register.en) begin
-            vidout.r = cursor_control_register.r ? 8'hff : 0;
-            vidout.g = cursor_control_register.g ? 8'hff : 0;
-            vidout.b = cursor_control_register.b ? 8'hff : 0;
+            vidout.r = cursor_color.r ? 8'hff : 0;
+            vidout.g = cursor_color.g ? 8'hff : 0;
+            vidout.b = cursor_color.b ? 8'hff : 0;
 
-            if (!cursor_control_register.y) begin
+            if (!cursor_color.y) begin
                 // Half brightness
                 vidout.r[7] = 0;
                 vidout.g[7] = 0;
@@ -1292,7 +1395,7 @@ module mcd212 (
                     7'h59: begin
                         // Mosaic Pixel Hold for Plane A
                         // TODO is ignored
-                        $display("Mosaic A %b", ch0_register_data[3:0]);
+                        $display("Mosaic A %b %b", ch0_register_data[23], ch0_register_data[7:0]);
                     end
                     7'h5b: begin
                         // Weight Factor for Plane A
@@ -1426,7 +1529,8 @@ module mcd212 (
                     7'h5A: begin
                         // Mosaic Pixel Hold for Plane B
                         // TODO is ignored
-                        $display("Mosaic B %b", ch0_register_data[3:0]);
+                        $display("Mosaic B %b %b", ch1_register_data[23], ch1_register_data[7:0]);
+
                     end
                     default: begin
                         if (ch1_register_adr >= 7'h40 && ch1_register_adr[6:3] != 4'b1010) begin
@@ -1470,7 +1574,7 @@ module mcd212 (
     bit [1:0] rf1_index;  // 0 to 3 as only required for Implicit Control
 
     always_ff @(posedge clk) begin
-        if (hblank) begin
+        if (new_line) begin
             region_flags <= 0;
             rf0_index <= 0;
             rf1_index <= 0;

@@ -8,9 +8,8 @@ module cditop (
     input debug_uart_fake_space,
     input [1:0] debug_force_video_plane,
     input [1:0] debug_limited_to_full,
-    input debug_audio_cd_in_tray,
+    input audio_cd_in_tray,
     input debug_disable_audio_attenuation,
-    input debug_ica_at_vblank,
 
     output bit ce_pix,
     output bit HBlank,
@@ -50,6 +49,7 @@ module cditop (
 
     bytestream.source slave_serial_out,
     bytestream.sink slave_serial_in,
+    input rc_eye,
     output slave_rts,
 
     output [31:0] cd_hps_lba,
@@ -57,6 +57,8 @@ module cditop (
     input cd_hps_ack,
     input cd_hps_data_valid,
     input [15:0] cd_hps_data,
+    input cd_img_mount,
+    input cd_img_mounted,
 
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
@@ -64,6 +66,7 @@ module cditop (
     output fail_not_enough_words,
     output fail_too_much_data,
     input  disable_cpu_starve,
+    input  config_auto_play,
 
     input [64:0] hps_rtc
 );
@@ -99,16 +102,38 @@ module cditop (
     wire attex_cs_slave = addr_byte[23:16] == 8'h31 && as;
     wire attex_cs_mk48 = addr_byte[23:16] == 8'h32 && as;
 
+    // Custom kernel module for OS9 to start a CD-i application after booting
+    // Written by "CD-i Fan" for "CD-i Emulator"
+    wire rom_playcdi_cs = ((addr_byte >= 24'hf00000) && (addr_byte <= 24'hf00068)) && as;
+    bit [15:0] rom_playcdi[64];
+    initial $readmemh("../mem/playcdi.mem", rom_playcdi);
+    bit rom_playcdi_bus_ack;
+    bit [15:0] rom_playcdi_dout;
 
-    bit [15:0] data_in_q = 0;
-    bit attex_cs_slave_q = 0;
-
-    wire bus_err_ram_area1 = (addr_byte >= 24'h600000 && addr_byte < 24'hd00000);
-    wire bus_err_ram_area2 = (addr_byte >= 24'hf00000);
-    wire bus_err = (bus_err_ram_area1 || bus_err_ram_area2) && as && (lds || uds);
+    // Activate automatic playback of CD-i discs only when
+    // an image is mounted, auto play is activated in OSD,
+    // there is an actual CD-i disc in the tray (no audio cd) and
+    // the last reset was not self imposed.
+    // When software is quitting to system shell, this is done via reset using the SLAVE
+    // In that case, we want to go back to the shell.
+    // Also, when booting fails, we also want to go back to shell
+    bit last_reset_by_slave = 0;
+    wire playcdi_rom_activated = cd_img_mounted && config_auto_play && !audio_cd_in_tray && !last_reset_by_slave;
 
     always_ff @(posedge clk30) begin
-        data_in_q <= data_in;
+        if (resetsys) last_reset_by_slave <= 1;
+        if (external_reset) last_reset_by_slave <= 0;
+    end
+
+    bit attex_cs_slave_q = 0;
+
+    wire bus_err_ram_area1 = (addr_byte >= 24'h080000 && addr_byte < 24'h200000);
+    wire bus_err_ram_area2 = (addr_byte >= 24'h500000 && addr_byte < 24'hd00000);
+    wire bus_err_ram_area3 = (addr_byte >= 24'hf10000);
+    wire bus_err_ram_area4 = (addr_byte >= 24'hf00000) && !playcdi_rom_activated;
+    wire bus_err = (bus_err_ram_area1 || bus_err_ram_area2 || bus_err_ram_area3 || bus_err_ram_area4) && as && (lds || uds);
+
+    always_ff @(posedge clk30) begin
 
         if (reset) ce_pix <= 0;
         else ce_pix <= !ce_pix;
@@ -128,14 +153,14 @@ module cditop (
                 );
 
             if ((lds || uds) && attex_cs_slave && !write_strobe)
-                $display("Read SLAVE %x %x %d %d %d", addr[7:1], data_in_q, lds, uds, write_strobe);
+                $display("Read SLAVE %x %x %d %d %d", addr[7:1], data_in, lds, uds, write_strobe);
 
 
             if ((lds || uds) && attex_cs_mk48)
                 $display(
                     "Access NVRAM %x %x %x %d %d %d",
                     addr[7:1],
-                    data_in_q,
+                    data_in,
                     cpu_data_out,
                     lds,
                     uds,
@@ -166,7 +191,7 @@ module cditop (
         .hps_rtc(hps_rtc)
     );
 
-    wire vdsc_int;
+    wire vdsc_int  /*verilator public_flat_rd*/;
 
     mcd212 mcd212_inst (
         .clk(clk30),
@@ -201,12 +226,11 @@ module cditop (
         .irq(vdsc_int),
         .debug_force_video_plane,
         .debug_limited_to_full,
-        .debug_ica_at_vblank,
         // Don't starve the CPU during DMA transfers
         .disable_cpu_starve(disable_cpu_starve || cdic_dma_ack || cdic_dma_req)
     );
 
-    wire in2in;
+    wire in2in  /*verilator public_flat_rd*/;
     wire in4in;
     wire iack2;
     wire iack4;
@@ -258,20 +282,35 @@ module cditop (
     wire av = iack2;
 
 `ifndef DISABLE_MAIN_CPU
+    wire reset68k;
+
+    // On a real 210/05, the main CPU polls 152 times
+    // for the PAL/NTSC region. The timeout is 500.
+    // With CPU Turbo this timeout is reached...
+    // This reset delay of 8 frames ensures
+    // that the slave has enough time to react
+    // It will result into 160 polls until the answer is available
+    resetdelay cpuresetdelay (
+        .clk(clk30),
+        .reset,
+        .vsync(VSync),
+        .delayedreset(reset68k)
+    );
+    /*verilator tracing_off*/
 
     scc68070 scc68070_0 (
         .clk(clk30),
-        .reset(reset),  // External sync reset on emulated system
+        .reset(reset68k),  // External sync reset on emulated system
         .write_strobe(write_strobe),
         .as(as),
         .lds(lds),
         .uds(uds),
         .bus_ack(bus_ack),
         .bus_err,
-        .int1(vdsc_int),
+        .int1(vdsc_int),  // Video IRQ
         .int2(1'b0),  // unconnected in CDi MONO1
-        .in2(!in2in),  // TODO fix polarity
-        .in4(in4in),
+        .in2(in2in),  // Slave IRQ
+        .in4(in4in),  // CDIC IRQ
         .in5(1'b0),
         .iack2(iack2),
         .iack4(iack4),
@@ -292,6 +331,7 @@ module cditop (
         .done_in(cdic_dma_done_in),
         .done_out(cdic_dma_done_out)
     );
+    /*verilator tracing_on*/
 
 `endif
 
@@ -328,6 +368,9 @@ module cditop (
         end else if (attex_cs_mcd212 || dvc_ram_cs) begin
             data_in = mcd212_dout;
             bus_ack = mcd212_bus_ack;
+        end else if (rom_playcdi_cs && playcdi_rom_activated) begin
+            data_in = rom_playcdi_dout;
+            bus_ack = rom_playcdi_bus_ack;
         end
 
         if (iack4) begin
@@ -336,7 +379,12 @@ module cditop (
         end
     end
 
-    wire resetsys = ddrc[2] ? portc_out[2] : 1'b0;
+    always_ff @(posedge clk30) begin
+        rom_playcdi_dout <= rom_playcdi[addr[6:1]];
+        rom_playcdi_bus_ack <= !reset && rom_playcdi_cs && !rom_playcdi_bus_ack;
+    end
+
+    wire resetsys  /*verilator public_flat_rd*/ = ddrc[2] ? portc_out[2] : 1'b0;
     wire disdat_from_uc = ddrc[3] ? portc_out[3] : 1'b1;
     wire disdat_to_ic;
 
@@ -345,7 +393,9 @@ module cditop (
 
     wire dtackslaven = ddrb[6] ? portb_out[6] : 1'b1;
     assign slave_rts = ddrb[4] ? portb_out[4] : 1'b1;
-    assign in2in = ddrb[5] ? portb_out[5] : 1'b1;
+
+    // The polarity must be altered as a real SCC68070 is low active
+    assign in2in = !(ddrb[5] ? portb_out[5] : 1'b1);
 
     wire datadac = ddrb[0] ? portb_out[0] : 1'b0;
     wire clkdac = ddrb[1] ? portb_out[1] : 1'b0;
@@ -353,7 +403,7 @@ module cditop (
     wire csdac2n = ddrb[3] ? portb_out[3] : 1'b1;
 
     bit  dtackslaven_q = 0;
-    bit  in2in_q = 1;
+    bit  in2in_q = 0;
 
     bit  slave_irq;
 
@@ -380,6 +430,7 @@ module cditop (
         .worm_data(slave_worm_data),
         .worm_wr  (slave_worm_wr),
 
+        .tcap(rc_eye),
         .serial_in(slave_serial_in),
         .serial_out(slave_serial_out),
         .spi(slave_servo_spi),
@@ -419,7 +470,9 @@ module cditop (
         .reset(reset),
         .spi(slave_servo_spi),
         .quirk_force_mode_fault(quirk_force_mode_fault),
-        .debug_audio_cd_in_tray
+        .audio_cd_in_tray,
+        .cd_img_mount(cd_img_mount),
+        .cd_img_mounted(cd_img_mounted)
     );
 
     always_comb begin
@@ -431,14 +484,14 @@ module cditop (
         if (reset) begin
             attex_cs_slave_q <= 0;
             dtackslaven_q <= 0;
-            in2in_q <= 1;
+            in2in_q <= 0;
         end else begin
             attex_cs_slave_q <= attex_cs_slave;
             dtackslaven_q <= dtackslaven;
             in2in_q <= in2in;
 
-            if (!in2in && in2in_q) $display("SLAVE IRQ2 1");
-            if (in2in && !in2in_q) $display("SLAVE IRQ2 0");
+            if (!in2in && in2in_q) $display("SLAVE IRQ2 0");
+            if (in2in && !in2in_q) $display("SLAVE IRQ2 1");
         end
 
     end
