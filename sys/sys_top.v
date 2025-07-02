@@ -56,7 +56,7 @@ module sys_top
 	output        SDRAM_CLK,
 //	output        SDRAM_CKE,
 
-`ifdef MISTER_DUAL_SDRAM
+`ifdef DUAL_SDRAM
 	////////// SDR #2 //////////
 //	output [12:0] SDRAM2_A,
 //	inout  [15:0] SDRAM2_DQ,
@@ -72,7 +72,7 @@ module sys_top
 //	output  [5:0] VGA_R,
 //	output  [5:0] VGA_G,
 //	output  [5:0] VGA_B,
-//	inout         VGA_HS,
+//	inout         VGA_HS,  // VGA_HS is secondary SD card detect when VGA_EN = 1 (inactive)
 //	output		  VGA_VS,
 //	input         VGA_EN,  // active low
 

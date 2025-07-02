@@ -215,23 +215,27 @@ module emu (
         "-;",
         "S0,CUECHD,Load CD;",
         "-;",
-        "O[4],TV Mode,PAL,NTSC;",
-        "O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-        "-;",
 
-        "P1,Debug Options;",
-        "P1-;",
-        "P1F1,ROM,Replace Boot ROM;",
-        "P1O[2],Disable Audio Att.,No,Yes;",
-        "P1O[3],UART Fake Space,No,Yes;",
-        "P1O[7:6],Force Video Plane,Original,A,B;",
-        "P1O[8],No reset on NvRAM change,No,Yes;",
-        "P1O[10:9],RGB Scale Limited to Full,0,1,2;",
-        "P1O[12],SERVO Audio CD,No,Yes;",
-        "P1O[11],CPU Turbo,No,Yes;",
-        "P1O[13],ICA at VBlank,No,Yes;",
+        "P1,Audio & Video;",
+        "P1O[4],Video Region,PAL,NTSC;",
+        "P1O[33:32],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+        "P1O[35:34],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+        "P1O[39],Vertical Crop,Off,On(270);",
+        "P1O[10:9],RGB Scale,0-255,16-235,16-255;",
+
+        "P2,Debug Options;",
+        "P2-;",
+        "P2F1,ROM,Replace Boot ROM;",
+        "P2O[2],Disable Audio Att.,No,Yes;",
+        "P2O[3],UART Fake Space,No,Yes;",
+        "P2O[7:6],Force Video Plane,Original,A,B;",
+        "P2O[8],No reset on NvRAM change,No,Yes;",
+        "P2O[12],SERVO Audio CD,No,Yes;",
+        "P2O[11],CPU Turbo,No,Yes;",
 
         "O[5],Overclock input device,No,Yes;",
+        "O[14],Autoplay,Yes,No;",
+
         "-;",
         "T[0],Reset;",
         "R[0],Reset and close OSD;",
@@ -241,7 +245,7 @@ module emu (
         "jn,B,A,Y;",
         // so all options will get default values on first start.
         "I,",
-        "NvRAM saved,",
+        "NvRAM saved;",
         "V,v",
         `BUILD_DATE
     };
@@ -250,56 +254,52 @@ module emu (
     wire [  1:0] buttons;
     wire [127:0] status;
 
-    wire [  1:0] ar = status[122:121];
-    assign VIDEO_ARX = (ar == 0) ? 13'd4 : (13'(ar) - 13'd1);
-    assign VIDEO_ARY = (ar == 0) ? 13'd3 : 13'd0;
+    wire [ 10:0] ps2_key;
 
-    wire [10:0] ps2_key;
+    wire [ 15:0] JOY0  /*verilator public_flat_rw*/;
+    wire [ 15:0] JOY0_ANALOG  /*verilator public_flat_rw*/;
+    wire [ 24:0] MOUSE  /*verilator public_flat_rw*/;
 
-    wire [15:0] JOY0  /*verilator public_flat_rw*/;
-    wire [15:0] JOY0_ANALOG  /*verilator public_flat_rw*/;
-    wire [24:0] MOUSE  /*verilator public_flat_rw*/;
+    wire         ioctl_download  /*verilator public_flat_rw*/;
+    wire         ioctl_wr  /*verilator public_flat_rw*/;
+    wire [ 24:0] ioctl_addr  /*verilator public_flat_rw*/;
+    wire [ 15:0] ioctl_dout  /*verilator public_flat_rw*/;
+    wire [ 15:0] ioctl_index  /*verilator public_flat_rw*/;
+    wire         ioctl_wait  /*verilator public_flat_rw*/ = 0;
 
-    wire        ioctl_download  /*verilator public_flat_rw*/;
-    wire        ioctl_wr  /*verilator public_flat_rw*/;
-    wire [24:0] ioctl_addr  /*verilator public_flat_rw*/;
-    wire [15:0] ioctl_dout  /*verilator public_flat_rw*/;
-    wire [15:0] ioctl_index  /*verilator public_flat_rw*/;
-    wire        ioctl_wait  /*verilator public_flat_rw*/ = 0;
-
-    wire        clk_sys  /*verilator public_flat_rw*/;
-    wire        clk_audio  /*verilator public_flat_rw*/;
+    wire         clk_sys  /*verilator public_flat_rw*/;
+    wire         clk_audio  /*verilator public_flat_rw*/;
 
 
-    wire [31:0] cd_hps_lba;
-    wire        cd_hps_req  /*verilator public_flat_rd*/;
-    wire        cd_hps_ack  /*verilator public_flat_rw*/;
-    wire        cd_media_change  /*verilator public_flat_rw*/;
+    wire [ 31:0] cd_hps_lba;
+    wire         cd_hps_req  /*verilator public_flat_rd*/;
+    wire         cd_hps_ack  /*verilator public_flat_rw*/;
+    wire         cd_media_change  /*verilator public_flat_rw*/;
 
-    wire        nvram_hps_ack  /*verilator public_flat_rw*/;
-    bit         nvram_hps_wr;
-    bit         nvram_hps_rd  /*verilator public_flat_rd*/;
-    bit  [15:0] nvram_hps_din;
-    wire        nvram_media_change  /*verilator public_flat_rw*/;
+    wire         nvram_hps_ack  /*verilator public_flat_rw*/;
+    bit          nvram_hps_wr;
+    bit          nvram_hps_rd  /*verilator public_flat_rd*/;
+    bit  [ 15:0] nvram_hps_din;
+    wire         nvram_media_change  /*verilator public_flat_rw*/;
 
-    wire [ 7:0] sd_buff_addr  /*verilator public_flat_rw*/;
-    wire        sd_buff_wr  /*verilator public_flat_rw*/;
-    wire [15:0] sd_buff_dout  /*verilator public_flat_rw*/;
+    wire [  7:0] sd_buff_addr  /*verilator public_flat_rw*/;
+    wire         sd_buff_wr  /*verilator public_flat_rw*/;
+    wire [ 15:0] sd_buff_dout  /*verilator public_flat_rw*/;
 
-    wire        img_readonly;
-    wire [63:0] img_size;
+    wire         img_readonly;
+    wire [ 63:0] img_size  /*verilator public_flat_rw*/;
 
-    wire [15:0] status_menumask;
+    wire [ 15:0] status_menumask = 0;
 
-    bit         info_req;
-    bit  [ 7:0] info;
+    bit          info_req;
+    bit  [  7:0] info;
 
-    wire [64:0] hps_rtc;
+    wire [ 64:0] hps_rtc;
 
     // Flag which becomes active for some time when an NvRAM image is mounted
-    wire        nvram_img_mount = nvram_media_change && img_size != 0;
+    wire         nvram_img_mount = nvram_media_change && img_size != 0;
     // Flag which becomes active for some time when an NvRAM image is mounted
-    wire        cd_img_mount = cd_media_change && img_size != 0;
+    wire         cd_img_mount = cd_media_change && img_size != 0;
 
 `ifndef VERILATOR
     hps_io #(
@@ -331,7 +331,7 @@ module emu (
 
         .sd_lba('{cd_hps_lba, 0}),
         .sd_blk_cnt('{0, 0}),
-        .sd_rd({nvram_hps_rd, cd_hps_req && cd_image_mounted}),
+        .sd_rd({nvram_hps_rd, cd_hps_req && cd_img_mounted}),
         .sd_wr({nvram_hps_wr, 1'b0}),
         .sd_ack({nvram_hps_ack, cd_hps_ack}),
         .sd_buff_addr(sd_buff_addr),
@@ -352,6 +352,20 @@ module emu (
 
         .RTC(hps_rtc)
     );
+
+    wire [1:0] ar = status[33:32];
+    wire vcrop_en = status[39];
+
+    video_freak video_freak (
+        .*,
+        .VGA_DE_IN(~(HBlank | VBlank)),
+        .ARX((!ar) ? 13'd4 : (13'(ar) - 13'd1)),
+        .ARY((!ar) ? 13'd3 : 13'd0),
+        .CROP_SIZE(vcrop_en ? 10'd270 : 10'd0),
+        .CROP_OFF(0),
+        .SCALE(status[35:34])
+    );
+
 `endif
 
     ///////////////////////   CLOCKS   ///////////////////////////////
@@ -418,8 +432,10 @@ module emu (
 
     // boot0.rom represented as ioctl_index==16h'0000
     // boot1.rom represented as ioctl_index==16h'0040
-    wire                  ioctl_maincpu_rom_wr = ioctl_wr && ioctl_index[6] == 0;
-    wire                  ioctl_slave_worm_wr = ioctl_wr && ioctl_index[6] == 1;
+    // boot2.rom represented as ioctl_index==16h'0080
+    wire                  ioctl_maincpu_rom_wr = ioctl_wr && ioctl_index[7:6] == 2'b00;
+    wire                  ioctl_slave_worm_wr = ioctl_wr && ioctl_index[7:6] == 2'b01;
+    wire                  ioctl_vmpega_worm_wr = ioctl_wr && ioctl_index[7:6] == 2'b10;
 
     bit                   ioctl_slave_worm_wr_q = 0;
 
@@ -485,7 +501,7 @@ module emu (
         case (sdram_owner)
             ROM_DOWNLOAD: begin
                 prepare_sdram_din  = {ioctl_dout[7:0], ioctl_dout[15:8]};
-                prepare_sdram_addr = {3'b001, ioctl_addr[21:1], 1'b0};
+                prepare_sdram_addr = {5'b00100, ioctl_index[7], ioctl_addr[18:1], 1'b0};
                 prepare_sdram_wr   = 1;
             end
             RAM_ZERO: begin
@@ -511,7 +527,7 @@ module emu (
     always_ff @(posedge clk_sys) begin
         if (ioctl_sdram_wr_latch && ioctl_wr) ioctl_wr_overflow <= 1;
 
-        if (ioctl_maincpu_rom_wr) begin
+        if (ioctl_maincpu_rom_wr || ioctl_vmpega_worm_wr) begin
             ioctl_sdram_wr_latch <= 1;
         end
 
@@ -528,7 +544,7 @@ module emu (
             if (sdram_owner_q == RAM_ZERO && sdram_busy_q && !sdram_busy)
                 ram_zero_adr <= ram_zero_adr + 1;
 
-            if (sdram_owner_q == ROM_DOWNLOAD && sdram_busy_q && !sdram_busy)
+            if (sdram_owner == ROM_DOWNLOAD && sdram_busy_q && !sdram_busy)
                 ioctl_sdram_wr_latch <= 0;
         end
     end
@@ -557,10 +573,12 @@ module emu (
 
 `ifdef VERILATOR
     bit [15:0] rom[262144]  /*verilator public_flat_rw*/;
+    bit [15:0] vmpega_rom[65536]  /*verilator public_flat_rw*/;
     bit [15:0] ram[2097152]  /*verilator public_flat_rw*/;
     bit [22:0] sdram_real_addr;
     initial begin
         $readmemh("cdi200.mem", rom);
+        //$readmemh("vmpega.mem", vmpega_rom);
         //$readmemh("ramdump.mem", ram);
     end
 
@@ -572,8 +590,11 @@ module emu (
     always_comb begin
         SDRAM_DQ_in = 0;
 
-        if (sdram_real_addr[21]) SDRAM_DQ_in = rom[burstwrap_corrected_address[17:0]];
-        else SDRAM_DQ_in = ram[burstwrap_corrected_address[20:0]];
+        case (sdram_real_addr[21:18])
+            4'b1000: SDRAM_DQ_in = rom[burstwrap_corrected_address[17:0]];
+            4'b1001: SDRAM_DQ_in = vmpega_rom[burstwrap_corrected_address[15:0]];
+            default: SDRAM_DQ_in = ram[burstwrap_corrected_address[20:0]];
+        endcase
     end
 
     bit SDRAM_nWE_q;
@@ -591,20 +612,26 @@ module emu (
         if (!SDRAM_nCAS) burstindex <= 0;
         else if (burstindex < 4) burstindex <= burstindex + 1;
 
-        if (sdram_real_addr[21]) begin
-            // no write during download
-            //if (!SDRAM_nWE_q) assert (ioctl_download);
-
-            if (!SDRAM_nWE_q && !SDRAM_DQMH_q)
-                rom[burstwrap_corrected_address[17:0]][15:8] <= SDRAM_DQ_out[15:8];
-            if (!SDRAM_nWE_q && !SDRAM_DQML_q)
-                rom[burstwrap_corrected_address[17:0]][7:0] <= SDRAM_DQ_out[7:0];
-        end else begin
-            if (!SDRAM_nWE_q && !SDRAM_DQMH_q)
-                ram[burstwrap_corrected_address[20:0]][15:8] <= SDRAM_DQ_out[15:8];
-            if (!SDRAM_nWE_q && !SDRAM_DQML_q)
-                ram[burstwrap_corrected_address[20:0]][7:0] <= SDRAM_DQ_out[7:0];
-        end
+        case (sdram_real_addr[21:18])
+            4'b1000: begin
+                if (!SDRAM_nWE_q && !SDRAM_DQMH_q)
+                    rom[burstwrap_corrected_address[17:0]][15:8] <= SDRAM_DQ_out[15:8];
+                if (!SDRAM_nWE_q && !SDRAM_DQML_q)
+                    rom[burstwrap_corrected_address[17:0]][7:0] <= SDRAM_DQ_out[7:0];
+            end
+            4'b1001: begin
+                if (!SDRAM_nWE_q && !SDRAM_DQMH_q)
+                    vmpega_rom[burstwrap_corrected_address[15:0]][15:8] <= SDRAM_DQ_out[15:8];
+                if (!SDRAM_nWE_q && !SDRAM_DQML_q)
+                    vmpega_rom[burstwrap_corrected_address[15:0]][7:0] <= SDRAM_DQ_out[7:0];
+            end
+            default: begin
+                if (!SDRAM_nWE_q && !SDRAM_DQMH_q)
+                    ram[burstwrap_corrected_address[20:0]][15:8] <= SDRAM_DQ_out[15:8];
+                if (!SDRAM_nWE_q && !SDRAM_DQML_q)
+                    ram[burstwrap_corrected_address[20:0]][7:0] <= SDRAM_DQ_out[7:0];
+            end
+        endcase
     end
 `endif
 
@@ -615,9 +642,9 @@ module emu (
     wire [1:0] debug_force_video_plane = 0;
     wire enable_reset_on_nvram_img_mount = 0;
     wire [1:0] debug_limited_to_full = 0;
-    wire debug_audio_cd_in_tray = 0;
+    wire audio_cd_in_tray = 0;
     wire disable_cpu_starve = 1;
-    wire debug_ica_at_vblank = 0;
+    wire config_auto_play  /*verilator public_flat_rw*/ = 1;
 `else
     // Status seems to be all zero after reset
     // Should be considered for defining the default
@@ -627,9 +654,9 @@ module emu (
     wire overclock_pointing_device = status[5];
     wire enable_reset_on_nvram_img_mount = !status[8];
     wire [1:0] debug_limited_to_full = status[10:9];
-    wire debug_audio_cd_in_tray = status[12];
+    wire audio_cd_in_tray = status[12];
     wire disable_cpu_starve = status[11];
-    wire debug_ica_at_vblank = status[13];
+    wire config_auto_play = !status[14];
 `endif
     wire HBlank;
     wire HSync;
@@ -658,6 +685,9 @@ module emu (
     wire fail_too_much_data;
     wire debug_irq_hangup;
 
+    // TODO requires connection and testing with real photo diode
+    wire rc_eye  /*verilator public_flat_rw*/;
+
     cditop cditop (
         .clk30(clk_sys),
         .clk_audio(clk_audio),
@@ -667,9 +697,8 @@ module emu (
         .debug_uart_fake_space,
         .debug_force_video_plane,
         .debug_limited_to_full,
-        .debug_audio_cd_in_tray,
+        .audio_cd_in_tray,
         .debug_disable_audio_attenuation(status[2]),
-        .debug_ica_at_vblank,
 
         .ce_pix(ce_pix),
 
@@ -710,6 +739,7 @@ module emu (
         .slave_serial_in(slave_serial_in),
         .slave_serial_out(slave_serial_out),
         .slave_rts(slave_rts),
+        .rc_eye(rc_eye),
 
         .cd_hps_req(cd_hps_req),
         .cd_hps_lba(cd_hps_lba),
@@ -718,6 +748,8 @@ module emu (
         // MiSTer uses little endian on linux. Swap over to big endian
         // to actually fit the way the 68k wants it
         .cd_hps_data({sd_buff_dout[7:0], sd_buff_dout[15:8]}),
+        .cd_img_mount(cd_img_mount),
+        .cd_img_mounted(cd_img_mounted),
 
         .audio_left (AUDIO_L),
         .audio_right(AUDIO_R),
@@ -725,6 +757,7 @@ module emu (
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data),
         .disable_cpu_starve,
+        .config_auto_play,
 
         .hps_rtc(hps_rtc)
     );
@@ -733,7 +766,6 @@ module emu (
     assign CLK_VIDEO = clk_sys;
     assign CE_PIXEL = ce_pix;
 
-    assign VGA_DE = ~(HBlank | VBlank);
     assign VGA_HS = HSync;
     assign VGA_VS = VSync;
     assign VGA_R = r;
@@ -767,10 +799,10 @@ module emu (
     bit sd_buff_addr_q;
 
     // Is set, if NvRAM image is mounted and usable
-    bit nvram_image_mounted = 0;
+    bit nvram_img_mounted = 0;
 
     // Is set, if CD image is mounted and usable
-    bit cd_image_mounted = 0;
+    bit cd_img_mounted = 0;
 
     // Used to detect changes of OSD_STATUS
     bit OSD_STATUS_q;
@@ -782,12 +814,12 @@ module emu (
         nvram_restore_write <= 0;
         OSD_STATUS_q <= OSD_STATUS;
 
-        if (nvram_media_change) nvram_image_mounted <= (img_size != 0);
-        if (cd_media_change) cd_image_mounted <= (img_size != 0);
+        if (nvram_media_change) nvram_img_mounted <= (img_size != 0);
+        if (cd_media_change) cd_img_mounted <= (img_size != 0);
 
         if (cditop_reset) begin
             nvram_backup_pending <= 0;
-        end else if (nvram_cpu_changed && nvram_image_mounted) begin
+        end else if (nvram_cpu_changed && nvram_img_mounted) begin
             nvram_backup_pending <= 1;
         end
 
