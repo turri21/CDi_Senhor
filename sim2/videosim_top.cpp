@@ -7,19 +7,26 @@
 #include "Vemu.h"
 #include "Vemu___024root.h"
 
-#include <chrono>
-#include <csignal>
-#include <cstdint>
-#include <png.h>
-
 #include "hle.h"
 #include <arpa/inet.h>
 #include <byteswap.h>
+#include <chrono>
+#include <csignal>
+#include <cstdint>
+#include <glob.h>
+#include <iostream>
+#include <png.h>
+#include <regex>
+#include <sstream>
+#include <stdexcept>
+#include <string.h> // memset()
+#include <string>
+#include <sys/wait.h>
+#include <vector>
 
-#define SCC68070
-#define SLAVE
+// #define SCC68070
+// #define SLAVE
 // #define TRACE
-// #define SIMULATE_RC5
 
 #define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
 
@@ -60,6 +67,7 @@ volatile sig_atomic_t status = 0;
 const int width = 120 * 16;
 const int height = 312;
 const int size = width * height * 3;
+const int png_height_scale = 4;
 
 FILE *f_cd_bin{nullptr};
 
@@ -188,12 +196,6 @@ void subcode_data(int lba, struct subcode &out) {
 
 class CDi {
   public:
-#ifdef SIMULATE_RC5
-    FILE *rc5_file;
-    uint64_t rc5_fliptime{0};
-    uint32_t rc5_nextstate{1};
-#endif
-
     Vemu dut;
     uint64_t step = 0;
     uint64_t sim_time = 0;
@@ -237,6 +239,7 @@ class CDi {
         return r | g | b;
     }
 
+  public:
     void write_png_file(const char *filename) {
         FILE *fp = fopen(filename, "wb");
         if (!fp)
@@ -255,7 +258,6 @@ class CDi {
 
         png_init_io(png, fp);
 
-        int png_height_scale = 4;
         int png_height = height * png_height_scale;
         // Output is 8bit depth, RGBA format.
         png_set_IHDR(png, info, width, png_height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
@@ -285,10 +287,7 @@ class CDi {
             dut.eval();
 #ifdef TRACE
             if (do_trace) {
-                // emu__DOT__clk_sys is 30 MHz
-                // One period is 33333.3333 ps
-                // sim_time counts the half periods
-                m_trace.dump(sim_time * 33333 / 2);
+                m_trace.dump(sim_time);
             }
 #endif
             sim_time++;
@@ -348,31 +347,9 @@ class CDi {
         step++;
         clock();
 
-#ifdef SIMULATE_RC5
-        if (sim_time >= rc5_fliptime) {
-            dut.rootp->emu__DOT__rc_eye = rc5_nextstate;
-
-            fprintf(stderr, "Set RC5!\n");
-            char buffer[100];
-            if (!fgets(buffer, sizeof(buffer), rc5_file))
-                exit(1);
-            char *endptr;
-            // primitive csv parsing
-            float next_flip = std::max(strtof(buffer, &endptr) - 2.58810f + 3.0f, 0.0f) * 30e6 * 2;
-            rc5_nextstate = strtol(endptr + 1, &endptr, 10);
-            assert(rc5_nextstate <= 1);
-            printf("%f %d\n", next_flip, rc5_nextstate);
-            rc5_fliptime = next_flip;
-        }
-#endif
-
         if ((step % 100000) == 0) {
             printf("%d\n", step);
         }
-
-        dut.rootp->emu__DOT__cd_media_change = (step == 1300000);
-        if (step == 1300000)
-            printf("Media change!\n");
 
 #ifdef SCC68070
         // Abort on illegal Instructions
@@ -382,7 +359,6 @@ class CDi {
         }
 #endif
 
-        dut.rootp->emu__DOT__nvram_media_change = (step == 2000);
         // Simulate CD data delivery from HPS
         if (dut.rootp->emu__DOT__cd_hps_req && sd_rd_q == 0 && dut.rootp->emu__DOT__nvram_hps_ack == 0) {
             assert(dut.rootp->emu__DOT__cd_hps_ack == 0);
@@ -539,50 +515,20 @@ class CDi {
             dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_x == 0) {
             char filename[100];
 
-#ifndef SIMULATE_RC5
-            if (dut.rootp->emu__DOT__tvmode_ntsc) {
-                // NTSC
-
-                if (frame_index > 259) {
-                    if ((frame_index % 25) == 20) {
-                        printf("Press a button!\n");
-                        dut.rootp->emu__DOT__JOY0 = 0b100000;
-                    }
-
-                    if ((frame_index % 25) == 23) {
-                        printf("Release a button!\n");
-                        dut.rootp->emu__DOT__JOY0 = 0b000000;
-                    }
-                }
-
-            } else {
-                // PAL
-                if (frame_index > 200) {
-                    if ((frame_index % 25) == 20) {
-                        printf("Press a button!\n");
-                        dut.rootp->emu__DOT__JOY0 = 0b100000;
-                    }
-
-                    if ((frame_index % 25) == 23) {
-                        printf("Release a button!\n");
-                        dut.rootp->emu__DOT__JOY0 = 0b000000;
-                    }
-                }
+            // Start game
+            if (frame_index == 190) {
+                printf("Press a button!\n");
+                dut.rootp->emu__DOT__JOY0 = 0b100000;
             }
-#endif
+            if (frame_index == 194) {
+                printf("Release a button!\n");
+                dut.rootp->emu__DOT__JOY0 = 0b000000;
+            }
 
             if (pixel_index > 100) {
-                auto current = std::chrono::system_clock::now();
-                std::chrono::duration<double> elapsed_seconds = current - start;
-                sprintf(filename, "%d/video_%03d.png", instanceid, frame_index);
-                write_png_file(filename);
-                printf("Written %s %d\n", filename, pixel_index);
-                printf("We are at step=%ld\n", step);
-                fprintf(stderr, "Written %s after %.2fs\n", filename, elapsed_seconds.count());
                 frame_index++;
             }
             pixel_index = 0;
-            memset(output_image, 0, sizeof(output_image));
         }
 
         // Simulate Audio
@@ -647,9 +593,8 @@ class CDi {
         dut.eval();
         dut.rootp->emu__DOT__debug_uart_fake_space = false;
         dut.rootp->emu__DOT__img_size = 4096;
-        dut.rootp->emu__DOT__rc_eye = 1; // RC Eye signal is idle high
 
-        dut.rootp->emu__DOT__tvmode_ntsc = false;
+        // dut.rootp->emu__DOT__tvmode_ntsc = true;
 
         dut.RESET = 1;
         dut.UART_RXD = 1;
@@ -663,14 +608,11 @@ class CDi {
         dut.OSD_STATUS = 1;
 
         start = std::chrono::system_clock::now();
-
-#ifdef SIMULATE_RC5
-        rc5_file = fopen("rc5_joy_upwards.csv", "r");
-#endif
     }
 
     void reset() {
         dut.RESET = 1;
+        clock();
         clock();
         dut.RESET = 0;
     }
@@ -708,87 +650,252 @@ class CDi {
     }
 };
 
-void prepare_apprentice_usa_toc() {
-    toc_buffer[0] = {1, 1, 21, 34, 1};
-    toc_buffer[1] = {1, 1, 21, 34, 0};
-    toc_buffer[2] = {1, 1, 21, 34, 34};
-    toc_buffer[3] = {1, 2, 25, 68, 21};
-    toc_buffer[4] = {1, 2, 25, 68, 2};
-    toc_buffer[5] = {1, 2, 25, 68, 1};
-    toc_buffer[6] = {1, 3, 35, 85, 0};
-    toc_buffer[7] = {1, 3, 35, 85, 68};
-    toc_buffer[8] = {1, 3, 35, 85, 35};
-    toc_buffer[9] = {1, 4, 36, 86, 3};
-    toc_buffer[10] = {1, 4, 36, 86, 1};
-    toc_buffer[11] = {1, 4, 36, 86, 0};
-    toc_buffer[12] = {1, 5, 41, 66, 86};
-    toc_buffer[13] = {1, 5, 41, 66, 36};
-    toc_buffer[14] = {1, 5, 41, 66, 4};
-    toc_buffer[15] = {1, 6, 48, 67, 1};
-    toc_buffer[16] = {1, 6, 48, 67, 0};
-    toc_buffer[17] = {1, 6, 48, 67, 66};
-    toc_buffer[18] = {1, 7, 53, 49, 41};
-    toc_buffer[19] = {1, 7, 53, 49, 6};
-    toc_buffer[20] = {1, 7, 53, 49, 1};
-    toc_buffer[21] = {1, 8, 54, 55, 0};
-    toc_buffer[22] = {1, 8, 54, 55, 67};
-    toc_buffer[23] = {1, 8, 54, 55, 53};
-    toc_buffer[24] = {1, 9, 65, 18, 7};
-    toc_buffer[25] = {1, 9, 65, 18, 1};
-    toc_buffer[26] = {1, 9, 65, 18, 0};
-    toc_buffer[27] = {1, 16, 66, 21, 55};
-    toc_buffer[28] = {1, 16, 66, 21, 54};
-    toc_buffer[29] = {1, 16, 66, 21, 8};
-    toc_buffer[30] = {1, 17, 70, 37, 1};
-    toc_buffer[31] = {1, 17, 70, 37, 0};
-    toc_buffer[32] = {1, 17, 70, 37, 18};
-    toc_buffer[33] = {1, 18, 71, 32, 65};
-    toc_buffer[34] = {1, 18, 71, 32, 16};
-    toc_buffer[35] = {1, 18, 71, 32, 1};
-    toc_buffer[36] = {1, 19, 81, 54, 0};
-    toc_buffer[37] = {1, 19, 81, 54, 21};
-    toc_buffer[38] = {1, 19, 81, 54, 70};
-    toc_buffer[39] = {1, 20, 82, 54, 17};
-    toc_buffer[40] = {1, 20, 82, 54, 1};
-    toc_buffer[41] = {1, 20, 82, 54, 0};
-    toc_buffer[42] = {1, 21, 83, 69, 32};
-    toc_buffer[43] = {1, 21, 83, 69, 71};
-    toc_buffer[44] = {1, 21, 83, 69, 18};
-    toc_buffer[45] = {1, 22, 86, 85, 1};
-    toc_buffer[46] = {1, 22, 86, 85, 0};
-    toc_buffer[47] = {1, 22, 86, 85, 54};
-    toc_buffer[48] = {1, 23, 87, 5, 81};
-    toc_buffer[49] = {1, 23, 87, 5, 20};
-    toc_buffer[50] = {1, 23, 87, 5, 1};
-    toc_buffer[51] = {1, 24, 89, 2, 0};
-    toc_buffer[52] = {1, 24, 89, 2, 54};
-    toc_buffer[53] = {1, 24, 89, 2, 83};
-    toc_buffer[54] = {1, 25, 89, 37, 21};
-    toc_buffer[55] = {1, 25, 89, 37, 1};
-    toc_buffer[56] = {1, 25, 89, 37, 0};
-    toc_buffer[57] = {1, 32, 96, 0, 85};
-    toc_buffer[58] = {1, 32, 96, 0, 86};
-    toc_buffer[59] = {1, 32, 96, 0, 22};
-    toc_buffer[60] = {1, 33, 96, 34, 1};
-    toc_buffer[61] = {1, 33, 96, 34, 0};
-    toc_buffer[62] = {1, 33, 96, 34, 5};
-    toc_buffer[63] = {1, 34, 96, 87, 87};
-    toc_buffer[64] = {1, 34, 96, 87, 24};
-    toc_buffer[65] = {1, 34, 96, 87, 1};
-    toc_buffer[66] = {1, 160, 1, 0, 0};
-    toc_buffer[67] = {1, 160, 1, 0, 2};
-    toc_buffer[68] = {1, 160, 1, 0, 89};
-    toc_buffer[69] = {1, 161, 34, 0, 25};
-    toc_buffer[70] = {1, 161, 34, 0, 1};
-    toc_buffer[71] = {1, 161, 34, 0, 0};
-    toc_buffer[72] = {1, 162, 21, 34, 0};
-    toc_buffer[73] = {1, 162, 21, 34, 96};
-    toc_buffer[74] = {1, 162, 21, 34, 32};
+std::vector<std::string> glob(const std::string &pattern) {
+    using namespace std;
 
-    toc_entry_count = 75;
+    // glob struct resides on the stack
+    glob_t glob_result;
+    memset(&glob_result, 0, sizeof(glob_result));
+
+    // do the glob operation
+    int return_value = glob(pattern.c_str(), GLOB_TILDE, NULL, &glob_result);
+    if (return_value != 0) {
+        globfree(&glob_result);
+        stringstream ss;
+        ss << "glob() failed with return_value " << return_value << endl;
+        throw std::runtime_error(ss.str());
+    }
+
+    // collect all the filenames into a std::list<std::string>
+    vector<string> filenames;
+    for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
+        filenames.push_back(string(glob_result.gl_pathv[i]));
+    }
+
+    // cleanup
+    globfree(&glob_result);
+
+    // done
+    return filenames;
+}
+
+std::array<uint32_t, 256> frogfeast_clut = {
+    0x0,      0x101010, 0x3000,   0x104010, 0x5800,   0xec0808, 0x9c00,   0xe4e400, 0x4030fc, 0x68c494, 0xbcbcbc,
+    0xc4c4e4, 0xf4fcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0x0,      0x6008,   0x45828,  0x6028,
+    0xec0808, 0xa46008, 0x9c00,   0x20ac00, 0x38b400, 0x8438,   0x8438,   0x40b400, 0x48bc08, 0x30cc00, 0x64cc00,
+    0x64fc64, 0xc48408, 0x18608c, 0x306498, 0x4434fc, 0x4030fc, 0x5848fc, 0x9c9c,   0x3c98b8, 0x98cc,   0x9ccc,
+    0x49ccc,  0x89ccc,  0xc9ccc,  0x98ccfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc};
+
+std::array<uint32_t, 256> validation_disc_clut = {
+    0xfcfc,   0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0xfc,     0xfcfcfc, 0xfc0000,
+    0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0xfc,     0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc,
+    0xfcfc,   0x0,      0xfc,     0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0xfc,
+    0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0xfc,     0xfcfcfc, 0xfc0000, 0xfc00,
+    0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0xfc,     0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,
+    0x0,      0xfc,     0xfcfcfc, 0xfc0000, 0xfc00,   0xfcfc00, 0xfc00fc, 0xfcfc,   0x0,      0x141414, 0x404040,
+    0xbcbcbc, 0x383838, 0x242424, 0x303030, 0x4c4c4c, 0x949494, 0x2c2c48, 0x384054, 0x646870, 0x787894, 0x1c2c38,
+    0x707070, 0x606060, 0x242c40, 0x787878, 0x484c5c, 0x606060, 0x101438, 0x30304c, 0x5c6468, 0x707078, 0x303048,
+    0x5c5c5c, 0x888888, 0x686870, 0x646464, 0x8c8c94, 0x4c5464, 0x808088, 0x101010, 0xdcdcdc, 0x646464, 0x303848,
+    0x88888c, 0x38404c, 0x4c4c5c, 0x101430, 0x707880, 0x545c64, 0x545464, 0x84c4b0, 0x1c2438, 0x101010, 0x141c30,
+    0x2c3048, 0x404854, 0x545454, 0x2c2c2c, 0x303030, 0x1c1c1c, 0x808080, 0x88949c, 0x9084b4, 0x3c4478, 0x40547c,
+    0xc4cccc, 0xa4a4a4, 0x909090, 0xb4b4b4, 0xa8a8a8, 0x9c9c9c, 0x949494, 0xfcfcfc, 0x787894, 0x9084b4, 0x646464,
+    0x687c70, 0x80ac94, 0x9084b4, 0x9084b4, 0x787894, 0x80ac94, 0x1054e8, 0x707878, 0x646468, 0x808888, 0xd0d0d0,
+    0x10142c, 0x646878, 0x545c68, 0x949c9c, 0xccd4d4, 0x686868, 0x141414, 0x404040, 0xbcbcbc, 0x383838, 0x242424,
+    0x303030, 0x4c4c4c, 0xdcdcdc, 0x2c2c48, 0x384054, 0x646870, 0x40485c, 0x1c2c38, 0x707070, 0x707878, 0x242c40,
+    0x949494, 0x949494, 0x9084b4, 0x9084b4, 0x606060, 0x646c64, 0x949494, 0x80ac94, 0x101010, 0x787894, 0x787894,
+    0x787894, 0x687c70, 0xdcdcdc, 0xdcdcdc, 0x949494, 0x949494, 0xa4a8a8, 0x949494, 0x8c9494, 0x808888, 0xd0d0d0,
+    0x484848, 0xd4dcdc, 0x949c9c, 0xccd4d4, 0x686868, 0x40404,  0xc8c8c8, 0x40404,  0x9ce4c4, 0x585858, 0x606060,
+    0x141414, 0x0,      0xf8f8f8, 0xdcdcdc, 0xb4b4b4, 0x484848, 0x84c0ac, 0x7068,   0x5c70,   0xc8a8d0, 0xb400b4,
+    0x949494, 0xdc1414, 0xc8c8c8, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0,
+    0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0xc8a8d0, 0x0,      0x40404,  0x80808,  0xc0c0c,  0x0,      0x0,
+    0x48000,  0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,
+    0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x0,
+    0x0,      0x0,      0x0,
+};
+
+std::array<uint32_t, 256> zenith_ingame_clut = {
+    0x0,      0x40408,  0xc1010,  0x14181c, 0x1c2028, 0x242c34, 0x2c3440, 0x344048, 0x3c4854, 0x445060, 0x4c5c6c,
+    0x546474, 0x607080, 0x68788c, 0x708098, 0x788ca4, 0x7c90a8, 0x8498ac, 0x8c9cb4, 0x94a4b8, 0x9cacc0, 0xa4b0c4,
+    0xacb8c8, 0xb4c0d0, 0xbcc8d4, 0xc4ccd8, 0xccd4e0, 0xd4dce4, 0xe0e4ec, 0xe8ecf0, 0xf0f4f4, 0xfcfcfc, 0x403800,
+    0x504800, 0x645800, 0x746c00, 0x888000, 0x989000, 0xaca400, 0xbcb800, 0xd0d000, 0xd4d418, 0xdcdc3c, 0xe0e05c,
+    0xe8e880, 0xececa8, 0xf4f4d0, 0xfcfcfc, 0x58002c, 0x600438, 0x6c0844, 0x781450, 0x841c60, 0x8c286c, 0x98387c,
+    0xa4448c, 0xac5498, 0xb868a8, 0xc47cb8, 0xd090c8, 0xd8a4d4, 0xe4bce0, 0xf0d4f0, 0xfcf0fc, 0x480000, 0x5c0000,
+    0x740000, 0x8c0000, 0xa00000, 0xb80000, 0xd00000, 0xd41414, 0xd82c2c, 0xe04848, 0xe46464, 0xe88080, 0xf0a0a0,
+    0xf4bcbc, 0xfce0e0, 0x285884, 0xbcc8d4, 0x44546c, 0xbcc8d4, 0x44546c, 0x44546c, 0xbcc8d4, 0xbcc8d4, 0x44546c,
+    0xbcc8d4, 0xbcc8d4, 0x44546c, 0x44546c, 0xbcc8d4, 0xbcc8d4, 0x44546c, 0x44546c, 0x0,      0x0,      0x0,
+    0x0,      0x0,      0x0,      0x0,      0x0,      0x0,      0x240000, 0xbc2400, 0xf4a800, 0x0,      0x0,
+    0x708098, 0xfc0000, 0xfc0000, 0xfcfc00, 0xfcbc00, 0xfc7c00, 0xfc3c00, 0x2c4048, 0x24343c, 0x202c30, 0x182028,
+    0x10181c, 0x81010,  0x40408,  0x0,      0x445c68, 0x3c505c, 0x344850, 0x0,      0x101818, 0x102020, 0x181818,
+    0x182020, 0x202010, 0x202018, 0x202820, 0x282828, 0x283830, 0x303020, 0x303838, 0x304040, 0x383820, 0x383830,
+    0x384848, 0x385858, 0x404030, 0x404840, 0x405050, 0x405850, 0x406058, 0x484830, 0x484838, 0x484848, 0x486060,
+    0x486860, 0x486868, 0x505038, 0x505850, 0x506058, 0x507070, 0x507878, 0x586050, 0x586868, 0x587878, 0x588c8c,
+    0x606858, 0x687870, 0x689494, 0x68a4a4, 0x787860, 0x708c84, 0x78acac, 0x849484, 0x9cac94, 0x9cb4ac, 0x9cccc4,
+    0x9ce4e4, 0xbcd0cc, 0xccf4f4, 0xc0c0c0, 0x808080, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc,
+    0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcfc, 0xfcfcdc, 0xfcfc98, 0xfcf4b4, 0xfcf098, 0xfce884, 0xf0e898,
+    0xe8e0b4, 0xecd478, 0xd8cc9c, 0xd4cc7c, 0xb8bcb0, 0xc4b470, 0xa8ac9c, 0xa0a06c, 0x949494, 0x7494a4, 0x8c8c8c,
+    0x789494, 0x78887c, 0x7c885c, 0x68888c, 0x6c7878, 0x507488, 0x606c60, 0x546848, 0x486864, 0x305c78, 0x484c4c,
+    0x285468, 0x2c5044, 0x1c485c, 0x203c48, 0xc344c,  0xc343c,  0x202820, 0x2444,   0x82428,  0x101c18, 0x1c38,
+    0x1830,   0x1428,   0x141c,   0x80808,  0x420,    0x810,    0x808,    0x418,    0x10,     0xfcfcfc, 0xececec,
+    0xdcdcdc, 0xcccccc, 0xb8b8b8, 0xa8a8a8, 0x989898, 0x888888, 0x747474, 0x646464, 0x545454, 0x444444, 0x303030,
+    0x202020, 0x101010, 0x0};
+
+void get_video_frame(std::string binpath, std::string pngpath) {
+    CDi machine(0);
+
+    FILE *f = fopen(binpath.c_str(), "rb");
+    assert(f);
+    fread(&machine.dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
+    fclose(f);
+
+    if (binpath == "ramdumps/frogfeast3.bin" || binpath == "ramdumps/frogfeast4.bin") {
+        fprintf(stderr, "Overwrite CLUT\n");
+        auto &clut = frogfeast_clut;
+        for (int i = 0; i < 256; i++) {
+            uint32_t r = (clut[i] >> 18) & 0x3f;
+            uint32_t g = (clut[i] >> 10) & 0x3f;
+            uint32_t b = (clut[i] >> 2) & 0x3f;
+            machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__clutmem__DOT__ram[i] = (r << 12) | (g << 6) | b;
+        }
+    }
+
+#if 0
+    auto &clut = zenith_ingame_clut;
+    for (int i = 0; i < 256; i++) {
+        uint32_t r = (clut[i] >> 18) & 0x3f;
+        uint32_t g = (clut[i] >> 10) & 0x3f;
+        uint32_t b = (clut[i] >> 2) & 0x3f;
+        machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__clutmem__DOT__ram[i] = (r << 12) | (g << 6) | b;
+    }
+#endif
+
+    if (binpath == "ramdumps/dyuv2.bin" || binpath == "ramdumps/dyuv0.bin" || binpath == "ramdumps/dyuv1.bin" ||
+        binpath == "ramdumps/dyuv3.bin") {
+        fprintf(stderr, "Overwrite CLUT\n");
+        auto &clut = validation_disc_clut;
+        for (int i = 0; i < 256; i++) {
+            uint32_t r = (clut[i] >> 18) & 0x3f;
+            uint32_t g = (clut[i] >> 10) & 0x3f;
+            uint32_t b = (clut[i] >> 2) & 0x3f;
+            machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__clutmem__DOT__ram[i] = (r << 12) | (g << 6) | b;
+        }
+    }
+
+    // Force ICA0 and ICA1
+    static constexpr uint32_t ic1 = (1 << 9);
+    static constexpr uint32_t dc1 = (1 << 8);
+    static constexpr uint32_t cf = (1 << 14); // 30 MHz
+    static constexpr uint32_t fd = (1 << 13); // 60 Hz
+
+    machine.modelstep(); // To let the reset signal sink in
+    machine.modelstep(); // To let the reset signal sink in
+
+    machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__command_register_dcr1 = ic1 | dc1 | cf;
+    machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__command_register_dcr2 = ic1 | dc1;
+
+    if (binpath.find("flashback") != std::string::npos)
+        machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__control_register_crsr1w = 1;
+
+    machine.modelstep(); // Step to get new frame out of the way
+
+    // Drive until frame is generated
+    machine.modelstep();
+    while (machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y == 0) {
+        machine.modelstep();
+    }
+    while (machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y != 0) {
+        machine.modelstep();
+    }
+    machine.modelstep();
+
+    machine.write_png_file(pngpath.c_str());
+    // machine.write_png_file("1.png");
+    fprintf(stderr, "Written %s\n", pngpath.c_str());
+
+#if 0
+    // And again!
+    machine.modelstep();
+    while (machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y == 0) {
+        machine.modelstep();
+    }
+    while (machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y != 0) {
+        machine.modelstep();
+    }
+    machine.write_png_file("2.png");
+    fprintf(stderr, "Written %s\n", pngpath.c_str());
+#endif
+}
+
+void forked_run() {
+    static constexpr size_t kNumberForks{12};
+    std::vector<pid_t> child_pids;
+
+    auto ramdumps = glob("ramdumps/*.bin");
+    size_t chunksize = std::max((size_t)ramdumps.size() / kNumberForks, (size_t)1);
+    printf("Splitting %d ram dumps into %d sizes of %d\n", ramdumps.size(), kNumberForks, chunksize);
+
+    auto iterator = ramdumps.begin();
+
+    int runner = 0;
+
+    while (iterator < ramdumps.end()) {
+
+        pid_t pid = fork();
+        switch (pid) {
+        case -1:
+            perror("fork");
+            exit(EXIT_FAILURE);
+        case 0:
+            printf("Runner %d is PID %jd\n", runner, (intmax_t)pid);
+
+            while (chunksize && iterator != ramdumps.end()) {
+                chunksize--;
+                printf("Runner %d %s\n", runner, iterator->c_str());
+
+                auto binpath = *iterator;
+                auto pngpath = std::regex_replace(binpath, std::regex("ramdumps/(.*).bin"), "videosim/$1.png");
+                get_video_frame(binpath, pngpath);
+
+                iterator++;
+            }
+            exit(0);
+        default:
+            printf("Child is PID %jd\n", (intmax_t)pid);
+            child_pids.push_back(pid);
+        }
+
+        iterator += chunksize;
+        runner++;
+    }
+
+    printf("Waiting for the runners to finish...\n");
+
+    for (auto child : child_pids) {
+        pid_t result = waitpid(child, nullptr, 0);
+        printf("PID %d has finished!\n", result);
+    }
 }
 
 int main(int argc, char **argv) {
+
     // Initialize Verilators variables
     Verilated::commandArgs(argc, argv);
 
@@ -797,66 +904,7 @@ int main(int argc, char **argv) {
         Verilated::traceEverOn(true);
 #endif
 
-    if (signal(SIGINT, catch_function) == SIG_ERR) {
-        fputs("An error occurred while setting a signal handler.\n", stderr);
-        return EXIT_FAILURE;
-    }
-
-    int machineindex = 0;
-
-    if (argc == 2) {
-        machineindex = atoi(argv[1]);
-        fprintf(stderr, "Machine is %d\n", machineindex);
-    }
-
-    switch (machineindex) {
-    case 0:
-        f_cd_bin = fopen("images/Zelda Wand of Gamelon.bin", "rb");
-        break;
-    case 1:
-        f_cd_bin = fopen("images/Hotel Mario.bin", "rb");
-        break;
-    case 2:
-        f_cd_bin = fopen("images/tetris.bin", "rb");
-        break;
-    case 3:
-        f_cd_bin = fopen("images/Nobelia (USA).bin", "rb");
-        break;
-    case 4:
-        f_cd_bin = fopen("images/Hotel Mario.bin", "rb");
-        break;
-    case 5:
-        f_cd_bin = fopen("images/Zelda's Adventure (Europe).bin", "rb");
-        break;
-    case 6:
-        f_cd_bin = fopen("images/audiocd.bin", "rb");
-        break;
-    case 7:
-        f_cd_bin = fopen("images/Flashback (Europe).bin", "rb");
-        break;
-    case 8:
-        f_cd_bin = fopen("images/Apprentice_USA_single.bin", "rb");
-        prepare_apprentice_usa_toc();
-        break;
-    }
-
-    assert(f_cd_bin);
-
-    CDi machine(machineindex);
-
-    machine.dut.rootp->emu__DOT__config_auto_play = 1;
-
-    while (status == 0) {
-        machine.modelstep();
-    }
-
-    machine.modelstep();
-    machine.modelstep();
-    machine.modelstep();
-    machine.dump_system_memory();
-    machine.dump_slave_memory();
-
-    fclose(f_cd_bin);
+    forked_run();
 
     fprintf(stderr, "Closing...\n");
     fflush(stdout);

@@ -13,6 +13,11 @@ start_delay:
 	add #-1,d0
 	bne start_delay
 
+	move.l #slaveirq,$68
+	move.b #2,$80001001 ; LIR
+	move #$2000,SR  
+
+
 	move.b #$86,$310000
 	move.b #$89,$310000
 	move.b #$80,$310006
@@ -52,6 +57,7 @@ start_delay:
 
 	;X-Bus Interrupt Enable (0xfa)
 	move.b #$fa,$310006
+
 	; Request Disc Status (0xb0)
 	move.b #$b0,$310006
 	move.b #$00,$310006
@@ -64,17 +70,6 @@ start_delay:
 
 	move #4000,d0
 	bsr wait
-
-	move.b $310000,d0
-	move.b $310000,d0
-	move.b $310000,d0
-	move.b $310002,d0
-	move.b $310002,d0
-	move.b $310002,d0
-	move.b $310006,d0
-	move.b $310006,d0
-	move.b $310006,d0
-	move.b $310006,d0
 
 	;move #8000,d0
 	;bsr wait
@@ -139,40 +134,9 @@ start_delay:
 	move.b $310004,d0
 
 
-	move.l #slaveirq,$68
-	move.b #2,$80001001 ; LIR
-	move #$2000,SR  
-
 	; Activate Input Polling (0xf7)
 	move.b #$f7,$310006
 
-	bra endless
-
-	move.b #$f0,$310004
-
-	move.b #$07,$310002
-	move.b #$00,$310002
-	
-	move.b #$00,$310002
-	move.b #$00,$310002
-	
-	move.b #$0f,$310002; D
-	move.b #$21,$310002
-
-	move.b #$38,$310002 ;L
-	move.b #$00,$310002
-
-	move.b #$73,$310002 ;R
-	move.b #$2c,$310002
-
-	move.b #$3f,$310002 ;O
-	move.b #$00,$310002
-
-	move.b #$36,$310002 ;W
-	move.b #$38,$310002
-
-	move.b #$00,$310002
-	move.b #$00,$310002
 
 endless:
 	bra endless
@@ -184,12 +148,20 @@ wait:
 	
 
 slaveirq:
-	move.b $310000,d0
-	move.b $310000,d0
-	move.b $310000,d0
-	move.b $310000,d0
-	move.b $310002,d0
-	move.b $310002,d0
-	move.b $310004,d0
-	move.b $310004,d0
+	move.b $310001,d0
+	move.b $310001,d0
+	move.b $310001,d0
+	move.b $310001,d0
+	move.b $310003,d0
+	move.b $310003,d0
+	move.b $310003,d0
+	move.b $310003,d0
+	move.b $310005,d0
+	move.b $310005,d0
+	move.b $310005,d0
+	move.b $310005,d0
+	move.b $310007,d0
+	move.b $310007,d0
+	move.b $310007,d0
+	move.b $310007,d0
 	rte
