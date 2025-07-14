@@ -260,6 +260,11 @@ module cditop (
     wire signed [15:0] cdic_audio_left;
     wire signed [15:0] cdic_audio_right;
 
+    wire signed [15:0] mpeg_audio_left;
+    wire signed [15:0] mpeg_audio_right;
+
+    wire sample_tick44  /*verilator public_flat_rd*/;
+
     wire cdic_intreq;
     wire cdic_intack;
 
@@ -290,6 +295,7 @@ module cditop (
         .cd_hps_data,
         .audio_left(cdic_audio_left),
         .audio_right(cdic_audio_right),
+        .sample_tick44,
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data)
     );
@@ -327,7 +333,10 @@ module cditop (
         .hsync(HSync),
         .vsync(VSync),
         .hblank(HBlank),
-        .vblank(VBlank)
+        .vblank(VBlank),
+        .audio_left(mpeg_audio_left),
+        .audio_right(mpeg_audio_right),
+        .sample_tick44
     );
 
 
@@ -511,8 +520,8 @@ module cditop (
         .audio_right_out(att_audio_right)
     );
 
-    assign audio_left  = debug_disable_audio_attenuation ? cdic_audio_left : att_audio_left;
-    assign audio_right = debug_disable_audio_attenuation ? cdic_audio_right : att_audio_right;
+    assign audio_left  = mpeg_audio_left;
+    assign audio_right = mpeg_audio_right;
 
     u3090mg u3090mg (
         .clk(clk30),

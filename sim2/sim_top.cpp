@@ -18,7 +18,7 @@
 
 #define SCC68070
 #define SLAVE
-#define TRACE
+// #define TRACE
 // #define SIMULATE_RC5
 
 #define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
@@ -568,9 +568,9 @@ class CDi {
         }
 
         // Simulate Audio
-        if (dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__sample_tick) {
-            int16_t sample_l = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__adpcm__DOT__fifo_out_left;
-            int16_t sample_r = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__adpcm__DOT__fifo_out_right;
+        if (dut.rootp->emu__DOT__cditop__DOT__sample_tick44) {
+            int16_t sample_l = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__audio__DOT__fifo_out_left;
+            int16_t sample_r = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__audio__DOT__fifo_out_right;
             fwrite(&sample_l, 2, 1, f_audio_left);
             fwrite(&sample_r, 2, 1, f_audio_right);
         }

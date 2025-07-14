@@ -40,6 +40,7 @@ module cdic (
     // Audio out
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
+    output sample_tick44,
 
     // Debugging
     output bit fail_not_enough_words,
@@ -151,7 +152,7 @@ module cdic (
     wire sample_tick44_audio = sample44100counter == 0;
     wire sector_tick_audio = sector75counter == 0;
     wire sample_tick37  /*verilator public_flat_rd*/;
-    wire sample_tick44  /*verilator public_flat_rd*/;
+    //wire sample_tick44  /*verilator public_flat_rd*/;
 
 `ifdef VERILATOR
     wire sample_tick  /*verilator public_flat_rd*/ = read_cdda ? sample_tick44 : sample_tick37;

@@ -23,6 +23,9 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/u3090mg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/uc_68hc05.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/video_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videofifo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/mpeg_audio.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/mpeg_audiofifo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/VexiiRiscv.v
 set_global_assignment -name VERILOG_FILE rtl/uart_rx.v
 set_global_assignment -name VERILOG_FILE rtl/uart_tx.v
 set_global_assignment -name VHDL_FILE rtl/6805.vhd

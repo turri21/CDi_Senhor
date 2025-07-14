@@ -35,6 +35,10 @@ module vmpeg (
     input hblank,
     input vblank,
 
+    output signed [15:0] audio_left,
+    output signed [15:0] audio_right,
+    input sample_tick44,
+
     output bit mpeg_ram_enabled  // Prohibits detection of MPEG RAM by the OS RAM crawler
 );
     wire access = cs && (uds || lds);
@@ -57,6 +61,21 @@ module vmpeg (
     bit dma_for_fma;
     wire fmv_data_valid  /*verilator public_flat_rd*/ = mpeg_data_valid && !dma_for_fma;
     wire fma_data_valid  /*verilator public_flat_rd*/ = mpeg_data_valid && dma_for_fma;
+
+    wire fmv_word_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid && !dma_for_fma;
+    wire fma_word_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid && dma_for_fma;
+
+    mpeg_audio audio (
+        .clk,
+        .reset,
+        .data_word(din),
+        .data_strobe(fma_word_data_valid),
+        .fifo_full(),
+        .audio_left(audio_left),
+        .audio_right(audio_right),
+        .sample_tick44(sample_tick44),
+        .playback_active()
+    );
 
     enum bit [3:0] {
         IDLE,
