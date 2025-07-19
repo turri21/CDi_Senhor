@@ -145,7 +145,15 @@ module mpeg_audio (
     );
     /*verilator tracing_on*/
 
-    bit signed [31:0] mac_vector_accu = 0;
+    bit signed [32:0] mac_vector_accu = 0;
+    bit signed [31:0] mac_vector_accu_saturated;
+
+    always_comb begin
+        if (mac_vector_accu > signed'(33'h7fffffff)) mac_vector_accu_saturated = 32'h7fffffff;
+        else if (mac_vector_accu < signed'(-33'h7fffffff)) mac_vector_accu_saturated = -32'h7fffffff;
+        else mac_vector_accu_saturated = mac_vector_accu[31:0];
+    end
+
     bit signed [17:0] mac_vector_temp1 = 0;
 
     // shared with CPU bus. Careful!
@@ -187,7 +195,7 @@ module mpeg_audio (
 
                 end
                 if (dmem_cmd_payload_address == 32'h10001008 && dmem_cmd_payload_write && dmem_cmd_valid && dmem_cmd_ready)
-                    mac_vector_accu <= dmem_cmd_payload_data;
+                    mac_vector_accu <= {1'b0, dmem_cmd_payload_data};
             end
             FETCH: begin
                 mac_vector_temp1 <= PLM_AUDIO_SYNTHESIS_WINDOW(mac_vector_index);
@@ -217,7 +225,7 @@ module mpeg_audio (
                     // I/O Area
                     if (!dmem_cmd_payload_write_q) begin
                         if (dmem_cmd_payload_address_q == 32'h10001008)
-                            dmem_rsp_payload_data = mac_vector_accu;
+                            dmem_rsp_payload_data = mac_vector_accu_saturated;
                         if (dmem_cmd_payload_address_q == 32'h10002000)
                             dmem_rsp_payload_data = {3'b000, mpeg_stream_fifo_write_adr, 1'b0};
                         if (dmem_cmd_payload_address_q == 32'h10002004)
