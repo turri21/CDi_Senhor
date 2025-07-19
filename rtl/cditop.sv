@@ -267,7 +267,7 @@ module cditop (
 
     wire cdic_intreq;
     wire cdic_intack;
-
+    /*verilator tracing_off*/
     cdic cdic_inst (
         .clk(clk30),
         .clk_audio(clk_audio),
@@ -299,6 +299,7 @@ module cditop (
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data)
     );
+    /*verilator tracing_on*/
 
     // TODO might not be correct
     // CDIC seems to want manual vector
@@ -356,6 +357,7 @@ module cditop (
         .delayedreset(reset68k)
     );
 
+    /*verilator tracing_off*/
     scc68070 scc68070_0 (
         .clk(clk30),
         .reset(reset),  // External sync reset on emulated system
@@ -389,6 +391,7 @@ module cditop (
         .done_in(cdic_dma_done_in),
         .done_out(dma_done_out)
     );
+    /*verilator tracing_on */
 
 `endif
 

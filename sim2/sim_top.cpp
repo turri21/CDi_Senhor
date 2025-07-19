@@ -18,7 +18,7 @@
 
 #define SCC68070
 #define SLAVE
-// #define TRACE
+#define TRACE
 // #define SIMULATE_RC5
 
 #define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
@@ -832,13 +832,13 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/Nobelia (USA).bin", "rb");
         break;
     case 4:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb"); // 333
+        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
         break;
     case 5:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb"); // 400
+        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
         break;
     case 6:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb"); // 500
+        f_cd_bin = fopen("images/FMVTEST.BIN", "rb");
         break;
     case 7:
         f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");

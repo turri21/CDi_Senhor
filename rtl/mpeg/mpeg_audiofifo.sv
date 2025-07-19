@@ -9,11 +9,11 @@ module mpeg_audiofifo (
     output half_full
 );
 
-    bit signed [15:0] mem[128];
-    bit [6:0] read_index_d;
-    bit [6:0] read_index_q;
-    bit [6:0] write_index;
-    bit [7:0] count;
+    bit signed [15:0] mem[512];
+    bit [8:0] read_index_d;
+    bit [8:0] read_index_q;
+    bit [8:0] write_index;
+    bit [9:0] count;
 
     // The memory introduces one cycle delay. This is an issue
     // when the FIFO is empty. We want to avoid using the memory readout
@@ -22,11 +22,11 @@ module mpeg_audiofifo (
     bit indizes_equal_during_write_q;
 
     assign out.write = count != 0 && !reset && !indizes_equal_during_write_q;
-    assign in.strobe = count < 126 && !reset && in.write;
+    assign in.strobe = count < 510 && !reset && in.write;
 
     // Every MPEG synthesis will create 32 samples
     // Let's have at least 70 samples to not starve during frame change
-    assign nearly_full = count >= 126;
+    assign nearly_full = count >= 510;
     assign half_full = count >= 70;
 
     always_comb begin

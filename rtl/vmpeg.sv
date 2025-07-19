@@ -434,7 +434,7 @@ module vmpeg (
     bit vsync_q;
     bit dma_active;
     assign req = dma_active;
-    assign rdy = dma_active;  // TODO actually use the data
+    assign rdy = dma_active;
 
     // Divides 30 Mhz to 45 kHz
     localparam bit [9:0] kFmaClockDivider = 667;

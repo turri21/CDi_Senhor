@@ -22,11 +22,11 @@ module mpeg_audio (
     mpeg_input_stream_fifo in_fifo (
         .clk,
         // In (from 16 Bit CD data)
-        .waddr(mpeg_stream_fifo_write_adr[10:0] ^ 1),
+        .waddr(mpeg_stream_fifo_write_adr[12:0] ^ 1),
         .wdata(data_word),
         .we(data_strobe),
         // Out (32 bit CPU interface)
-        .raddr(dmem_cmd_payload_address[11:2]),
+        .raddr(dmem_cmd_payload_address[13:2]),
         .q(mpeg_in_fifo_out)
     );
 
@@ -38,7 +38,8 @@ module mpeg_audio (
     // Word address
     wire [27:0] mpeg_stream_fifo_read_adr = mpeg_stream_byte_index[28:1];
 
-    assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd2000);
+    wire [27:0] fifo_level = mpeg_stream_fifo_write_adr - mpeg_stream_fifo_read_adr;
+    assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd7000);
 
     always_ff @(posedge clk) begin
 
@@ -402,19 +403,20 @@ endmodule
 
 
 // https://www.intel.com/content/www/us/en/docs/programmable/683082/21-3/mixed-width-dual-port-ram.html
-// 512x16 write and 1024x32 read
+// 4096x16 write and 2048x32 read
+// So, this is 8KB of memory
 module mpeg_input_stream_fifo (
-    input [10:0] waddr,
+    input [12:0] waddr,
     input [15:0] wdata,
     input we,
     input clk,
-    input [9:0] raddr,
+    input [11:0] raddr,
     output logic [31:0] q
 );
     
-    logic [1:0][15:0] ram[0:1023];
+    logic [1:0][15:0] ram[4096];
     always_ff @(posedge clk) begin
-        if (we) ram[waddr[10:1]][waddr[0]] <= wdata;
+        if (we) ram[waddr[12:1]][waddr[0]] <= wdata;
         q <= ram[raddr];
     end
 endmodule : mpeg_input_stream_fifo
@@ -448,7 +450,7 @@ module firmware_memory
 	input we1, we2, clk,
 	output [DATA_WIDTH_R-1:0] data_out1,
 	output [DATA_WIDTH_R-1:0] data_out2);
-	localparam RAM_DEPTH = 1 << ADDRESS_WIDTH;
+	localparam RAM_DEPTH = 23505 >> 2;
 
 	// model the RAM with two dimensional packed array
 	logic [BYTES-1:0][BYTE_WIDTH-1:0] ram[0:RAM_DEPTH-1];
