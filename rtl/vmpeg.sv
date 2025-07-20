@@ -99,7 +99,7 @@ module vmpeg (
         SEQHDR
     } mpeg_video_state = IDLE;
 
-    enum bit [3:0] {
+    enum bit [4:0] {
         FMA_IDLE,
         FMA_MAGIC0,
         FMA_MAGIC1,
@@ -111,7 +111,16 @@ module vmpeg (
         FMA_PACK2,
         FMA_PACK3,
         FMA_PACK4,
-        FMA_PACK5
+        FMA_PACK5,
+        FMA_PES0,
+        FMA_PES1,
+        FMA_PES2,
+        FMA_PES3,
+        FMA_PES4,
+        FMA_PES5,
+        FMA_PES6,
+        FMA_PES7,
+        FMA_PES8
     } mpeg_audio_state = FMA_IDLE;
 
     mpeg_dummy_video_fifo_entry fifo_in;
@@ -135,6 +144,9 @@ module vmpeg (
     bit signed [32:0] system_clock_reference;
     bit signed [32:0] system_clock_reference_start_time;
     bit system_clock_reference_start_time_valid = 0;
+    bit [15:0] packet_length;
+    bit [32:0] presentation_time_stamp;
+
 
     bit decoding_frame_data = 0;
 
@@ -160,18 +172,6 @@ module vmpeg (
                 {FMA_PACK5, 8'h??}: begin         
                     mpeg_audio_state <= FMA_IDLE;
                     $display ("FMA PACK %x %d",mpeg_data,system_clock_reference);
-
-                    // verilog_format: on
-                    if (!system_clock_reference_start_time_valid) begin
-                        system_clock_reference_start_time_valid <= 1;
-
-                        if (system_clock_reference >= 0) begin
-                            system_clock_reference_start_time[32:1] <= fma_dclk + 10;  // TODO
-                        end else begin
-                            system_clock_reference_start_time[32:1] <= fma_dclk - system_clock_reference[32:1];
-                        end
-                    end
-                    // verilog_format: off
                 end
                 
                 {FMA_PACK4, 8'h??}: begin                    
@@ -196,8 +196,61 @@ module vmpeg (
                     system_clock_reference[32:30] <= mpeg_data[3:1];
                 end
 
+                {FMA_PES8, 8'h??}: begin         
+                    mpeg_audio_state <= FMA_IDLE;
+                    $display ("FMA PES %x %d",mpeg_data,presentation_time_stamp);
+
+                    // verilog_format: on
+                    if (!system_clock_reference_start_time_valid) begin
+                        system_clock_reference_start_time_valid <= 1;
+
+                        system_clock_reference_start_time[32:1] <= fma_dclk + presentation_time_stamp[32:1] - system_clock_reference[32:1];
+                    end
+                    // verilog_format: off
+                end
+                {FMA_PES7, 8'b???????1}: begin // PTS
+                    presentation_time_stamp[6:0] <= mpeg_data[7:1];
+                    mpeg_audio_state <= FMA_PES8;
+                end
+                {FMA_PES6, 8'h??}: begin // PTS
+                    mpeg_audio_state <= FMA_PES7;
+                    presentation_time_stamp[14:7] <= mpeg_data;
+                end
+                {FMA_PES5, 8'b???????1}: begin // PTS
+                    presentation_time_stamp[21:15] <= mpeg_data[7:1];
+                    mpeg_audio_state <= FMA_PES6;
+                end
+                {FMA_PES4, 8'h??}: begin // PTS
+                    mpeg_audio_state <= FMA_PES5;
+                    presentation_time_stamp[29:22] <= mpeg_data;
+                end
+                {FMA_PES2, 8'b0010???1}: begin // PTS
+                    presentation_time_stamp[32:30] <= mpeg_data[3:1];
+                    mpeg_audio_state <= FMA_PES4;
+                end
+
+                {FMA_PES3, 8'h??}: begin
+                    // just ignore STD buffer size second byte
+                    mpeg_audio_state <= FMA_PES2;
+                end
+                {FMA_PES2, 8'b01??????}: begin // STD buffer size
+                    mpeg_audio_state <= FMA_PES3;
+                end
+                
+                {FMA_PES1, 8'h??}: begin
+                    mpeg_audio_state <= FMA_PES2;
+                    packet_length[7:0] <= mpeg_data;
+                end
+                {FMA_PES0, 8'h??}: begin
+                    mpeg_audio_state <= FMA_PES1;
+                    packet_length[15:8] <= mpeg_data;
+                end
+
                 {FMA_MAGIC_MATCH, 8'hba} : begin
                     mpeg_audio_state <= FMA_PACK0;
+                end
+                {FMA_MAGIC_MATCH, 8'hC?} : begin
+                    mpeg_audio_state <= FMA_PES0;
                 end
                 {FMA_MAGIC2, 8'h01} : mpeg_audio_state <= FMA_MAGIC_MATCH;
                 {FMA_MAGIC2, 8'h00} : mpeg_audio_state <= FMA_MAGIC2;
