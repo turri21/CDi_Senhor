@@ -764,13 +764,16 @@ module emu (
 
 
     assign CLK_VIDEO = clk_sys;
-    assign CE_PIXEL = ce_pix;
-
+    assign CE_PIXEL  = ce_pix;
+`ifdef VERILATOR
+    // when the videofreak is not used.
+    assign VGA_DE = ~(HBlank | VBlank);
+`endif
     assign VGA_HS = HSync;
     assign VGA_VS = VSync;
-    assign VGA_R = r;
-    assign VGA_G = g;
-    assign VGA_B = b;
+    assign VGA_R  = r;
+    assign VGA_G  = g;
+    assign VGA_B  = b;
 
     // ----- NvRAM Backup and Restore Handling -----
 

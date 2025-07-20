@@ -202,9 +202,6 @@ class CDi {
     int frame_index = 0;
 
   private:
-    FILE *f_audio_left{nullptr};
-    FILE *f_audio_right{nullptr};
-
     uint8_t output_image[size] = {0};
     uint32_t regfile[16];
 #ifdef TRACE
@@ -531,14 +528,6 @@ class CDi {
             pixel_index = 0;
         }
 
-        // Simulate Audio
-        if (dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__sample_tick) {
-            int16_t sample_l = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__adpcm__DOT__fifo_out_left;
-            int16_t sample_r = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__adpcm__DOT__fifo_out_right;
-            fwrite(&sample_l, 2, 1, f_audio_left);
-            fwrite(&sample_r, 2, 1, f_audio_right);
-        }
-
         if (pixel_index < size - 6) {
             uint8_t r, g, b;
 
@@ -565,20 +554,9 @@ class CDi {
     }
 
     virtual ~CDi() {
-        fclose(f_audio_right);
-        fclose(f_audio_left);
     }
     CDi(int i) {
         instanceid = i;
-
-        char filename[100];
-        sprintf(filename, "%d/audio_left.bin", instanceid);
-        fprintf(stderr, "Writing to %s\n", filename);
-        f_audio_left = fopen(filename, "wb");
-
-        sprintf(filename, "%d/audio_right.bin", instanceid);
-        fprintf(stderr, "Writing to %s\n", filename);
-        f_audio_right = fopen(filename, "wb");
 
 #ifdef TRACE
         dut.trace(&m_trace, 5);
