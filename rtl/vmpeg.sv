@@ -58,7 +58,7 @@ module vmpeg (
 
     wire mpeg_xferwrite = (address[15:1] == 15'h206F) && bus_ack && write_strobe && access;
     wire mpeg_word_valid = dma_data_valid || mpeg_xferwrite;
-    bit dma_for_fma;
+    bit  dma_for_fma;
     wire fmv_data_valid  /*verilator public_flat_rd*/ = mpeg_data_valid && !dma_for_fma;
     wire fma_data_valid  /*verilator public_flat_rd*/ = mpeg_data_valid && dma_for_fma;
 
@@ -68,13 +68,16 @@ module vmpeg (
     mpeg_audio audio (
         .clk,
         .reset,
+        .dsp_enable(decoding_frame_data),
         .data_word(din),
         .data_strobe(fma_word_data_valid),
         .fifo_full(),
         .audio_left(audio_left),
         .audio_right(audio_right),
         .sample_tick44(sample_tick44),
-        .playback_active()
+        .playback_active(),
+        .event_decoding_started(),
+        .event_frame_decoded()
     );
 
     enum bit [3:0] {
@@ -129,13 +132,16 @@ module vmpeg (
 
     bit [9:0] temperal_sequence_number;
     bit [9:0] next_sequence_number;
-    bit [32:0] system_clock_reference;
-    bit [32:0] system_clock_reference_start_time;
+    bit signed [32:0] system_clock_reference;
+    bit signed [32:0] system_clock_reference_start_time;
     bit system_clock_reference_start_time_valid = 0;
 
     bit decoding_frame_data = 0;
 
     always @(posedge clk) begin
+        // TODO
+        if (fma_command_register == 1) system_clock_reference_start_time_valid <= 0;
+
         fifo_write <= 0;
 
         if (fifo_write) begin
@@ -153,19 +159,24 @@ module vmpeg (
                 // verilog_format: off
                 {FMA_PACK5, 8'h??}: begin         
                     mpeg_audio_state <= FMA_IDLE;
+                    $display ("FMA PACK %x %d",mpeg_data,system_clock_reference);
 
-                    if (!system_clock_reference_start_time_valid)begin
-                        system_clock_reference_start_time[32:1] <= fma_dclk + 17400;
+                    // verilog_format: on
+                    if (!system_clock_reference_start_time_valid) begin
                         system_clock_reference_start_time_valid <= 1;
+
+                        if (system_clock_reference >= 0) begin
+                            system_clock_reference_start_time[32:1] <= fma_dclk + 10;  // TODO
+                        end else begin
+                            system_clock_reference_start_time[32:1] <= fma_dclk - system_clock_reference[32:1];
+                        end
                     end
+                    // verilog_format: off
                 end
                 
                 {FMA_PACK4, 8'h??}: begin                    
                     mpeg_audio_state <= FMA_PACK5;
                     system_clock_reference[6:0] <= mpeg_data[7:1];
-                    $display ("FMA PACK %x %d",mpeg_data,system_clock_reference);
-
-
                     fma_pack_cnt <= fma_pack_cnt +1;
                 end
                 {FMA_PACK3, 8'h??}: begin
@@ -479,8 +490,6 @@ module vmpeg (
                     interrupt_status_register.tim <= 1;
                     fma_interrupt_status_register[8] <= 1;
                     timer_cnt <= 0;
-
-                    $display("Time %d", system_clock_reference_start_time[32:1] - fma_dclk);
                 end else begin
                     timer_cnt <= timer_cnt + 1;
                 end
@@ -507,7 +516,6 @@ module vmpeg (
                     // Frame Header Updated
                     fma_status_register[2] <= 1;
                     fma_interrupt_status_register[2] <= 1;
-
                 end
             end else begin
                 fma_dclk_shadow_cnt <= fma_dclk_shadow_cnt + 1;
@@ -559,6 +567,11 @@ module vmpeg (
                             if (din[15]) begin
                                 dma_active  <= 1;
                                 dma_for_fma <= 1;
+                            end
+
+                            if (din == 1) begin
+                                // Stop command
+                                decoding_frame_data <= 0;
                             end
                         end
                         15'h1806: begin

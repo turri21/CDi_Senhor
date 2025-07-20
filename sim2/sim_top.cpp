@@ -541,10 +541,6 @@ class CDi {
         // Trace CPU state
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__decodeopc &&
             dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__clkena_in) {
-
-            uint32_t pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
-            if (pc >= 0xe40000 && pc < 0xe7ffff)
-                printstate();
         }
 #endif
 
@@ -580,6 +576,8 @@ class CDi {
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma);
+            //do_trace = true;
+            //fprintf(stderr,"Trace on!\n");
         }
 
         if (pixel_index < size - 6) {
@@ -672,6 +670,9 @@ class CDi {
         dut.OSD_STATUS = 1;
 
         start = std::chrono::system_clock::now();
+        //do_trace = false;
+        //fprintf(stderr,"Trace off!\n");
+
 
 #ifdef SIMULATE_RC5
         rc5_file = fopen("rc5_joy_upwards.csv", "r");
@@ -832,10 +833,10 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/Nobelia (USA).bin", "rb");
         break;
     case 4:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
+        f_cd_bin = fopen("images/fmvtest_only_audio.bin", "rb");
         break;
     case 5:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
+        f_cd_bin = fopen("images/fmvtest.bin", "rb");
         break;
     case 6:
         f_cd_bin = fopen("images/FMVTEST.BIN", "rb");

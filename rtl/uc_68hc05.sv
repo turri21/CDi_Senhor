@@ -70,7 +70,16 @@ module uc68hc05 (
 
     bit [15:0] free_running_counter = 0;
     // clock divider
-    bit [4:0] free_running_counter_shadowcnt = 0;
+    bit [ 4:0] free_running_counter_shadowcnt = 0;
+
+`ifdef VERILATOR
+    // This is a hack to speed up the boot process
+    localparam FREE_RUNNING_COUNTER_SHADOW_PERIOD = 5;
+`else
+    // 30 MHz / 2 (clken) / 30 = 0.5 MHz
+    // Equal to 4 MHz /2 /4 on a real 68HC05
+    localparam FREE_RUNNING_COUNTER_SHADOW_PERIOD = 30;
+`endif
 
     bit [7:0] latched_counter = 0;
     bit timerirq = 0;
@@ -322,11 +331,7 @@ module uc68hc05 (
 
                 // 30 MHz / 2 (clken) / 30 = 0.5 MHz
                 // Equal to 4 MHz /2 /4 on a real 68HC05
-`ifdef VERILATOR
-                if (free_running_counter_shadowcnt == 5 - 1) begin
-`else
-                if (free_running_counter_shadowcnt == 30 - 1) begin
-`endif 
+                if (free_running_counter_shadowcnt == FREE_RUNNING_COUNTER_SHADOW_PERIOD - 1) begin
                     free_running_counter_shadowcnt <= 0;
                     free_running_counter <= free_running_counter + 1;
                 end else free_running_counter_shadowcnt <= free_running_counter_shadowcnt + 1;
