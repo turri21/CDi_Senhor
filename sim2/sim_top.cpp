@@ -67,8 +67,21 @@ template <typename T, typename U> constexpr T BIT(T x, U n) noexcept {
     return (x >> n) & T(1);
 }
 
-static void catch_function(int signo) {
-    status = signo;
+bool press_button_signal{false};
+
+void signal_handler(int signum, siginfo_t *info, void *context) {
+    fprintf(stderr, "Received signal %d\n", signum);
+
+    switch (signum) {
+    case SIGINT:
+        // End simulation
+        status = signum;
+        break;
+    case SIGUSR1:
+        // Press a button
+        press_button_signal = true;
+        break;
+    }
 }
 
 // got from mame
@@ -198,6 +211,7 @@ class CDi {
     uint64_t step = 0;
     uint64_t sim_time = 0;
     int frame_index = 0;
+    int release_button_frame{-1};
 
   private:
     FILE *f_audio_left{nullptr};
@@ -549,6 +563,30 @@ class CDi {
             dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_x == 0) {
             char filename[100];
 
+            // Skip Philips Logo
+            if (frame_index == 140) {
+                press_button_signal = true;
+            }
+
+            // Skip Intro Screen
+            if (frame_index == 386) {
+                press_button_signal = true;
+            }
+
+            if (press_button_signal) {
+                press_button_signal = false;
+                release_button_frame = frame_index + 5;
+                printf("Press a button!\n");
+                fprintf(stderr, "Press a button!\n");
+                dut.rootp->emu__DOT__JOY0 = 0b100000;
+            }
+
+            if (release_button_frame == frame_index) {
+                printf("Release a button!\n");
+                fprintf(stderr, "Release a button!\n");
+                dut.rootp->emu__DOT__JOY0 = 0b000000;
+            }
+
             if (pixel_index > 400) {
                 auto current = std::chrono::system_clock::now();
                 std::chrono::duration<double> elapsed_seconds = current - start;
@@ -576,8 +614,8 @@ class CDi {
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma);
-            //do_trace = true;
-            //fprintf(stderr,"Trace on!\n");
+            do_trace = true;
+            fprintf(stderr, "Trace on!\n");
         }
 
         if (pixel_index < size - 6) {
@@ -670,9 +708,8 @@ class CDi {
         dut.OSD_STATUS = 1;
 
         start = std::chrono::system_clock::now();
-        //do_trace = false;
-        //fprintf(stderr,"Trace off!\n");
-
+        do_trace = false;
+        fprintf(stderr, "Trace off!\n");
 
 #ifdef SIMULATE_RC5
         rc5_file = fopen("rc5_joy_upwards.csv", "r");
@@ -807,10 +844,13 @@ int main(int argc, char **argv) {
         Verilated::traceEverOn(true);
 #endif
 
-    if (signal(SIGINT, catch_function) == SIG_ERR) {
-        fputs("An error occurred while setting a signal handler.\n", stderr);
-        return EXIT_FAILURE;
-    }
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
 
     int machineindex = 0;
 
@@ -821,7 +861,7 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/Zelda Wand of Gamelon.bin", "rb");
+        f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
         break;
     case 1:
         f_cd_bin = fopen("images/Hotel Mario.bin", "rb");
@@ -845,7 +885,7 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
         break;
     case 8:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
+        f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
         prepare_apprentice_usa_toc();
         break;
     }

@@ -236,6 +236,10 @@ module vmpeg (
                 {FMA_PES2, 8'b01??????}: begin // STD buffer size
                     mpeg_audio_state <= FMA_PES3;
                 end
+
+                {FMA_PES2, 8'hff}: begin // stuffing byte
+                    mpeg_audio_state <= FMA_PES2;
+                end
                 
                 {FMA_PES1, 8'h??}: begin
                     mpeg_audio_state <= FMA_PES2;

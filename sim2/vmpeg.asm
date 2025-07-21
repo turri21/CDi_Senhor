@@ -23,13 +23,13 @@ main:
 	move.w #$0024,$303C00 ; Command Register = Reset Mode 2
 	move.w #$8000,$303FFE ; Data buffer
 
-	; Designed for FMVTest
+	; Designed for Dragon's Lair Intro
 	; Start reading at 00:32:34
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$0001,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$00323400,$303C02 ; Timer Register
+	move.l #$01274700,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 
