@@ -24,3 +24,7 @@ The official manual is not very detailed when it comes to the debugger
     v EXPR                         - Displays expression value
     i[t][h] [TABLE]                - Displays processor clocks
 
+
+## Tracing syscalls
+
+    et trp
