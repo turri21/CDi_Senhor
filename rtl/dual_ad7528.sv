@@ -8,6 +8,10 @@ module dual_ad7528_attenuation (
 
     input signed [15:0] audio_left_in,
     input signed [15:0] audio_right_in,
+
+    input signed [15:0] mpeg_left_in,
+    input signed [15:0] mpeg_right_in,
+
     output bit signed [15:0] audio_left_out,
     output bit signed [15:0] audio_right_out
 );
@@ -94,7 +98,7 @@ module dual_ad7528_attenuation (
                 audio_left_out <= temp_clipped[23:8];
 
                 state <= LEFT_B;
-                temp <= signed'({1'b0, factor_left_a}) * audio_left_in;
+                temp <= signed'({1'b0, factor_left_a}) * audio_left_in + {mpeg_right_in[15],mpeg_right_in[15],mpeg_right_in,8'b10000000};
             end
             LEFT_B: begin
                 state <= RIGHT_A;
@@ -104,7 +108,7 @@ module dual_ad7528_attenuation (
                 audio_right_out <= temp_clipped[23:8];
 
                 state <= RIGHT_B;
-                temp <= signed'({1'b0, factor_right_a}) * audio_right_in;
+                temp <= signed'({1'b0, factor_right_a}) * audio_right_in + {mpeg_left_in[15],mpeg_left_in[15],mpeg_left_in,8'b10000000};
             end
             RIGHT_B: begin
                 state <= LEFT_A;

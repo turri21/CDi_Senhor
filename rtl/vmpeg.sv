@@ -346,25 +346,25 @@ module vmpeg (
 
 
     typedef struct packed {
-        bit erdv; // ?
-        bit erdd; // ?
-        bit vcup; // ?
-        bit pai; // Pause Interrupt ?
+        bit erdv;  // ?
+        bit erdd;  // ?
+        bit vcup;  // ?
+        bit pai;   // Pause Interrupt ?
 
-        bit vsync; // Vertical Synchronization ?
-        bit eii; // End ISO Indicator ?
-        bit esi; // End Sequence Indicator ?
-        bit tim; // Timer
+        bit vsync;  // Vertical Synchronization ?
+        bit eii;    // End ISO Indicator ?
+        bit esi;    // End Sequence Indicator ?
+        bit tim;    // Timer
 
-        bit dcl; // ?
-        bit ovf; // Overflow ?
-        bit ndat; // ?
-        bit rfb; // ?
+        bit dcl;   // ?
+        bit ovf;   // Overflow ?
+        bit ndat;  // ?
+        bit rfb;   // ?
 
-        bit eod; // End Of Data
-        bit pic; // Picture Decoded
-        bit gop; // GOP Decoded
-        bit seq; // SEQ Decoded
+        bit eod;  // End Of Data
+        bit pic;  // Picture Decoded
+        bit gop;  // GOP Decoded
+        bit seq;  // SEQ Decoded
     } interrupt_flags_s;
 
     // FMA CMD @ 00E03000
