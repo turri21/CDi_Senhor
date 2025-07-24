@@ -16,9 +16,9 @@ module mpeg_audio (
     input sample_tick44,
     output playback_active,
 
-    output event_decoding_started,
-    output event_frame_decoded
-
+    output bit event_decoding_started,
+    output bit event_frame_decoded,
+    output bit event_underflow
 );
 
     // 4kB of MPEG stream memory to fill from outside
@@ -47,6 +47,9 @@ module mpeg_audio (
     assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd7000);
 
     always_ff @(posedge clk) begin
+        event_decoding_started <= 0;
+        event_frame_decoded <= 0;
+        event_underflow <= 0;
 
         if (reset) begin
             mpeg_stream_fifo_write_adr <= 0;
@@ -61,6 +64,10 @@ module mpeg_audio (
                     mpeg_stream_fifo_write_adr <= dmem_cmd_payload_data[27:0];
                 if (dmem_cmd_payload_address == 32'h10002004)
                     mpeg_stream_bit_index <= dmem_cmd_payload_data;
+
+                event_decoding_started <= (dmem_cmd_payload_address == 32'h10002008);
+                event_frame_decoded <= (dmem_cmd_payload_address == 32'h1000200c);
+                event_underflow <= (dmem_cmd_payload_address == 32'h10002010);
             end
         end
     end

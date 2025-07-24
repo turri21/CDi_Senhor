@@ -389,7 +389,7 @@ module cdic (
     // Number of sectors to wait until requesting the first
     // after the reading was instructed to start.
 `ifdef VERILATOR
-    localparam bit [5:0] kSeekTime = 1;
+    localparam bit [5:0] kSeekTime = 10;
 `else
     // Seeking on a real 210/05 takes about 200ms
     // But 19 (250ms) seems to be more stable

@@ -563,16 +563,6 @@ class CDi {
             dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_x == 0) {
             char filename[100];
 
-            // Skip Philips Logo
-            if (frame_index == 140) {
-                press_button_signal = true;
-            }
-
-            // Skip Intro Screen
-            if (frame_index == 386) {
-                press_button_signal = true;
-            }
-
             if (press_button_signal) {
                 press_button_signal = false;
                 release_button_frame = frame_index + 5;
@@ -835,6 +825,68 @@ void prepare_apprentice_usa_toc() {
     toc_entry_count = 75;
 }
 
+void prepare_lucky_luke_europe_toc() {
+    toc_buffer[0] = {1, 1, 34, 25, 1};
+    toc_buffer[1] = {1, 1, 34, 25, 0};
+    toc_buffer[2] = {1, 1, 34, 25, 25};
+    toc_buffer[3] = {1, 2, 37, 32, 34};
+    toc_buffer[4] = {1, 2, 37, 32, 2};
+    toc_buffer[5] = {1, 2, 37, 32, 1};
+    toc_buffer[6] = {1, 3, 41, 2, 0};
+    toc_buffer[7] = {1, 3, 41, 2, 32};
+    toc_buffer[8] = {1, 3, 41, 2, 41};
+    toc_buffer[9] = {1, 4, 50, 19, 3};
+    toc_buffer[10] = {1, 4, 50, 19, 1};
+    toc_buffer[11] = {1, 4, 50, 19, 0};
+    toc_buffer[12] = {1, 5, 53, 70, 19};
+    toc_buffer[13] = {1, 5, 53, 70, 50};
+    toc_buffer[14] = {1, 5, 53, 70, 4};
+    toc_buffer[15] = {1, 6, 56, 4, 1};
+    toc_buffer[16] = {1, 6, 56, 4, 0};
+    toc_buffer[17] = {1, 6, 56, 4, 70};
+    toc_buffer[18] = {1, 7, 57, 37, 53};
+    toc_buffer[19] = {1, 7, 57, 37, 6};
+    toc_buffer[20] = {1, 7, 57, 37, 1};
+    toc_buffer[21] = {1, 8, 64, 86, 0};
+    toc_buffer[22] = {1, 8, 64, 86, 4};
+    toc_buffer[23] = {1, 8, 64, 86, 57};
+    toc_buffer[24] = {1, 9, 66, 41, 7};
+    toc_buffer[25] = {1, 9, 66, 41, 1};
+    toc_buffer[26] = {1, 9, 66, 41, 0};
+    toc_buffer[27] = {1, 16, 67, 72, 86};
+    toc_buffer[28] = {1, 16, 67, 72, 64};
+    toc_buffer[29] = {1, 16, 67, 72, 8};
+    toc_buffer[30] = {1, 17, 68, 41, 1};
+    toc_buffer[31] = {1, 17, 68, 41, 0};
+    toc_buffer[32] = {1, 17, 68, 41, 41};
+    toc_buffer[33] = {1, 18, 68, 82, 66};
+    toc_buffer[34] = {1, 18, 68, 82, 16};
+    toc_buffer[35] = {1, 18, 68, 82, 1};
+    toc_buffer[36] = {1, 19, 69, 84, 0};
+    toc_buffer[37] = {1, 19, 69, 84, 72};
+    toc_buffer[38] = {1, 19, 69, 84, 68};
+    toc_buffer[39] = {1, 20, 71, 25, 17};
+    toc_buffer[40] = {1, 20, 71, 25, 1};
+    toc_buffer[41] = {1, 20, 71, 25, 0};
+    toc_buffer[42] = {1, 21, 72, 69, 82};
+    toc_buffer[43] = {1, 21, 72, 69, 68};
+    toc_buffer[44] = {1, 21, 72, 69, 18};
+    toc_buffer[45] = {1, 22, 81, 37, 1};
+    toc_buffer[46] = {1, 22, 81, 37, 0};
+    toc_buffer[47] = {1, 22, 81, 37, 84};
+    toc_buffer[48] = {1, 160, 1, 0, 69};
+    toc_buffer[49] = {1, 160, 1, 0, 20};
+    toc_buffer[50] = {1, 160, 1, 0, 1};
+    toc_buffer[51] = {1, 161, 22, 0, 0};
+    toc_buffer[52] = {1, 161, 22, 0, 25};
+    toc_buffer[53] = {1, 161, 22, 0, 72};
+    toc_buffer[54] = {1, 162, 34, 25, 21};
+    toc_buffer[55] = {1, 162, 34, 25, 1};
+    toc_buffer[56] = {1, 162, 34, 25, 0};
+
+    toc_entry_count = 57;
+}
+
 int main(int argc, char **argv) {
     // Initialize Verilators variables
     Verilated::commandArgs(argc, argv);
@@ -864,7 +916,8 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
         break;
     case 1:
-        f_cd_bin = fopen("images/Hotel Mario.bin", "rb");
+        f_cd_bin = fopen("images/LuckyLuke.bin", "rb");
+        prepare_lucky_luke_europe_toc();
         break;
     case 2:
         f_cd_bin = fopen("images/tetris.bin", "rb");

@@ -65,10 +65,14 @@ module vmpeg (
     wire fmv_word_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid && !dma_for_fma;
     wire fma_word_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid && dma_for_fma;
 
+    wire event_decoding_started;
+    wire event_frame_decoded;
+    wire event_underflow;
+
     mpeg_audio audio (
         .clk,
         .reset,
-        .dsp_enable(decoding_frame_data),
+        .dsp_enable(dsp_enable),
         .data_word(din),
         .data_strobe(fma_word_data_valid),
         .fifo_full(),
@@ -76,8 +80,9 @@ module vmpeg (
         .audio_right(audio_right),
         .sample_tick44(sample_tick44),
         .playback_active(),
-        .event_decoding_started(),
-        .event_frame_decoded()
+        .event_decoding_started(event_decoding_started),
+        .event_frame_decoded(event_frame_decoded),
+        .event_underflow(event_underflow)
     );
 
     enum bit [3:0] {
@@ -148,7 +153,7 @@ module vmpeg (
     bit [32:0] presentation_time_stamp;
 
 
-    bit decoding_frame_data = 0;
+    bit dsp_enable = 0;
 
     always @(posedge clk) begin
         // TODO
@@ -400,7 +405,6 @@ module vmpeg (
     // FMA DCLKH @ 00E03010, DCLKH @ 00E03012
     // Increments with 45 kHz
     bit [31:0] fma_dclk;
-    bit [31:0] fma_dclk_next_update;
     bit [15:0] fma_dclkl_latch;
 
 
@@ -539,6 +543,27 @@ module vmpeg (
                 timecode <= fifo_out.timecode;
             end
 
+            if (event_decoding_started) begin
+                // Decoding started
+                fma_status_register[4] <= 1;
+                fma_interrupt_status_register[4] <= 1;
+            end
+
+            if (event_frame_decoded) begin
+                // Resetting Decoding started
+                fma_status_register[4] <= 0;
+
+                // Frame Header Updated
+                fma_status_register[2] <= 1;
+                fma_interrupt_status_register[2] <= 1;
+            end
+
+            if (event_underflow) begin
+                // Underflow
+                fma_status_register[3] <= 1;
+                fma_interrupt_status_register[3] <= 1;
+            end
+
             if (fma_dclk_shadow_cnt == kFmaClockDivider - 1) begin
                 fma_dclk_shadow_cnt <= 0;
                 fma_dclk <= fma_dclk + 1;
@@ -551,28 +576,8 @@ module vmpeg (
                     timer_cnt <= timer_cnt + 1;
                 end
 
-
-                if (fma_dclk == fma_dclk_next_update && decoding_frame_data) begin
-                    fma_dclk_next_update <= fma_dclk_next_update + 1175;
-
-                    // Resetting Decoding started
-                    fma_status_register[4] <= 0;
-
-                    // Frame Header Updated
-                    fma_status_register[2] <= 1;
-                    fma_interrupt_status_register[2] <= 1;
-                end
-
-                if (system_clock_reference_start_time_valid && fma_dclk == system_clock_reference_start_time[32:1] && !decoding_frame_data) begin
-                    decoding_frame_data <= 1;
-                    fma_dclk_next_update <= fma_dclk + 1175;
-                    // Decoding started
-                    fma_status_register[4] <= 1;
-                    fma_interrupt_status_register[4] <= 1;
-
-                    // Frame Header Updated
-                    fma_status_register[2] <= 1;
-                    fma_interrupt_status_register[2] <= 1;
+                if (system_clock_reference_start_time_valid && fma_dclk == system_clock_reference_start_time[32:1] && !dsp_enable) begin
+                    dsp_enable <= 1;
                 end
             end else begin
                 fma_dclk_shadow_cnt <= fma_dclk_shadow_cnt + 1;
@@ -628,7 +633,7 @@ module vmpeg (
 
                             if (din == 1) begin
                                 // Stop command
-                                decoding_frame_data <= 0;
+                                dsp_enable <= 0;
                             end
                         end
                         15'h1806: begin
