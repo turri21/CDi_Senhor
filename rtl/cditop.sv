@@ -360,7 +360,7 @@ module cditop (
     /*verilator tracing_off*/
     scc68070 scc68070_0 (
         .clk(clk30),
-        .reset(reset),  // External sync reset on emulated system
+        .reset(reset68k),  // External sync reset on emulated system
         .write_strobe(write_strobe),
         .as(as),
         .lds(lds),
