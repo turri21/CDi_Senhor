@@ -763,13 +763,13 @@ class CDi {
                 release_button_frame = frame_index + 10;
                 printf("Press a button!\n");
                 fprintf(stderr, "Press a button!\n");
-                dut.rootp->emu__DOT__JOY0 = 0b100000;
+                dut.rootp->emu__DOT__JOY0 = 0b10000;
             }
 
             if (release_button_frame == frame_index) {
                 printf("Release a button!\n");
                 fprintf(stderr, "Release a button!\n");
-                dut.rootp->emu__DOT__JOY0 = 0b000000;
+                dut.rootp->emu__DOT__JOY0 = 0b00000;
             }
 
             if (pixel_index > 400) {
