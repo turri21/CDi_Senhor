@@ -63,9 +63,9 @@ module audiodecoder (
     header_coding_s playback_coding;
 
     // Those are byte addresses
-    localparam bit [13:0] HEADER_OFFSETS_4BIT[8] = '{0, 1, 2, 3, 8, 9, 10, 11};
+    localparam bit [13:0] HEADER_OFFSETS_4BIT[8] = '{4, 5, 6, 7, 12, 13, 14, 15};
     localparam bit [13:0] DATA_OFFSETS_4BIT[8] = '{16, 16, 17, 17, 18, 18, 19, 19};
-    localparam bit [13:0] HEADER_OFFSETS_8BIT[4] = '{0, 1, 2, 3};
+    localparam bit [13:0] HEADER_OFFSETS_8BIT[4] = '{4, 5, 6, 7};
     localparam bit [13:0] DATA_OFFSETS_8BIT[4] = '{16, 17, 18, 19};
 
     localparam bit [4:0] LAST_GROUP_INDEX = 17;
