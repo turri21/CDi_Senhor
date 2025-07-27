@@ -33,10 +33,10 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  15,245 / 41,910 ( 36 % )
-    Total registers              17711
-    Total block memory bits      1,164,999 / 5,662,720 ( 21 % )
-    Total DSP Blocks             66 / 112 ( 59 % )
+    Logic utilization (in ALMs)  15,581 / 41,910 ( 37 % )
+    Total registers              17949
+    Total block memory bits      1,101,511 / 5,662,720 ( 19 % )
+    Total DSP Blocks             72 / 112 ( 64 % )
 
 ### TODOs
 
@@ -50,6 +50,7 @@ Core Utilization:
     * A workaround is CPU overclocking
 * Investigate input responsiveness (skipped events?)
 * Investigate screeching sound effect in the menu of "Golf Tips"
+    * Vincent Halver has found a solution for MAME. Need to check that.
 * Fix hang on audio track stop or change in media player
 * Cheat support?
 * Digital Video Cartridge MPEG Decoder
@@ -64,6 +65,7 @@ Core Utilization:
     * RC5 support is added. A test using real hardware is required.
 * Add 2 player support
 * CD+G
+* Check compatibilitiy with CDs that have track index 2 as opposed to the usual 0 and 1
 * Possibly adding support for other PCBs (like Mono II)
 * Refurbish I2C for the front display and show the content as picture in picture during changes?
     * It might not even be required at all.

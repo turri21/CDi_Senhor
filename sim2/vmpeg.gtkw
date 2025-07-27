@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.121 (w)1999-2024 BSI
-[*] Sun Jul 20 11:15:10 2025
+[*] Sat Jul 26 22:23:29 2025
 [*]
 [dumpfile] "/tmp/waveform.vcd"
-[dumpfile_mtime] "Sun Jul 20 11:15:10 2025"
-[dumpfile_size] 156513708
+[dumpfile_mtime] "Sat Jul 26 22:22:11 2025"
+[dumpfile_size] 13839736415
 [savefile] "/home/andre/GIT/scc68070/sim2/vmpeg.gtkw"
-[timestart] 0
-[size] 1920 1152
+[timestart] 23390000000000
+[size] 2560 1348
 [pos] -1 -1
-*-37.060101 256400000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-37.830338 24776000000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.emu.
 [treeopen] TOP.emu.cditop.
@@ -19,7 +19,7 @@
 [sst_width] 363
 [signals_width] 431
 [sst_expanded] 1
-[sst_vpaned_height] 346
+[sst_vpaned_height] 414
 @28
 TOP.emu.cditop.vmpeg_inst.audio.fifo_full
 TOP.emu.cditop.vmpeg_inst.audio.strobe_fifo
@@ -35,9 +35,6 @@ TOP.emu.cditop.vmpeg_inst.system_clock_reference_start_time[32:0]
 TOP.emu.cditop.vmpeg_inst.system_clock_reference_start_time_valid
 @22
 TOP.emu.cditop.vmpeg_inst.fma_dclk[31:0]
-@28
-TOP.emu.cditop.vmpeg_inst.decoding_frame_data
-@22
 TOP.emu.cditop.vmpeg_inst.fma_command_register[15:0]
 @28
 TOP.emu.cditop.vmpeg_inst.audio.audio_fifo_output_enabled
@@ -45,6 +42,11 @@ TOP.emu.cditop.vmpeg_inst.fmv_data_valid
 TOP.emu.cditop.vmpeg_inst.audio.data_strobe
 @8024
 TOP.emu.cditop.vmpeg_inst.audio.fifo_level[27:0]
+@22
+TOP.emu.cditop.vmpeg_inst.audio.mpeg_stream_bit_index[31:0]
+TOP.emu.cditop.vmpeg_inst.audio.mpeg_stream_fifo_write_adr[27:0]
+@23
+TOP.emu.cditop.vmpeg_inst.audio.mpeg_stream_fifo_read_adr[27:0]
 @8420
 TOP.emu.cditop.vmpeg_inst.audio.audio_left[15:0]
 TOP.emu.cditop.vmpeg_inst.audio.audio_right[15:0]
@@ -53,7 +55,7 @@ TOP.emu.cditop.vmpeg_inst.audio.fifo_right.count[9:0]
 TOP.emu.cditop.vmpeg_inst.audio.fifo_left.count[9:0]
 @28
 TOP.emu.cditop.vmpeg_inst.audio.fifo_nearly_full[1:0]
-@25
+@24
 TOP.emu.cditop.vmpeg_inst.presentation_time_stamp[32:0]
 [pattern_trace] 1
 [pattern_trace] 0

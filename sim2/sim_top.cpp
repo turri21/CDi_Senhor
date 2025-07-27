@@ -18,7 +18,7 @@
 
 #define SCC68070
 #define SLAVE
-// #define TRACE
+#define TRACE
 // #define SIMULATE_RC5
 
 #define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
@@ -392,6 +392,7 @@ class CDi {
     FILE *f_audio_left{nullptr};
     FILE *f_audio_right{nullptr};
     FILE *f_fma{nullptr};
+    FILE *f_fma_mp2{nullptr};
     FILE *f_fmv{nullptr};
     FILE *f_uart{nullptr};
 
@@ -799,6 +800,11 @@ class CDi {
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma);
+
+            if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_packet_body) {
+                fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma_mp2);
+            }
+
 #ifdef TRACE
             do_trace = true;
             fprintf(stderr, "Trace on!\n");
@@ -834,6 +840,7 @@ class CDi {
         fclose(f_audio_right);
         fclose(f_audio_left);
         fclose(f_fma);
+        fclose(f_fma_mp2);
         fclose(f_fmv);
         fclose(f_uart);
     }
@@ -855,6 +862,11 @@ class CDi {
         fprintf(stderr, "Writing to %s\n", filename);
         f_fma = fopen(filename, "wb");
         assert(f_fma);
+
+        sprintf(filename, "%d/fma_mp2.bin", instanceid);
+        fprintf(stderr, "Writing to %s\n", filename);
+        f_fma_mp2 = fopen(filename, "wb");
+        assert(f_fma_mp2);
 
         sprintf(filename, "%d/fmv.bin", instanceid);
         fprintf(stderr, "Writing to %s\n", filename);

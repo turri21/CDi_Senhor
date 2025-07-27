@@ -525,8 +525,8 @@ module cditop (
         .audio_right_out(att_audio_right)
     );
 
-    assign audio_left  = debug_disable_audio_attenuation ? cdic_audio_left : att_audio_left;
-    assign audio_right = debug_disable_audio_attenuation ? cdic_audio_right : att_audio_right;
+    assign audio_left  = debug_disable_audio_attenuation ? mpeg_audio_left : att_audio_left;
+    assign audio_right = debug_disable_audio_attenuation ? mpeg_audio_right : att_audio_right;
 
     u3090mg u3090mg (
         .clk(clk30),

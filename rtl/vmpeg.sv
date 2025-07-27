@@ -51,6 +51,9 @@ module vmpeg (
     wire [7:0] mpeg_data  /*verilator public_flat_rd*/ = mpeg_word_valid_q ? mpeg_temp : din[15:8];
     wire mpeg_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid_q || mpeg_word_valid;
 
+    bit mpeg_packet_body  /*verilator public_flat_rd*/;
+    bit packet_length_decreasing;
+
     always @(posedge clk) begin
         mpeg_word_valid_q <= mpeg_word_valid;
         if (mpeg_word_valid) mpeg_temp <= din[7:0];
@@ -68,13 +71,15 @@ module vmpeg (
     wire event_decoding_started;
     wire event_frame_decoded;
     wire event_underflow;
+    bit  dsp_reset_input_fifo;
 
     mpeg_audio audio (
         .clk,
         .reset,
         .dsp_enable(dsp_enable),
-        .data_word(din),
-        .data_strobe(fma_word_data_valid),
+        .reset_input_fifo(dsp_reset_input_fifo),
+        .data_byte(mpeg_data),
+        .data_strobe(fma_data_valid && mpeg_packet_body),
         .fifo_full(),
         .audio_left(audio_left),
         .audio_right(audio_right),
@@ -168,7 +173,15 @@ module vmpeg (
         end
 
         if (fma_data_valid) begin
-            // $display ("MPEG %x",mpeg_data);
+            $display("MPEG FMA %x %d %d", mpeg_data, mpeg_packet_body, packet_length);
+
+            if (packet_length_decreasing) begin
+                packet_length <= packet_length - 1;
+                if (packet_length == 1) begin
+                    packet_length_decreasing <= 0;
+                    mpeg_packet_body <= 0;
+                end
+            end
 
             casez ({
                 mpeg_audio_state, mpeg_data
@@ -214,6 +227,8 @@ module vmpeg (
                     // verilog_format: off
                 end
                 {FMA_PES7, 8'b???????1}: begin // PTS
+                    mpeg_packet_body <= 1;
+
                     presentation_time_stamp[6:0] <= mpeg_data[7:1];
                     mpeg_audio_state <= FMA_PES8;
                 end
@@ -249,6 +264,7 @@ module vmpeg (
                 {FMA_PES1, 8'h??}: begin
                     mpeg_audio_state <= FMA_PES2;
                     packet_length[7:0] <= mpeg_data;
+                    packet_length_decreasing <= 1;
                 end
                 {FMA_PES0, 8'h??}: begin
                     mpeg_audio_state <= FMA_PES1;
@@ -523,6 +539,7 @@ module vmpeg (
         bus_ack <= 0;
         vsync_q <= vsync;
         fifo_out_strobe <= 0;
+        dsp_reset_input_fifo <= 0;
 
         if (reset) begin
             mpeg_ram_enabled <= 0;
@@ -625,15 +642,23 @@ module vmpeg (
                     case (address[15:1])
                         15'h1800: begin
                             $display("FMA CMD %x %x", address[15:1], din);
+
+                            /*
+                            FMA CMD 1800 0001 Stop ?
+                            FMA CMD 1800 0002 Start ?
+                            FMA CMD 1800 8002 DMA Transfer
+                            */
+
                             fma_command_register <= din;
                             if (din[15]) begin
                                 dma_active  <= 1;
                                 dma_for_fma <= 1;
                             end
 
-                            if (din == 1) begin
-                                // Stop command
+                            if (din == 2 && fma_command_register == 1) begin
+                                // Stop command?
                                 dsp_enable <= 0;
+                                dsp_reset_input_fifo <= 1;
                             end
                         end
                         15'h1806: begin

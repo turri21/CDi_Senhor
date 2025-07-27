@@ -6,8 +6,9 @@ module mpeg_audio (
     input clk,
     input reset,
     input dsp_enable,
+    input reset_input_fifo,
 
-    input [15:0] data_word,
+    input [7:0] data_byte,
     input data_strobe,
     output fifo_full,
 
@@ -21,37 +22,34 @@ module mpeg_audio (
     output bit event_underflow
 );
 
-    // 4kB of MPEG stream memory to fill from outside
+    // 8kB of MPEG stream memory to fill from outside
     wire [31:0] mpeg_in_fifo_out;
 
     mpeg_input_stream_fifo in_fifo (
         .clk,
-        // In (from 16 Bit CD data)
-        .waddr(mpeg_stream_fifo_write_adr[12:0] ^ 1),
-        .wdata(data_word),
+        // In, invert endianness at the same time
+        .waddr({mpeg_stream_fifo_write_adr[12:2], 2'b11 - mpeg_stream_fifo_write_adr[1:0]}),
+        .wdata(data_byte),
         .we(data_strobe),
         // Out (32 bit CPU interface)
-        .raddr(dmem_cmd_payload_address[13:2]),
+        .raddr(dmem_cmd_payload_address[12:2]),
         .q(mpeg_in_fifo_out)
     );
 
-    // Word Address
     bit  [27:0] mpeg_stream_fifo_write_adr;
     bit  [31:0] mpeg_stream_bit_index;
     wire [28:0] mpeg_stream_byte_index = mpeg_stream_bit_index[31:3];
-
-    // Word address
-    wire [27:0] mpeg_stream_fifo_read_adr = mpeg_stream_byte_index[28:1];
+    wire [27:0] mpeg_stream_fifo_read_adr = mpeg_stream_byte_index[27:0];
 
     wire [27:0] fifo_level = mpeg_stream_fifo_write_adr - mpeg_stream_fifo_read_adr;
-    assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd7000);
+    assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd8000);
 
     always_ff @(posedge clk) begin
         event_decoding_started <= 0;
         event_frame_decoded <= 0;
         event_underflow <= 0;
 
-        if (reset) begin
+        if (reset || reset_input_fifo) begin
             mpeg_stream_fifo_write_adr <= 0;
             mpeg_stream_bit_index <= 0;
         end else begin
@@ -240,7 +238,7 @@ module mpeg_audio (
                         if (dmem_cmd_payload_address_q == 32'h10001008)
                             dmem_rsp_payload_data = mac_vector_accu_saturated;
                         if (dmem_cmd_payload_address_q == 32'h10002000)
-                            dmem_rsp_payload_data = {3'b000, mpeg_stream_fifo_write_adr, 1'b0};
+                            dmem_rsp_payload_data = {4'b0000, mpeg_stream_fifo_write_adr};
                         if (dmem_cmd_payload_address_q == 32'h10002004)
                             dmem_rsp_payload_data = mpeg_stream_bit_index;
                     end
@@ -424,20 +422,20 @@ endmodule
 
 
 // https://www.intel.com/content/www/us/en/docs/programmable/683082/21-3/mixed-width-dual-port-ram.html
-// 4096x16 write and 2048x32 read
+// 8192x8 write and 2048x32 read
 // So, this is 8KB of memory
 module mpeg_input_stream_fifo (
     input [12:0] waddr,
-    input [15:0] wdata,
+    input [7:0] wdata,
     input we,
     input clk,
-    input [11:0] raddr,
+    input [10:0] raddr,
     output logic [31:0] q
 );
 
-    logic [1:0][15:0] ram[4096];
+    logic [3:0][7:0] ram[2048];
     always_ff @(posedge clk) begin
-        if (we) ram[waddr[12:1]][waddr[0]] <= wdata;
+        if (we) ram[waddr[12:2]][waddr[1:0]] <= wdata;
         q <= ram[raddr];
     end
 endmodule : mpeg_input_stream_fifo
