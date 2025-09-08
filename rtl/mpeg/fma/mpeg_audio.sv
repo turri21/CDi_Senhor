@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 `include "synth_window.svh"
-`include "util.svh"
+`include "../util.svh"
 
 module mpeg_audio (
     input clk,

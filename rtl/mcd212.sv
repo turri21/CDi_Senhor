@@ -46,14 +46,13 @@ module mcd212 (
     input             dvc_ram_cs,
     input             dvc_rom_cs,
 
-    output     [7:0] r,
-    output     [7:0] g,
-    output     [7:0] b,
-    output           hsync,
-    output           vsync,
-    output bit       hblank,
-    output           vblank,
-    output           vga_f1,
+    output rgb888_s vidout,
+    output          hsync,
+    output          vsync,
+    output bit      hblank,
+    output          vblank,
+    output          vga_f1,
+    output bit      vsd,
 
     output bit [24:0] sdram_addr,
     output bit        sdram_rd,
@@ -987,8 +986,6 @@ module mcd212 (
     // color mixing
     rgb888_s plane_a;
     rgb888_s plane_b;
-    rgb888_s vidout;
-
     rgb555_s rgb555;
 
     function clut_entry_s RGB888ToClut(input rgb888_s rgb);
@@ -996,8 +993,6 @@ module mcd212 (
         RGB888ToClut.g = rgb.g[7:2];
         RGB888ToClut.b = rgb.b[7:2];
     endfunction
-
-    assign {r, g, b} = {vidout.r, vidout.g, vidout.b};
 
     bit plane_a_visible;
     bit plane_b_visible;
@@ -1183,10 +1178,13 @@ module mcd212 (
     endfunction
 
     always_comb begin
+        bit backdrop_pixel;
+
         // start with the backdrop color
         vidout.r = backdrop_color_register.r ? 8'hff : 0;
         vidout.g = backdrop_color_register.g ? 8'hff : 0;
         vidout.b = backdrop_color_register.b ? 8'hff : 0;
+        backdrop_pixel = (!plane_a_visible && !plane_b_visible);
         if (!backdrop_color_register.y) begin
             // Half brightness
             vidout.r[7] = 0;
@@ -1231,6 +1229,7 @@ module mcd212 (
 
         // cursor
         if (cursor_pixel && inside_cursor_window && cursor_control_register.en) begin
+            backdrop_pixel = 0;
             vidout.r = cursor_control_register.r ? 8'hff : 0;
             vidout.g = cursor_control_register.g ? 8'hff : 0;
             vidout.b = cursor_control_register.b ? 8'hff : 0;
@@ -1242,6 +1241,10 @@ module mcd212 (
                 vidout.b[7] = 0;
             end
         end
+
+        // TODO not working?
+        // vsd = backdrop_pixel && image_coding_method_register.ev;
+        vsd = video_y > 100;
     end
 
     // Implementation of Table 5-13 Register Map

@@ -118,6 +118,7 @@ module emu (
     //High latency DDR3 RAM interface
     //Use for non-critical time purposes
     output DDRAM_CLK,  // any clock, no restrictions. Typically main core clock
+`ifndef VERILATOR
     input DDRAM_BUSY,  // every read and write request is only accepted in a cycle where busy is low
     output [7:0] DDRAM_BURSTCNT,  // amount of words to be written/read. Maximum is 128
     output [28:0] DDRAM_ADDR,         // starting address for read/write. In case of burst, the addresses will internally count up
@@ -127,6 +128,7 @@ module emu (
     output [63:0] DDRAM_DIN,  // data word to be written
     output  [7:0] DDRAM_BE,           // byte enable for each of the 8 bytes in DDRAM_DIN, only used for writing. (1=write, 0=ignore)
     output DDRAM_WE,  // request write at DDRAM_ADDR with DDRAM_DIN data and DDRAM_BE mask
+`endif
 
     //SDRAM interface with lower latency
     output        SDRAM_CLK,
@@ -191,8 +193,6 @@ module emu (
 `else
     assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 `endif
-
-    assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 
     assign VGA_SL = 0;
     assign VGA_SCALER = 0;
@@ -363,7 +363,7 @@ module emu (
         .rst(0),
         .outclk_0(clk_sys),  // 30 MHz
         .outclk_1(clk_audio),  // 22.2264 MHz
-        .outclk_2(clk_mpeg)  // 150 MHz
+        .outclk_2(clk_mpeg)  // 90 MHz
     );
 `endif
 
@@ -560,6 +560,54 @@ module emu (
     );
 
 `ifdef VERILATOR
+
+    // DDR3 simulation
+    bit [63:0] ddram[500000/8]  /*verilator public_flat_rd*/;
+
+    int ddr_latencycnt;
+    bit [7:0] ddr_words_to_prove;
+    bit [28:0] ddr_addr;
+
+    bit DDRAM_BUSY;  // every read and write request is only accepted in a cycle where busy is low
+    wire [7:0] DDRAM_BURSTCNT;  // amount of words to be written/read. Maximum is 128
+    wire [28:0] DDRAM_ADDR;         // starting address for read/write. In case of burst; the addresses will internally count up
+    bit [63:0] DDRAM_DOUT;  // data coming from (burst) read
+    bit         DDRAM_DOUT_READY;   // high for 1 clock cycle for every 64 bit dataword requested via (burst) read request
+    wire DDRAM_RD;  // request read at DDRAM_ADDR and DDRAM_BURSTCNT length
+    wire [63:0] DDRAM_DIN;  // data word to be written
+    wire  [7:0] DDRAM_BE;           // byte enable for each of the 8 bytes in DDRAM_DIN; only used for writing. (1=write; 0=ignore)
+    wire DDRAM_WE;  // request write at DDRAM_ADDR with DDRAM_DIN data and DDRAM_BE mask
+
+    always_ff @(posedge DDRAM_CLK) begin
+        DDRAM_DOUT_READY <= 0;
+
+        if (DDRAM_WE && !DDRAM_BUSY) begin
+            ddram[DDRAM_ADDR[15:0]] <= DDRAM_DIN;
+            //$display("Write at %x %x",DDRAM_ADDR, DDRAM_DIN);
+        end
+
+        if (DDRAM_RD && !DDRAM_BUSY) begin
+            ddr_latencycnt <= 3;
+            ddr_words_to_prove <= DDRAM_BURSTCNT;
+            ddr_addr <= DDRAM_ADDR;
+            DDRAM_BUSY <= 1;
+        end
+
+        if (DDRAM_BUSY) begin
+            if (ddr_latencycnt > 0) ddr_latencycnt <= ddr_latencycnt - 1;
+            else begin
+                DDRAM_DOUT <= ddram[ddr_addr[15:0]];
+                ddr_addr <= ddr_addr + 1;
+                DDRAM_DOUT_READY <= 1;
+                ddr_words_to_prove <= ddr_words_to_prove - 1;
+                if (ddr_words_to_prove == 1) DDRAM_BUSY <= 0;
+            end
+
+        end
+    end
+
+    // SDRAM simulation
+
     bit [15:0] rom[262144]  /*verilator public_flat_rw*/;
     bit [15:0] vmpega_rom[65536]  /*verilator public_flat_rw*/;
     bit [15:0] ram[2097152]  /*verilator public_flat_rw*/;
@@ -676,6 +724,23 @@ module emu (
     // TODO requires connection and testing with real photo diode
     wire rc_eye  /*verilator public_flat_rw*/;
 
+
+    ddr_if ddr_host ();
+
+    assign DDRAM_CLK = clk_mpeg;
+    assign DDRAM_ADDR = ddr_host.addr;
+    assign DDRAM_BE = ddr_host.byteenable;
+    assign DDRAM_WE = ddr_host.write;
+    assign DDRAM_RD = ddr_host.read;
+    assign DDRAM_DIN = ddr_host.wdata;
+    assign DDRAM_BURSTCNT = ddr_host.burstcnt;
+    assign ddr_host.rdata = DDRAM_DOUT;
+    assign ddr_host.rdata_ready = DDRAM_DOUT_READY;
+    assign ddr_host.busy = DDRAM_BUSY;
+
+    rgb888_s cdi_video_out;
+    assign {r, g, b} = {cdi_video_out.r, cdi_video_out.g, cdi_video_out.b};
+
     cditop cditop (
         .clk30(clk_sys),
         .clk_audio(clk_audio),
@@ -697,9 +762,7 @@ module emu (
         .VSync (VSync),
         .vga_f1(VGA_F1),
 
-        .r(r),
-        .g(g),
-        .b(b),
+        .vidout(cdi_video_out),
 
         .sdram_addr(sdram_addr),
         .sdram_rd(sdram_rd),
@@ -713,6 +776,8 @@ module emu (
         .sdram_burstdata_valid,
         .scc68_uart_tx(UART_TXD),
         .scc68_uart_rx(UART_RXD),
+
+        .ddrif(ddr_host),
 
         .slave_worm_adr (slave_worm_adr),
         .slave_worm_data(slave_worm_data),

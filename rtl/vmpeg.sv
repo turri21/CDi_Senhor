@@ -22,12 +22,16 @@ module vmpeg (
     input done_in,
     output done_out,
 
-    // Video Synchronization
+    ddr_if.to_host ddrif,
+
+    // Video Synchronization and Output
     input hsync,
     input vsync,
     input hblank,
     input vblank,
+    output rgb888_s vidout,
 
+    // Audio Out
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
     input sample_tick44,
@@ -83,6 +87,8 @@ module vmpeg (
         .event_underflow(event_underflow)
     );
 
+    wire video_fifo_full;
+
     mpeg_video video (
         .clk30(clk),
         .clk60(clk_mpeg),
@@ -90,7 +96,13 @@ module vmpeg (
         .dsp_enable(1'b1),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
-        .fifo_full()
+        .fifo_full(video_fifo_full),
+        .ddrif,
+        .hsync,
+        .vsync,
+        .hblank,
+        .vblank,
+        .vidout
     );
 
     bit [9:0] temperal_sequence_number;
@@ -107,8 +119,8 @@ module vmpeg (
         .data_valid(fma_data_valid),
         .mpeg_packet_body(fma_packet_body),
         .dclk(fma_dclk),
-        .system_clock_reference_start_time,
-        .system_clock_reference_start_time_valid
+        .system_clock_reference_start_time(system_clock_reference_start_time),
+        .system_clock_reference_start_time_valid(system_clock_reference_start_time_valid)
     );
 
     mpeg_demuxer video_demuxer (

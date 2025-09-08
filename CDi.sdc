@@ -4,3 +4,7 @@ derive_clock_uncertainty
 # core specific constraints
 
 set_false_path -from {*|flag_cross_domain*|flagtoggle_clk_a*} -to {*|flag_cross_domain*|synca_clk_b*}
+set_false_path -from {*|signal_cross_domain*|signal_clk_a} -to {*|signal_cross_domain*|synca_clk_b[0]}
+set_false_path -from {*|ddr_to_byte_fifo:fifo_y|waddr_q*} -to {*|ddr_to_byte_fifo:fifo_y|waddr_q2*}
+set_false_path -from {*|ddr_to_byte_fifo:fifo_y|raddr_q*} -to {*|ddr_to_byte_fifo:fifo_y|raddr_q2*}
+

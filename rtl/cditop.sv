@@ -1,3 +1,4 @@
+`include "videotypes.svh"
 
 module cditop (
     input clk30,
@@ -19,9 +20,7 @@ module cditop (
     output bit VSync,
     output vga_f1,
 
-    output [7:0] r,
-    output [7:0] g,
-    output [7:0] b,
+    output rgb888_s vidout,
 
     output [24:0] sdram_addr,
     output        sdram_rd,
@@ -33,6 +32,8 @@ module cditop (
     output        sdram_burst,
     output        sdram_refresh,
     input         sdram_burstdata_valid,
+
+    ddr_if.to_host ddrif,
 
     output scc68_uart_tx,
     input  scc68_uart_rx,
@@ -199,6 +200,12 @@ module cditop (
 
     wire vdsc_int;
 
+    // VSD is set if EV-bit is set and the backdrop is shown
+    // A real CDI 210/05 uses VSA because of analog
+    // video mixing. But we won't do that here and use the digital
+    // one instead
+    wire mcd212_vsd;
+
     mcd212 mcd212_inst (
         .clk(clk30),
         .reset,
@@ -212,9 +219,8 @@ module cditop (
         .cs(attex_cs_mcd212),
         .dvc_ram_cs(dvc_ram_cs),
         .dvc_rom_cs(dvc_rom_cs),
-        .r(r),
-        .g(g),
-        .b(b),
+        .vidout(mcd212_video_out),
+        .vsd(mcd212_vsd),
         .hsync(HSync),
         .vsync(VSync),
         .hblank(HBlank),
@@ -312,6 +318,9 @@ module cditop (
     wire vmpeg_intreq;
     wire vmpeg_intack;
 
+    rgb888_s fmv_video_out;
+    rgb888_s mcd212_video_out;
+
     vmpeg vmpeg_inst (
         .clk(clk30),
         .clk_mpeg,
@@ -337,11 +346,14 @@ module cditop (
         .vsync(VSync),
         .hblank(HBlank),
         .vblank(VBlank),
+        .vidout(fmv_video_out),
         .audio_left(mpeg_audio_left),
         .audio_right(mpeg_audio_right),
-        .sample_tick44
+        .sample_tick44,
+        .ddrif
     );
 
+    assign vidout = mcd212_vsd ? fmv_video_out : mcd212_video_out;
 
 `ifndef DISABLE_MAIN_CPU
     wire reset68k;
