@@ -1242,9 +1242,7 @@ module mcd212 (
             end
         end
 
-        // TODO not working?
-        // vsd = backdrop_pixel && image_coding_method_register.ev;
-        vsd = video_y > 100;
+        vsd = backdrop_pixel && image_coding_method_register.ev;
     end
 
     // Implementation of Table 5-13 Register Map

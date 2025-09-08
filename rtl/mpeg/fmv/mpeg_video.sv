@@ -106,7 +106,6 @@ module mpeg_video (
             $finish();
         end
 
-
         hw_read_mem_ready <= 0;
 
         if (reset) begin

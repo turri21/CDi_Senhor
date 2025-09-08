@@ -638,13 +638,10 @@ class CDi {
 
             } else {
                 // PAL
-
-                if (frame_index == 137) { // Skip Philips Logo
-                    press_button_signal = true;
-                }
-
-                if (frame_index == 137) { // Skip Dragons Lair Intro
-                    press_button_signal = true;
+                
+                if (frame_index == 144) { // Skip Philips Logo
+                    if ((frame_index % 25) == 20)
+                        press_button_signal = true;
                 }
             }
 
@@ -860,7 +857,7 @@ class CDi {
             clock();
         }
 
-#if 1
+#if 0
         FILE *f = fopen("ddramdump.bin", "rb");
         assert(f);
         fread(&dut.rootp->emu__DOT__ddram[0], 1, 500000, f);

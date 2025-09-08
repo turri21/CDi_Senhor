@@ -19,6 +19,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fma/mpeg_audio.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fma/mpeg_audiofifo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/dct_coeff_huffman_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/frameplayer.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/mpeg_video_start_code_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/mpeg_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/mpeg_input_stream_fifo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/VexiiRiscv.v

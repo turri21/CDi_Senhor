@@ -24,7 +24,7 @@ module vmpeg (
 
     ddr_if.to_host ddrif,
 
-    // Video Synchronization and Output
+    // Video synchronization and output
     input hsync,
     input vsync,
     input hblank,
@@ -88,6 +88,16 @@ module vmpeg (
     );
 
     wire video_fifo_full;
+    wire fmv_event_sequence_header;
+    wire fmv_event_group_of_pictures;
+    wire fmv_event_picture;
+    wire [15:0] fmv_tmpref;
+    // TIMECD @ 00E04058
+    // [21:16] 6 Bit Frames? Not BCD
+    // [27:22] 6 Bit Seconds? Not BCD
+    // [5:0] 6 Bit Minutes? Not BCD
+    // Where are the hours?
+    wire [31:0] fmv_timecode;
 
     mpeg_video video (
         .clk30(clk),
@@ -105,8 +115,17 @@ module vmpeg (
         .vidout
     );
 
-    bit [9:0] temperal_sequence_number;
-    bit [9:0] next_sequence_number;
+    mpeg_video_start_code_decoder startcode (
+        .clk,
+        .reset,
+        .mpeg_data(mpeg_data),
+        .data_valid(fmv_data_valid && fmv_packet_body),
+        .event_sequence_header(fmv_event_sequence_header),
+        .event_group_of_pictures(fmv_event_group_of_pictures),
+        .event_picture(fmv_event_picture),
+        .tmpref(fmv_tmpref),
+        .timecode(fmv_timecode)
+    );
 
     bit dsp_enable = 0;
     wire signed [32:0] system_clock_reference_start_time;
@@ -219,14 +238,6 @@ module vmpeg (
     bit [15:0] image_width2 = 0;
     bit [15:0] image_rt;
 
-    // TIMECD @ 00E04058
-    // [21:16] 6 Bit Frames? Not BCD
-    // [27:22] 6 Bit Seconds? Not BCD
-    // [5:0] 6 Bit Minutes? Not BCD
-    // Where are the hours?
-    bit [31:0] timecode;
-    bit [15:0] tmpref;
-
     typedef struct packed {
         bit show_next;
         bit show;
@@ -261,9 +272,9 @@ module vmpeg (
             15'h2029: dout = 16'h0180;  // e04052 Pic Size High??
             15'h202a: dout = 16'h0118;  // e04054 Pic Size Low??
             15'h202b: dout = image_rt;  // e04056 Pic Rt ??
-            15'h202c: dout = timecode[31:16];  // 00E04058 Time Code High??
-            15'h202d: dout = timecode[15:0];  // 00E0405A Time Code Low??
-            15'h202e: dout = tmpref;  // 00E0405C TMP REF?? SYS_VSR?
+            15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High??
+            15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low??
+            15'h202e: dout = fmv_tmpref;  // 00E0405C TMP REF?? SYS_VSR?
             15'h202f:
             dout = 16'h2000;  // 00E0405E ?? STS ? 2000 has always room for more. always 2000 on cdiemu
             15'h2030: dout = interrupt_enable_register;  // 0E04060
@@ -316,16 +327,9 @@ module vmpeg (
 
             if (vsync && !vsync_q) vsync_flipflop <= !vsync_flipflop;
 
-            /*
-            if (fifo_out_valid && vsync && !vsync_q && vsync_flipflop) begin
-                fifo_out_strobe <= 1;
-                interrupt_status_register.seq <= fifo_out.seq;
-                interrupt_status_register.gop <= fifo_out.gop;
-                interrupt_status_register.pic <= fifo_out.pic;
-                tmpref <= fifo_out.tmpref;
-                timecode <= fifo_out.timecode;
-            end
-            */
+            if (fmv_event_sequence_header) interrupt_status_register.seq <= 1;
+            if (fmv_event_group_of_pictures) interrupt_status_register.gop <= 1;
+            if (fmv_event_picture) interrupt_status_register.pic <= 1;
 
             if (event_decoding_started) begin
                 // Decoding started
