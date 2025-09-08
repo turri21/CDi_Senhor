@@ -18,8 +18,54 @@
 
 #define SCC68070
 #define SLAVE
-#define TRACE
+// #define TRACE
 // #define SIMULATE_RC5
+
+#define PL_MPEG_IMPLEMENTATION
+#include "pl_mpeg_pc.h"
+
+int write_bmp(const char *path, int width, int height, uint8_t *pixels) {
+    FILE *fh = fopen(path, "wb");
+    if (!fh) {
+        return 0;
+    }
+
+    int padded_width = (width * 3 + 3) & (~3);
+    int padding = padded_width - (width * 3);
+    int data_size = padded_width * height;
+    int file_size = 54 + data_size;
+
+    fwrite("BM", 1, 2, fh);
+    fwrite(&file_size, 1, 4, fh);
+    fwrite("\x00\x00\x00\x00\x36\x00\x00\x00\x28\x00\x00\x00", 1, 12, fh);
+    fwrite(&width, 1, 4, fh);
+    fwrite(&height, 1, 4, fh);
+    fwrite("\x01\x00\x18\x00\x00\x00\x00\x00", 1, 8, fh); // planes, bpp, compression
+    fwrite(&data_size, 1, 4, fh);
+    fwrite("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 1, 16, fh);
+
+    for (int y = height - 1; y >= 0; y--) {
+        fwrite(pixels + y * width * 3, 3, width, fh);
+        fwrite("\x00\x00\x00\x00", 1, padding, fh);
+    }
+    fclose(fh);
+    return file_size;
+}
+
+typedef struct {
+    unsigned int width;
+    unsigned int height;
+    uint32_t adr;
+} plm_plane2_t;
+
+typedef struct {
+    int32_t time;
+    unsigned int width;
+    unsigned int height;
+    plm_plane2_t y;
+    plm_plane2_t cr;
+    plm_plane2_t cb;
+} plm_frame2_t;
 
 #define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
 
@@ -387,6 +433,7 @@ class CDi {
     uint64_t sim_time = 0;
     int frame_index = 0;
     int release_button_frame{-1};
+    int fmv_frame_cnt{0};
 
   private:
     FILE *f_audio_left{nullptr};
@@ -394,6 +441,7 @@ class CDi {
     FILE *f_fma{nullptr};
     FILE *f_fma_mp2{nullptr};
     FILE *f_fmv{nullptr};
+    FILE *f_fmv_m1v{nullptr};
     FILE *f_uart{nullptr};
 
     uint8_t output_image[size] = {0};
@@ -474,13 +522,15 @@ class CDi {
     uint16_t phase_accumulator;
 
     void clock() {
-        for (int i = 0; i < 2; i++) {
-
+        for (int i = 0; i < 4; i++) {
             // clk_sys is 30 MHz
-            dut.rootp->emu__DOT__clk_sys = (sim_time & 1);
+            dut.rootp->emu__DOT__clk_sys = (sim_time & 2);
+
+            // clk_mpeg is 60 MHz
+            dut.rootp->emu__DOT__clk_mpeg = (sim_time & 1);
 
             // clk_audio is 22.2264 MHz
-            phase_accumulator += 24277;
+            phase_accumulator += 24277 / 2;
             dut.rootp->emu__DOT__clk_audio = (phase_accumulator & 0x8000) ? 1 : 0;
 
             dut.eval();
@@ -795,19 +845,69 @@ class CDi {
             fwrite(&sample_r, 2, 1, f_audio_right);
         }
 
+        if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__expose_frame) {
+            uint32_t addr = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__frame_adr;
+            uint8_t *mem1 = (uint8_t *)&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__memory_core1;
+            uint8_t *mem2 = (uint8_t *)&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__memory_core2;
+            uint8_t *mem3 = (uint8_t *)&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__video_ram;
+            plm_frame2_t frame = *(plm_frame2_t *)(mem1 + addr);
+
+            // printf("%d %d %x %x %x\n", frame.width, frame.height, frame.y.adr, frame.cr.adr, frame.cb.adr);
+            // printf("%x %x %x\n",mem[frame.y.adr], mem[frame.cr.adr],mem[frame.cb.adr]);
+            plm_frame_t frame_convert;
+            frame_convert.y.data = &mem3[frame.y.adr];
+            frame_convert.y.height = frame.y.height;
+            frame_convert.y.width = frame.y.width;
+            frame_convert.cr.data = &mem3[frame.cr.adr];
+            frame_convert.cr.height = frame.cr.height;
+            frame_convert.cr.width = frame.cr.width;
+            frame_convert.cb.data = &mem3[frame.cb.adr];
+            frame_convert.cb.height = frame.cb.height;
+            frame_convert.cb.width = frame.cb.width;
+            frame_convert.width = frame.width;
+            frame_convert.height = frame.height;
+
+            char bmp_name[20];
+            int w = frame.width;
+            int h = frame.height;
+            uint8_t *pixels = (uint8_t *)malloc(w * h * 3);
+            assert(pixels);
+            plm_frame_to_bgr(&frame_convert, pixels, w * 3); // BMP expects BGR ordering
+
+            sprintf(bmp_name, "%06d.bmp", fmv_frame_cnt);
+            printf("FMV Writing %s at Fifo Level\n", bmp_name,
+                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level);
+            fprintf(stderr, "FMV Writing %s at Fifo Level %d\n", bmp_name,
+                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level);
+
+            write_bmp(bmp_name, w, h, pixels);
+
+            free(pixels);
+            fmv_frame_cnt++;
+        }
+
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fmv_data_valid) {
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv);
+
+            if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fmv_packet_body) {
+                fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv_m1v);
+            }
+#ifdef TRACE
+            if (!do_trace)
+                fprintf(stderr, "Trace on!\n");
+            do_trace = true;
+#endif
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma);
 
-            if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_packet_body) {
+            if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_packet_body) {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma_mp2);
             }
-
 #ifdef TRACE
+            if (!do_trace)
+                fprintf(stderr, "Trace on!\n");
             do_trace = true;
-            fprintf(stderr, "Trace on!\n");
 #endif
         }
 
@@ -842,6 +942,7 @@ class CDi {
         fclose(f_fma);
         fclose(f_fma_mp2);
         fclose(f_fmv);
+        fclose(f_fmv_m1v);
         fclose(f_uart);
     }
     CDi(int i) {
@@ -872,6 +973,11 @@ class CDi {
         fprintf(stderr, "Writing to %s\n", filename);
         f_fmv = fopen(filename, "wb");
         assert(f_fmv);
+
+        sprintf(filename, "%d/fmv_m1v.bin", instanceid);
+        fprintf(stderr, "Writing to %s\n", filename);
+        f_fmv_m1v = fopen(filename, "wb");
+        assert(f_fmv_m1v);
 
         sprintf(filename, "%d/uartlog", instanceid);
         fprintf(stderr, "Writing to %s\n", filename);

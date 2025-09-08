@@ -117,16 +117,16 @@ module emu (
 
     //High latency DDR3 RAM interface
     //Use for non-critical time purposes
-    output        DDRAM_CLK,
-    input         DDRAM_BUSY,
-    output [ 7:0] DDRAM_BURSTCNT,
-    output [28:0] DDRAM_ADDR,
-    input  [63:0] DDRAM_DOUT,
-    input         DDRAM_DOUT_READY,
-    output        DDRAM_RD,
-    output [63:0] DDRAM_DIN,
-    output [ 7:0] DDRAM_BE,
-    output        DDRAM_WE,
+    output DDRAM_CLK,  // any clock, no restrictions. Typically main core clock
+    input DDRAM_BUSY,  // every read and write request is only accepted in a cycle where busy is low
+    output [7:0] DDRAM_BURSTCNT,  // amount of words to be written/read. Maximum is 128
+    output [28:0] DDRAM_ADDR,         // starting address for read/write. In case of burst, the addresses will internally count up
+    input [63:0] DDRAM_DOUT,  // data coming from (burst) read
+    input         DDRAM_DOUT_READY,   // high for 1 clock cycle for every 64 bit dataword requested via (burst) read request
+    output DDRAM_RD,  // request read at DDRAM_ADDR and DDRAM_BURSTCNT length
+    output [63:0] DDRAM_DIN,  // data word to be written
+    output  [7:0] DDRAM_BE,           // byte enable for each of the 8 bytes in DDRAM_DIN, only used for writing. (1=write, 0=ignore)
+    output DDRAM_WE,  // request write at DDRAM_ADDR with DDRAM_DIN data and DDRAM_BE mask
 
     //SDRAM interface with lower latency
     output        SDRAM_CLK,
@@ -270,7 +270,7 @@ module emu (
 
     wire        clk_sys  /*verilator public_flat_rw*/;
     wire        clk_audio  /*verilator public_flat_rw*/;
-
+    wire        clk_mpeg  /*verilator public_flat_rw*/;
 
     wire [31:0] cd_hps_lba;
     wire        cd_hps_req  /*verilator public_flat_rd*/;
@@ -280,7 +280,7 @@ module emu (
     wire        nvram_hps_ack  /*verilator public_flat_rw*/;
     bit         nvram_hps_wr;
     bit         nvram_hps_rd  /*verilator public_flat_rd*/;
-    bit  [15:0] nvram_hps_din;
+    bit  [15:0] nvram_hps_din  /*verilator public_flat_rd*/;
     wire        nvram_media_change  /*verilator public_flat_rw*/;
 
     wire [ 7:0] sd_buff_addr  /*verilator public_flat_rw*/;
@@ -362,7 +362,8 @@ module emu (
         .refclk(CLK_50M),
         .rst(0),
         .outclk_0(clk_sys),  // 30 MHz
-        .outclk_1(clk_audio)  // 22.2264 MHz
+        .outclk_1(clk_audio),  // 22.2264 MHz
+        .outclk_2(clk_mpeg)  // 150 MHz
     );
 `endif
 
@@ -678,6 +679,7 @@ module emu (
     cditop cditop (
         .clk30(clk_sys),
         .clk_audio(clk_audio),
+        .clk_mpeg(clk_mpeg),
         .external_reset(cditop_reset),
 
         .tvmode_pal(!tvmode_ntsc),

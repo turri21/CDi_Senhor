@@ -1,15 +1,8 @@
 
 
-typedef struct {
-    bit [15:0] tmpref;
-    bit [31:0] timecode;
-    bit seq;
-    bit pic;
-    bit gop;
-} mpeg_dummy_video_fifo_entry;
-
 module vmpeg (
     input clk,
+    input clk_mpeg,
     input reset,
     // CPU interface
     input [23:1] address,
@@ -51,8 +44,8 @@ module vmpeg (
     wire [7:0] mpeg_data  /*verilator public_flat_rd*/ = mpeg_word_valid_q ? mpeg_temp : din[15:8];
     wire mpeg_data_valid  /*verilator public_flat_rd*/ = mpeg_word_valid_q || mpeg_word_valid;
 
-    bit mpeg_packet_body  /*verilator public_flat_rd*/;
-    bit packet_length_decreasing;
+    wire fma_packet_body  /*verilator public_flat_rd*/;
+    wire fmv_packet_body  /*verilator public_flat_rd*/;
 
     always @(posedge clk) begin
         mpeg_word_valid_q <= mpeg_word_valid;
@@ -74,12 +67,12 @@ module vmpeg (
     bit  dsp_reset_input_fifo;
 
     mpeg_audio audio (
-        .clk,
+        .clk(clk),
         .reset,
         .dsp_enable(dsp_enable),
         .reset_input_fifo(dsp_reset_input_fifo),
         .data_byte(mpeg_data),
-        .data_strobe(fma_data_valid && mpeg_packet_body),
+        .data_strobe(fma_data_valid && fma_packet_body),
         .fifo_full(),
         .audio_left(audio_left),
         .audio_right(audio_right),
@@ -90,281 +83,44 @@ module vmpeg (
         .event_underflow(event_underflow)
     );
 
-    enum bit [3:0] {
-        IDLE,
-        MAGIC0,
-        MAGIC1,
-        MAGIC2,
-        MAGIC3,
-        MAGIC_MATCH,
-        GOP0,
-        GOP1,
-        GOP2,
-        GOP3,
-        PIC0,
-        PIC1,
-        PIC2,
-        PIC3,
-        SLICE0,
-        SEQHDR
-    } mpeg_video_state = IDLE;
-
-    enum bit [4:0] {
-        FMA_IDLE,
-        FMA_MAGIC0,
-        FMA_MAGIC1,
-        FMA_MAGIC2,
-        FMA_MAGIC3,
-        FMA_MAGIC_MATCH,
-        FMA_PACK0,
-        FMA_PACK1,
-        FMA_PACK2,
-        FMA_PACK3,
-        FMA_PACK4,
-        FMA_PACK5,
-        FMA_PES0,
-        FMA_PES1,
-        FMA_PES2,
-        FMA_PES3,
-        FMA_PES4,
-        FMA_PES5,
-        FMA_PES6,
-        FMA_PES7,
-        FMA_PES8
-    } mpeg_audio_state = FMA_IDLE;
-
-    mpeg_dummy_video_fifo_entry fifo_in;
-    mpeg_dummy_video_fifo_entry fifo_out;
-    bit fifo_write;
-    bit fifo_out_valid;
-    bit fifo_out_strobe;
-
-    mpeg_dummy_video_fifo video_dummy_fifo (
-        .clk,
+    mpeg_video video (
+        .clk30(clk),
+        .clk60(clk_mpeg),
         .reset,
-        .in(fifo_in),
-        .write(fifo_write),
-        .out(fifo_out),
-        .out_valid(fifo_out_valid),
-        .strobe(fifo_out_strobe)
+        .dsp_enable(1'b1),
+        .data_byte(mpeg_data),
+        .data_strobe(fmv_data_valid && fmv_packet_body),
+        .fifo_full()
     );
 
     bit [9:0] temperal_sequence_number;
     bit [9:0] next_sequence_number;
-    bit signed [32:0] system_clock_reference;
-    bit signed [32:0] system_clock_reference_start_time;
-    bit system_clock_reference_start_time_valid = 0;
-    bit [15:0] packet_length;
-    bit [32:0] presentation_time_stamp;
-
 
     bit dsp_enable = 0;
+    wire signed [32:0] system_clock_reference_start_time;
+    wire system_clock_reference_start_time_valid;
 
-    always @(posedge clk) begin
-        // TODO
-        if (fma_command_register == 1) system_clock_reference_start_time_valid <= 0;
+    mpeg_demuxer audio_demuxer (
+        .clk,
+        .reset(reset || (fma_command_register == 1)),
+        .mpeg_data(mpeg_data),
+        .data_valid(fma_data_valid),
+        .mpeg_packet_body(fma_packet_body),
+        .dclk(fma_dclk),
+        .system_clock_reference_start_time,
+        .system_clock_reference_start_time_valid
+    );
 
-        fifo_write <= 0;
-
-        if (fifo_write) begin
-            fifo_in.seq <= 0;
-            fifo_in.pic <= 0;
-            fifo_in.gop <= 0;
-        end
-
-        if (fma_data_valid) begin
-            $display("MPEG FMA %x %d %d", mpeg_data, mpeg_packet_body, packet_length);
-
-            if (packet_length_decreasing) begin
-                packet_length <= packet_length - 1;
-                if (packet_length == 1) begin
-                    packet_length_decreasing <= 0;
-                    mpeg_packet_body <= 0;
-                end
-            end
-
-            casez ({
-                mpeg_audio_state, mpeg_data
-            })
-                // verilog_format: off
-                {FMA_PACK5, 8'h??}: begin         
-                    mpeg_audio_state <= FMA_IDLE;
-                    $display ("FMA PACK %x %d",mpeg_data,system_clock_reference);
-                end
-                
-                {FMA_PACK4, 8'h??}: begin                    
-                    mpeg_audio_state <= FMA_PACK5;
-                    system_clock_reference[6:0] <= mpeg_data[7:1];
-                    fma_pack_cnt <= fma_pack_cnt +1;
-                end
-                {FMA_PACK3, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PACK4;
-                    system_clock_reference[14:7] <= mpeg_data;
-                end
-                {FMA_PACK2, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PACK3;
-                    system_clock_reference[21:15] <= mpeg_data[7:1];
-                end
-                {FMA_PACK1, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PACK2;
-                    system_clock_reference[29:22] <= mpeg_data;
-                end
-                {FMA_PACK0, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PACK1;
-                    system_clock_reference[32:30] <= mpeg_data[3:1];
-                end
-
-                {FMA_PES8, 8'h??}: begin         
-                    mpeg_audio_state <= FMA_IDLE;
-                    $display ("FMA PES %x %d",mpeg_data,presentation_time_stamp);
-
-                    // verilog_format: on
-                    if (!system_clock_reference_start_time_valid) begin
-                        system_clock_reference_start_time_valid <= 1;
-
-                        system_clock_reference_start_time[32:1] <= fma_dclk + presentation_time_stamp[32:1] - system_clock_reference[32:1];
-                    end
-                    // verilog_format: off
-                end
-                {FMA_PES7, 8'b???????1}: begin // PTS
-                    mpeg_packet_body <= 1;
-
-                    presentation_time_stamp[6:0] <= mpeg_data[7:1];
-                    mpeg_audio_state <= FMA_PES8;
-                end
-                {FMA_PES6, 8'h??}: begin // PTS
-                    mpeg_audio_state <= FMA_PES7;
-                    presentation_time_stamp[14:7] <= mpeg_data;
-                end
-                {FMA_PES5, 8'b???????1}: begin // PTS
-                    presentation_time_stamp[21:15] <= mpeg_data[7:1];
-                    mpeg_audio_state <= FMA_PES6;
-                end
-                {FMA_PES4, 8'h??}: begin // PTS
-                    mpeg_audio_state <= FMA_PES5;
-                    presentation_time_stamp[29:22] <= mpeg_data;
-                end
-                {FMA_PES2, 8'b0010???1}: begin // PTS
-                    presentation_time_stamp[32:30] <= mpeg_data[3:1];
-                    mpeg_audio_state <= FMA_PES4;
-                end
-
-                {FMA_PES3, 8'h??}: begin
-                    // just ignore STD buffer size second byte
-                    mpeg_audio_state <= FMA_PES2;
-                end
-                {FMA_PES2, 8'b01??????}: begin // STD buffer size
-                    mpeg_audio_state <= FMA_PES3;
-                end
-
-                {FMA_PES2, 8'hff}: begin // stuffing byte
-                    mpeg_audio_state <= FMA_PES2;
-                end
-                
-                {FMA_PES1, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PES2;
-                    packet_length[7:0] <= mpeg_data;
-                    packet_length_decreasing <= 1;
-                end
-                {FMA_PES0, 8'h??}: begin
-                    mpeg_audio_state <= FMA_PES1;
-                    packet_length[15:8] <= mpeg_data;
-                end
-
-                {FMA_MAGIC_MATCH, 8'hba} : begin
-                    mpeg_audio_state <= FMA_PACK0;
-                end
-                {FMA_MAGIC_MATCH, 8'hC?} : begin
-                    mpeg_audio_state <= FMA_PES0;
-                end
-                {FMA_MAGIC2, 8'h01} : mpeg_audio_state <= FMA_MAGIC_MATCH;
-                {FMA_MAGIC2, 8'h00} : mpeg_audio_state <= FMA_MAGIC2;
-                {FMA_MAGIC0, 8'h00} : mpeg_audio_state <= FMA_MAGIC2;
-                {FMA_IDLE, 8'h00} : mpeg_audio_state <= FMA_MAGIC0;
-                default: mpeg_audio_state <= FMA_IDLE;
-            // verilog_format: on
-            endcase
-
-        end
-
-        if (fmv_data_valid) begin
-
-            // $display ("MPEG %x",mpeg_data);
-
-            casez ({
-                mpeg_video_state, mpeg_data
-            })
-                // verilog_format: off
-
-                {PIC3, 8'h??}: begin mpeg_video_state <= IDLE; 
-                    $display ("PIC3 %x",mpeg_data);
-
-                    fifo_write <= 1;
-                    fifo_in.pic <= 1;
-                end
-                {PIC2, 8'h??}: begin
-                    mpeg_video_state <= PIC3;
-                    if (next_sequence_number == temperal_sequence_number)
-                    begin
-                        fifo_in.tmpref[11:2] <= temperal_sequence_number;
-                        $display ("PIC2 %x %d",mpeg_data,temperal_sequence_number);
-                        next_sequence_number <= next_sequence_number + 1;
-                    end
-                    end
-                {PIC1, 8'h??}: begin
-                    mpeg_video_state <= PIC2;
-                    //$display ("PIC1 %x",mpeg_data);
-                    temperal_sequence_number[1:0] <= mpeg_data[7:6];
-                    end
-                {PIC0, 8'h??}: begin
-                    mpeg_video_state <= PIC1;
-                    //$display ("PIC0 %x",mpeg_data);
-                    temperal_sequence_number[9:2] <= mpeg_data;
-                    end
-                {GOP3, 8'h??}: begin
-                    mpeg_video_state <= IDLE;
-                    $display ("GOP3 %x",mpeg_data);
-                    fifo_in.gop <= 1;
-                    next_sequence_number <= 0;
-                    fifo_in.timecode[16] <= mpeg_data[7];
-                    $display ("Timecode %d:%d:%d",timecode[5:0],timecode[27:22], timecode[21:16]);
-                end
-                {GOP2, 8'h??}: begin
-                    mpeg_video_state <= GOP3;
-                    $display ("GOP2 %x",mpeg_data);
-                    fifo_in.timecode[24:22] <= mpeg_data[7:5];
-                    fifo_in.timecode[21:17] <= mpeg_data[4:0];
-                    gop_cnt <= gop_cnt + 1;
-                end
-                {GOP1, 8'h??}: begin
-                    mpeg_video_state <= GOP2;
-                    $display ("GOP1 %x",mpeg_data);
-                    // Seconds
-                    fifo_in.timecode[27:25] <= mpeg_data[2:0];
-                    end
-                {GOP0, 8'h??}: begin mpeg_video_state <= GOP1; $display ("GOP0 %x",mpeg_data);end
-
-                {SEQHDR, 8'h??}: begin
-                    mpeg_video_state <= IDLE; 
-                    $display ("SEQHDR %x",mpeg_data);
-                    fifo_in.seq <= 1;
-
-                end
-
-                {MAGIC_MATCH, 8'hb3} : begin mpeg_video_state <= SEQHDR;end
-                {MAGIC_MATCH, 8'hb8} : mpeg_video_state <= GOP0;
-                {MAGIC_MATCH, 8'h00} : mpeg_video_state <= PIC0;
-                {MAGIC_MATCH, 8'h01} : mpeg_video_state <= SLICE0;
-                {MAGIC2, 8'h01} : mpeg_video_state <= MAGIC_MATCH;
-                {MAGIC2, 8'h00} : mpeg_video_state <= MAGIC2;
-                {MAGIC0, 8'h00} : mpeg_video_state <= MAGIC2;
-                {IDLE, 8'h00} : mpeg_video_state <= MAGIC0;
-                default: mpeg_video_state <= IDLE;
-            // verilog_format: on
-            endcase
-        end
-    end
-
+    mpeg_demuxer video_demuxer (
+        .clk,
+        .reset(reset),
+        .mpeg_data(mpeg_data),
+        .data_valid(fmv_data_valid),
+        .mpeg_packet_body(fmv_packet_body),
+        .dclk(fma_dclk),
+        .system_clock_reference_start_time(),
+        .system_clock_reference_start_time_valid()
+    );
 
     typedef struct packed {
         bit erdv;  // ?
@@ -531,14 +287,11 @@ module vmpeg (
     // Increments at 90 kHz
     bit [15+5:0] timer_cnt = 0;
 
-    bit [9:0] gop_cnt = 0;
-    bit [9:0] fma_pack_cnt = 0;
     bit vsync_flipflop;
 
     always @(posedge clk) begin
         bus_ack <= 0;
         vsync_q <= vsync;
-        fifo_out_strobe <= 0;
         dsp_reset_input_fifo <= 0;
 
         if (reset) begin
@@ -551,6 +304,7 @@ module vmpeg (
 
             if (vsync && !vsync_q) vsync_flipflop <= !vsync_flipflop;
 
+            /*
             if (fifo_out_valid && vsync && !vsync_q && vsync_flipflop) begin
                 fifo_out_strobe <= 1;
                 interrupt_status_register.seq <= fifo_out.seq;
@@ -559,6 +313,7 @@ module vmpeg (
                 tmpref <= fifo_out.tmpref;
                 timecode <= fifo_out.timecode;
             end
+            */
 
             if (event_decoding_started) begin
                 // Decoding started
@@ -733,59 +488,4 @@ module vmpeg (
 
 endmodule
 
-
-
-module mpeg_dummy_video_fifo (
-    input clk,
-    input reset,
-    input mpeg_dummy_video_fifo_entry in,
-    input write,
-    output mpeg_dummy_video_fifo_entry out,
-    output out_valid,
-    input strobe
-);
-
-    mpeg_dummy_video_fifo_entry mem[64];
-    bit [5:0] read_index_d;
-    bit [5:0] read_index_q;
-    bit [5:0] write_index;
-    bit [6:0] count;
-
-    // The memory introduces one cycle delay. This is an issue
-    // when the FIFO is empty. We want to avoid using the memory readout
-    // when reading from a value that is just written
-    bit indizes_equal_during_write_d;
-    bit indizes_equal_during_write_q;
-
-    assign out_valid = count != 0 && !reset && !indizes_equal_during_write_q;
-
-    always_comb begin
-        read_index_d = read_index_q;
-        if (strobe) begin
-            read_index_d = read_index_q + 1;
-        end
-
-        indizes_equal_during_write_d = write_index == read_index_d && write;
-    end
-
-    always_ff @(posedge clk) begin
-        if (write && !strobe) count <= count + 1;
-        if (strobe && !write && count != 0) count <= count - 1;
-
-        if (reset) begin
-            write_index <= 0;
-            read_index_q <= 0;
-            count <= 0;
-        end else begin
-            if (write) begin
-                mem[write_index] <= in;
-                write_index <= write_index + 1;
-            end
-
-            out <= mem[read_index_d];
-            read_index_q <= read_index_d;
-            indizes_equal_during_write_q <= indizes_equal_during_write_d;
-        end
-    end
-endmodule
 

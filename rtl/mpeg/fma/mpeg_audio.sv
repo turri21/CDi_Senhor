@@ -417,31 +417,10 @@ module mpeg_audio (
         end
     end
 
-
 endmodule
 
 
-// https://www.intel.com/content/www/us/en/docs/programmable/683082/21-3/mixed-width-dual-port-ram.html
-// 8192x8 write and 2048x32 read
-// So, this is 8KB of memory
-module mpeg_input_stream_fifo (
-    input [12:0] waddr,
-    input [7:0] wdata,
-    input we,
-    input clk,
-    input [10:0] raddr,
-    output logic [31:0] q
-);
-
-    logic [3:0][7:0] ram[2048];
-    always_ff @(posedge clk) begin
-        if (we) ram[waddr[12:2]][waddr[1:0]] <= wdata;
-        q <= ram[raddr];
-    end
-endmodule : mpeg_input_stream_fifo
-
 integer i;
-
 
 // Quartus Prime SystemVerilog Template
 //
@@ -474,7 +453,7 @@ module firmware_memory #(
     // model the RAM with two dimensional packed array
     logic [BYTES-1:0][BYTE_WIDTH-1:0] ram[0:RAM_DEPTH-1];
 
-    initial $readmemh("../rtl/mpeg/audiodecoder.mem", ram);
+    initial $readmemh("../rtl/mpeg/fma/firmware.mem", ram);
 
     reg [DATA_WIDTH_R-1:0] data_reg1;
     reg [DATA_WIDTH_R-1:0] data_reg2;

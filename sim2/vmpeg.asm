@@ -32,7 +32,6 @@ main:
 	move.l #$01274700,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
-
 endless:
 	jsr waitforcdicirq
 	

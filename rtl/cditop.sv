@@ -2,6 +2,7 @@
 module cditop (
     input clk30,
     input clk_audio,
+    input clk_mpeg,
     input external_reset,
 
     input tvmode_pal,
@@ -313,6 +314,7 @@ module cditop (
 
     vmpeg vmpeg_inst (
         .clk(clk30),
+        .clk_mpeg,
         .reset,
         .address(addr),
         .din(vmpeg_dma_ack ? mcd212_dout : cpu_data_out),

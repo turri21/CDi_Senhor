@@ -1,3 +1,5 @@
+`ifndef HEADER_UTIL
+`define HEADER_UTIL
 
 function [31:0] reverse_endian_32;
     input [31:0] data_in;
@@ -6,3 +8,5 @@ function [31:0] reverse_endian_32;
     end
 endfunction
 
+
+`endif
