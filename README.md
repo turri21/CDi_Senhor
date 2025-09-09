@@ -38,6 +38,10 @@ Core Utilization:
     Total block memory bits      1,724,871 / 5,662,720 ( 30 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
+Expected synthesis times with Quartus 17.0.2
+
+    AMD Ryzen 7 3700X 8-Core    12 minutes
+
 ### TODOs
 
 * Find a better solution for reducing CPU speed
@@ -78,7 +82,6 @@ Core Utilization:
 ## Expected checksums of roms
 
 dd if=vmpega.rom bs=1024 count=128 of=vmpega_split.rom
-
 
 This core is tested with these ROMs:
 

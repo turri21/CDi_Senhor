@@ -1,6 +1,12 @@
 `ifndef HEADER_UTIL
 `define HEADER_UTIL
 
+function [31:0] ones_mask(bit [4:0] n);
+    begin
+        ones_mask = (32'h1 << n) - 1;  // n ones at LSB
+    end
+endfunction
+
 function [31:0] reverse_endian_32;
     input [31:0] data_in;
     begin
@@ -32,13 +38,6 @@ module g2b_converter #(
     input  [WIDTH-1:0] gray,
     output [WIDTH-1:0] binary
 );
-    /*
-  assign binary[0] = gray[3] ^ gray[2] ^ gray[1] ^ gray[0];
-  assign binary[1] = gray[3] ^ gray[2] ^ gray[1];
-  assign binary[2] = gray[3] ^ gray[2];
-  assign binary[3] = gray[3];
-  */
-    // OR
     genvar i;
     generate
         for (i = 0; i < WIDTH; i++) begin : bits
@@ -46,24 +45,5 @@ module g2b_converter #(
         end
     endgenerate
 endmodule
-
-
-// A try to make a parametrized function. Doesn't suit well with Quartus
-// This statement doesn't work
-// always @(posedge clk_in) waddr_q <= GrayConv#(2)::gray(waddr);
-/*
-virtual class GrayConv #(
-    parameter WIDTH
-);
-    static int i;
-    static function [WIDTH-1:0] gray(input [WIDTH-1:0] binary);
-        begin
-            for (i = 0; i < WIDTH - 1; i++) begin : bits
-                assign gray[i] = binary[i] ^ binary[i+1];
-            end
-        end
-    endfunction
-endclass
-*/
 
 `endif

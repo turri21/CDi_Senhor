@@ -4,7 +4,7 @@
 // https://www.intel.com/content/www/us/en/docs/programmable/683082/21-3/mixed-width-dual-port-ram.html
 // 8192x8 write and 2048x32 read
 // So, this is 8KB of memory
-module mpeg_input_stream_fifo (
+module mpeg_input_stream_fifo_8k (
     input [12:0] waddr,
     input [7:0] wdata,
     input we,
@@ -18,5 +18,5 @@ module mpeg_input_stream_fifo (
         if (we) ram[waddr[12:2]][waddr[1:0]] <= wdata;
         q <= ram[raddr];
     end
-endmodule : mpeg_input_stream_fifo
+endmodule : mpeg_input_stream_fifo_8k
 
