@@ -1,3 +1,5 @@
+`timescale 1 ns / 1 ps
+
 // Quartus Prime SystemVerilog Template
 //
 // True Dual-Port RAM with different read/write addresses and single read/write clock
@@ -8,7 +10,7 @@
 
 module dualport_shared_ram #(
     parameter int BYTE_WIDTH = 8,
-    ADDRESS_WIDTH = 11,
+    ADDRESS_WIDTH = 12,
     BYTES = 4,
     DATA_WIDTH_R = BYTE_WIDTH * BYTES
 ) (
@@ -25,7 +27,7 @@ module dualport_shared_ram #(
     output [DATA_WIDTH_R-1:0] data_out1,
     output [DATA_WIDTH_R-1:0] data_out2
 );
-    localparam RAM_DEPTH = 8192 >> 2;
+    localparam RAM_DEPTH = 16384 >> 2;
 
     // model the RAM with two dimensional packed array
     /* verilator lint_off MULTIDRIVEN */

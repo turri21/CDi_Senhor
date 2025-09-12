@@ -1,6 +1,7 @@
+`timescale 1 ns / 1 ps
 
 // inspired by https://github.com/MiSTer-devel/Arcade-TaitoF2_MiSTer/blob/main/rtl/ddram.sv
-module ddr_mux (
+module ddr_mux2 (
     input clk,
 
     ddr_if.to_host x,

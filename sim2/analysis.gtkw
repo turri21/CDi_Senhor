@@ -1,0 +1,85 @@
+[*]
+[*] GTKWave Analyzer v3.3.125 (w)1999-2025 BSI
+[*] Wed Sep 10 21:11:30 2025
+[*]
+[dumpfile] "/tmp/waveform.vcd"
+[dumpfile_mtime] "Wed Sep 10 20:23:01 2025"
+[dumpfile_size] 23886
+[savefile] "/home/andre/GIT/scc68070/sim2/analysis.gtkw"
+[timestart] 661655780000
+[size] 1920 1152
+[pos] 417 408
+*-24.039734 661710010000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.emu.
+[treeopen] TOP.emu.cditop.
+[treeopen] TOP.emu.cditop.vmpeg_inst.
+[treeopen] TOP.emu.cditop.vmpeg_inst.video.
+[treeopen] TOP.emu.cditop.vmpeg_inst.video.ddrmux.
+[treeopen] TOP.emu.cditop.vmpeg_inst.video.frameplayer.
+[sst_width] 387
+[signals_width] 380
+[sst_expanded] 1
+[sst_vpaned_height] 348
+@24
+TOP.emu.cditop.vmpeg_inst.video.soft_state1[31:0]
+TOP.emu.cditop.vmpeg_inst.video.soft_state2[31:0]
+TOP.emu.cditop.vmpeg_inst.video.soft_state3[31:0]
+@28
+TOP.emu.cditop.vmpeg_inst.video.vsync
+@8024
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.fifo_y.cnt_clkin[8:0]
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.fifo_y.cnt_clkout[8:0]
+@28
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.hblank
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.fifo_y.half_empty
+@8024
+TOP.emu.cditop.vmpeg_inst.video.fifo_level[27:0]
+@28
+TOP.emu.cditop.vmpeg_inst.video.expose_frame
+@22
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level[15:0]
+@28
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level_dec1
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level_dec1_clk30
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level_dec2
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level_dec2_clk30
+TOP.emu.cditop.vmpeg_inst.video.shared_buffer_level_inc
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.u_requested
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.v_requested
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.target_u
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.target_v
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.target_y
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.a_active
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.b_active
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.c_active
+@22
+TOP.emu.cditop.mcd212_inst.video_y[8:0]
+@28
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.reset
+TOP.emu.cditop.vmpeg_inst.video.frameplayer.reset_clkddr
+@200
+-a
+@28
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.a.acquire
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.a.rdata_ready
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.a.read
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.a.write
+@200
+-b
+@28
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.b.acquire
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.b.rdata_ready
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.b.read
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.b.write
+@200
+-c
+@28
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.c.acquire
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.c.rdata_ready
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.c.read
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.c.write
+@29
+TOP.emu.cditop.vmpeg_inst.video.ddrmux.x.busy
+[pattern_trace] 1
+[pattern_trace] 0

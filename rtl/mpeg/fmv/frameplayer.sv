@@ -14,11 +14,23 @@ module frameplayer (
     input           hsync,
     input           vsync,
     input           hblank,
-    input           vblank
+    input           vblank,
+
+    input [28:0] frame_adr,
+    input latch_frame
 );
 
     assign ddrif.byteenable = 8'hff;
     assign ddrif.write = 0;
+
+    bit [28:0] latched_frame_adr=100;
+
+    always_ff @(posedge clkddr) begin
+        if (latch_frame) begin
+            latched_frame_adr <= frame_adr;
+            $display("Latched frame %x",latched_frame_adr);
+        end
+    end
 
     bit [28:0] address_y;
     bit [28:0] address_u;
@@ -119,15 +131,16 @@ module frameplayer (
 
         if (chroma_fifo_strobe) chroma_read_addr <= chroma_read_addr + 1;
 
-        if (hblank) begin
+        if (hblank || reset) begin
             pixelcnt <= 0;
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
-        end else if (y_valid && !vblank && !hblank && pixelcnt < 368 * 4) begin
+        end else if (!vblank && !hblank && pixelcnt < 368 * 4) begin
             pixelcnt <= pixelcnt + 1;
             luma_fifo_strobe <= pixelcnt[1:0] == 3;
             chroma_fifo_strobe <= pixelcnt[2:0] == 7;
+            assert (y_valid);
         end else begin
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe   <= 0;
@@ -142,7 +155,7 @@ module frameplayer (
         */
     end
 
-    bit [4:0] data_burst_cnt;
+    bit [5:0] data_burst_cnt;
 
     // 0011 like the N64 core to force a base of 0x30000000
     localparam bit [3:0] DDR_CORE_BASE = 4'b0011;
@@ -154,9 +167,9 @@ module frameplayer (
 
         if (reset_clkddr || vblank_clkddr) begin
             fetchstate <= IDLE;
-            address_y <= 29'h0;
-            address_v <= 29'h15900;  // 368*240 = 88320
-            address_u <= 29'h1af40;  // 368*240 + 88320/4
+            address_y <= latched_frame_adr + 29'h0;
+            address_v <= latched_frame_adr + 29'h15900;  // 368*240 = 88320
+            address_u <= latched_frame_adr + 29'h1af40;  // 368*240 + 88320/4
             target_y <= 0;
             target_u <= 0;
             target_v <= 0;
@@ -199,9 +212,9 @@ module frameplayer (
                         ddrif.addr <= {DDR_CORE_BASE, address_y[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        ddrif.burstcnt <= 2;
-                        data_burst_cnt <= 2;
-                        address_y <= address_y + 8 * 2;
+                        ddrif.burstcnt <= 50;
+                        data_burst_cnt <= 50;
+                        address_y <= address_y + 8 * 50;
                         fetchstate <= WAITING;
                         target_y <= 1;
                     end
@@ -255,121 +268,3 @@ module frameplayer (
     end
 
 endmodule
-
-module ddr_to_byte_fifo (
-    // Input
-    input clk_in,
-    input reset_in,
-    input [63:0] wdata,
-    input we,
-    output half_empty,  // True if a space of 128 bit is available
-    // Output
-    input reset_out,
-    input clk_out,
-    input strobe,
-    output bit valid,
-    output bit [7:0] q
-);
-
-    bit [7:0][7:0] ram[8];
-
-    // Clock domain of output
-    bit [5:0] raddr;  // 32 x 8
-
-    // Clock domain of input
-    bit [2:0] waddr;  // 4 x 64
-
-    // verilog_format: off
-    // Transfer waddr from clk_in to clk_out
-    bit [2:0] waddr_gray;
-    b2g_converter #(.WIDTH(3)) waddr_to_gray1 (.binary(waddr),.gray(waddr_gray));
-    bit [2:0] waddr_q;
-    bit [2:0] waddr_q2;
-    bit [2:0] waddr_q3;
-    always @(posedge clk_in) waddr_q <= waddr_gray;
-    always @(posedge clk_out) waddr_q2 <= waddr_q;
-    always @(posedge clk_out) waddr_q3 <= waddr_q2;
-    bit [2:0] waddr_clkout;
-    g2b_converter #(.WIDTH(3)) waddr_to_binary1 (.binary(waddr_clkout),.gray(waddr_q3));
-
-    // Transfer raddr from clk_out to clk_in
-    bit [5:0] raddr_gray;
-    b2g_converter #(.WIDTH(6)) raddr_to_gray2 (.binary(raddr),.gray(raddr_gray));
-    bit [5:0] raddr_q;
-    bit [5:0] raddr_q2;
-    bit [5:0] raddr_q3;
-    always @(posedge clk_out) raddr_q <= raddr_gray;
-    always @(posedge clk_in) raddr_q2 <= raddr_q;
-    always @(posedge clk_in) raddr_q3 <= raddr_q2;
-    bit [5:0] raddr_clkin;
-    g2b_converter #(.WIDTH(6)) raddr_to_binary2 (.binary(raddr_clkin),.gray(raddr_q3));
-    
-    // verilog_format: on
-
-    wire [5:0] cnt_clkin = {waddr, 3'b0} - raddr_clkin;
-    wire [5:0] cnt_clkout = {waddr_clkout, 3'b0} - raddr;
-
-    // The threshold can't be set to exactly half.
-    // There is a latency of this signal because of the clock synchronization above
-    // The supplying machine might always provide more than requested becaues of this!
-    assign half_empty = cnt_clkin < 16;
-
-    always_ff @(posedge clk_in) begin
-        if (reset_in) waddr <= 0;
-
-        if (we) begin
-            ram[waddr] <= wdata;
-            waddr <= waddr + 1;
-        end
-    end
-
-    always_ff @(posedge clk_out) begin
-        if (reset_out) raddr <= 0;
-
-        if (strobe) begin
-            raddr <= raddr + 1;
-        end
-
-        q <= ram[raddr[5:3]][raddr[2:0]];
-        valid <= cnt_clkout != 0;
-    end
-
-endmodule : ddr_to_byte_fifo
-
-
-// For U and V which needs to be doubled in height.
-// To avoid fetching the same data twice, we cache it here
-module ddr_chroma_line_buffer (
-    // Input
-    input clk_in,
-    input reset,
-    input [63:0] wdata,
-    input we,
-    // Output
-    input clk_out,
-    input [7:0] raddr,  // 256 x 8
-    output bit [7:0] q
-);
-
-    // The maximum resolution for MPEG should be 384
-    // Since U and V are halfed, we need 192 pixels of storage
-    // To be safe, we go for 200
-
-    bit [4:0] waddr;  // 32 x 64
-    bit [7:0][7:0] ram[256/8];
-
-    always_ff @(posedge clk_in) begin
-        if (reset) waddr <= 0;
-
-        if (we) begin
-            ram[waddr] <= wdata;
-            waddr <= waddr + 1;
-        end
-    end
-
-    always_ff @(posedge clk_out) begin
-        q <= ram[raddr[7:3]][raddr[2:0]];
-    end
-
-endmodule : ddr_chroma_line_buffer
-

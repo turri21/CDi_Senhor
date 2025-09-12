@@ -683,8 +683,8 @@ class CDi {
             fwrite(&sample_r, 2, 1, f_audio_right);
         }
 
-        if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__expose_frame) {
-            uint32_t addr = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__frame_adr;
+        if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__expose_frame_struct_adr) {
+            uint32_t addr = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__frame_struct_adr;
             uint8_t *mem1 =
                 (uint8_t *)&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__core1mem__DOT__ram;
             uint8_t *mem_video = (uint8_t *)&dut.rootp->emu__DOT__ddram;
@@ -857,7 +857,7 @@ class CDi {
             clock();
         }
 
-#if 0
+#if 1
         FILE *f = fopen("ddramdump.bin", "rb");
         assert(f);
         fread(&dut.rootp->emu__DOT__ddram[0], 1, 500000, f);

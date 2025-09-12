@@ -33,14 +33,14 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  20,501 / 41,910 ( 49 % )
-    Total registers              22951
-    Total block memory bits      1,724,871 / 5,662,720 ( 30 % )
+    Logic utilization (in ALMs)  24,631 / 41,910 ( 59 % )
+    Total registers              29008
+    Total block memory bits      1,896,711 / 5,662,720 ( 33 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
 Expected synthesis times with Quartus 17.0.2
 
-    AMD Ryzen 7 3700X 8-Core    12 minutes
+    AMD Ryzen 7 3700X 8-Core    16 minutes
 
 ### TODOs
 

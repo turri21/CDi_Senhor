@@ -20,26 +20,36 @@ module mpeg_video (
     input           vblank
 );
 
-    ddr_if worker_ddr ();
+    ddr_if worker_2_ddr ();
+    ddr_if worker_3_ddr ();
     ddr_if player_ddr ();
 
-    ddr_mux ddrmux (
+    ddr_mux3 ddrmux (
         .clk(clk60),
         .x  (ddrif),
-        .a  (worker_ddr),
-        .b  (player_ddr)
+        .a  (player_ddr),
+        .b  (worker_2_ddr),
+        .c  (worker_3_ddr)
     );
 
-    assign worker_ddr.byteenable = 8'hff;
-    assign worker_ddr.read = 0;
-    assign worker_ddr.burstcnt = 1;
+    assign worker_2_ddr.byteenable = 8'hff;
+    assign worker_3_ddr.byteenable = 8'hff;
+
+    flag_cross_domain cross_reset (
+        .clk_a(clk30),
+        .clk_b(clk60),
+        .flag_in_clk_a(reset_dsp_enabled),
+        .flag_out_clk_b(reset_dsp_enabled_clk60)
+    );
+    wire reset_dsp_enabled = reset || !dsp_enable;
+    wire reset_dsp_enabled_clk60;
 
     bit [15:0] dct_coeff_result;
     bit dct_coeff_huffman_active = 0;
     wire dct_coeff_result_valid;
     dct_coeff_huffman_decoder huff (
-        .clk(clk30),
-        .reset,
+        .clk(clk60),
+        .reset(reset_dsp_enabled_clk60),
         .data_valid(dct_coeff_huffman_active && hw_read_mem_ready && !dct_coeff_result_valid),
         .data(mpeg_in_fifo_out[31-hw_read_bit_shift]),
         .result_valid(dct_coeff_result_valid),
@@ -62,12 +72,13 @@ module mpeg_video (
     end
 
     mpeg_input_stream_fifo_32k in_fifo (
-        .clk(clk30),
+        .clkw(clk30),
         // In, invert endianness at the same time
         .waddr({mpeg_stream_fifo_write_adr[14:2], 2'b11 - mpeg_stream_fifo_write_adr[1:0]}),
         .wdata(data_byte),
         .we(data_strobe),
         // Out (32 bit CPU interface)
+        .clkr(clk60),
         .raddr(mpeg_input_stream_fifo_raddr),
         .q(mpeg_in_fifo_out)
     );
@@ -84,7 +95,24 @@ module mpeg_video (
     wire [27:0] mpeg_stream_fifo_read_adr = mpeg_stream_byte_index[27:0];
 
     wire [27:0] fifo_level /*verilator public_flat_rd*/ = mpeg_stream_fifo_write_adr - mpeg_stream_fifo_read_adr;
-    assign fifo_full = mpeg_stream_fifo_write_adr > (mpeg_stream_fifo_read_adr + 28'd30000);
+
+    wire fifo_underflow = mpeg_stream_fifo_write_adr_clk60 < mpeg_stream_fifo_read_adr;
+    (* keep *) (* noprune *) bit [31:0] decoder_failing_address;
+    (* keep *) (* noprune *) bit decoder_failing_address_set = 0;
+
+    always_ff @(posedge clk60) begin
+        if (reset_dsp_enabled_clk60) begin
+            decoder_failing_address_set <= 0;
+        end else if (fifo_underflow && !decoder_failing_address_set) begin
+            // This is a bad sign! The reader just went faster than the writer. Prepare for impact!
+            decoder_failing_address_set <= 1;
+            decoder_failing_address <= imem_cmd_payload_address_1;
+            $display("Underflow of FIFO at %x", imem_cmd_payload_address_1);
+            $finish();
+        end
+    end
+
+    wire fifo_full_clk60 = mpeg_stream_fifo_write_adr_clk60 > (mpeg_stream_fifo_read_adr + 28'd30500);
 
     bit hw_read_mem_ready = 0;
     wire [4:0] hw_read_bit_shift = mpeg_stream_bit_index[4:0];
@@ -94,7 +122,52 @@ module mpeg_video (
     wire [ 4:0] hw_read_count_aligned = hw_read_aligned_access ? hw_read_count : hw_read_remaining_bits_in_dword[4:0];
     wire [31:0] hw_read_mask = ones_mask(hw_read_count_aligned);
 
+    bit [3:0] sync_write_adr_cnt;
+    bit [27:0] mpeg_stream_fifo_write_adr_syncval;
+    bit mpeg_stream_fifo_write_adr_syncflag;
+    bit mpeg_stream_fifo_write_adr_syncflag_clk60;
+    bit [27:0] mpeg_stream_fifo_write_adr_clk60;
+
+    // TODO This is a weird approach to sync the write address over
+    // It has 16 clocks of latency but doesn't need any gray code
     always_ff @(posedge clk30) begin
+        sync_write_adr_cnt <= sync_write_adr_cnt + 1;
+        mpeg_stream_fifo_write_adr_syncflag <= 0;
+
+        if (sync_write_adr_cnt == 0) begin
+            mpeg_stream_fifo_write_adr_syncflag <= 1;
+            mpeg_stream_fifo_write_adr_syncval  <= mpeg_stream_fifo_write_adr;
+        end
+    end
+
+    flag_cross_domain cross_fifo_write_adr_syncflag (
+        .clk_a(clk30),
+        .clk_b(clk60),
+        .flag_in_clk_a(mpeg_stream_fifo_write_adr_syncflag),
+        .flag_out_clk_b(mpeg_stream_fifo_write_adr_syncflag_clk60)
+    );
+
+    signal_cross_domain cross_fifo_full (
+        .clk_a(clk60),
+        .clk_b(clk30),
+        .signal_in_clk_a(fifo_full_clk60),
+        .signal_out_clk_b(fifo_full)
+    );
+
+    always_ff @(posedge clk60) begin
+        if (mpeg_stream_fifo_write_adr_syncflag_clk60)
+            mpeg_stream_fifo_write_adr_clk60 <= mpeg_stream_fifo_write_adr_syncval;
+    end
+
+    always_ff @(posedge clk30) begin
+        if (reset) begin
+            mpeg_stream_fifo_write_adr <= 0;
+        end else if (data_strobe) begin
+            mpeg_stream_fifo_write_adr <= mpeg_stream_fifo_write_adr + 1;
+        end
+    end
+
+    always_ff @(posedge clk60) begin
         if (fifo_full) begin
             $display("FIFO FULL");
             $finish();
@@ -102,18 +175,14 @@ module mpeg_video (
 
         hw_read_mem_ready <= 0;
 
-        if (reset) begin
-            mpeg_stream_fifo_write_adr <= 0;
+        if (reset_dsp_enabled_clk60) begin
             mpeg_stream_bit_index <= 0;
             hw_read_count <= 0;
         end else begin
-            if (data_strobe) begin
-                mpeg_stream_fifo_write_adr <= mpeg_stream_fifo_write_adr + 1;
-            end
 
             if (dmem_cmd_payload_write_1 && dmem_cmd_valid_1) begin
-                if (dmem_cmd_payload_address_1 == 32'h10002000)
-                    mpeg_stream_fifo_write_adr <= dmem_cmd_payload_data_1[27:0];
+                if (dmem_cmd_payload_address_1 == 32'h10002000) $finish();
+
                 if (dmem_cmd_payload_address_1 == 32'h10002004)
                     mpeg_stream_bit_index <= dmem_cmd_payload_data_1;
                 if (dmem_cmd_payload_address_1 == 32'h10002008) begin
@@ -140,7 +209,7 @@ module mpeg_video (
             end
         end
 
-        if (reset || dct_coeff_result_valid) begin
+        if (reset_dsp_enabled_clk60 || dct_coeff_result_valid) begin
             dct_coeff_huffman_active <= 0;
             mpeg_stream_bit_index <= mpeg_stream_bit_index;
             hw_read_count <= 0;
@@ -156,7 +225,7 @@ module mpeg_video (
     wire [31:0] memory_out_i1;
     wire [31:0] memory_out_d1;
     decoder_firmware_memory core1mem (
-        .clk(clk30),
+        .clk(clk60),
         .addr2(imem_cmd_payload_address_1[13:2]),
         .data_out2(memory_out_i1),
         .be2(0),
@@ -205,13 +274,13 @@ module mpeg_video (
     wire [31:0] shared12_out_1;
     dualport_shared_ram shared12 (
         .clk2(clk60),
-        .addr2(dmem_cmd_payload_address_2[12:2]),
+        .addr2(dmem_cmd_payload_address_2[13:2]),
         .data_out2(shared12_out_2),
         .be2(dmem_cmd_payload_mask_2),
         .we2(dmem_cmd_payload_address_2[31:28]==4 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_write_2),
         .data_in2(dmem_cmd_payload_data_2),
-        .addr1(dmem_cmd_payload_address_1[12:2]),
-        .clk1(clk30),
+        .addr1(dmem_cmd_payload_address_1[13:2]),
+        .clk1(clk60),
         .data_in1(dmem_cmd_payload_data_1),
         .we1(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 1 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
         .be1(dmem_cmd_payload_mask_1),
@@ -222,13 +291,13 @@ module mpeg_video (
     wire [31:0] shared13_out_1;
     dualport_shared_ram shared13 (
         .clk2(clk60),
-        .addr2(dmem_cmd_payload_address_3[12:2]),
+        .addr2(dmem_cmd_payload_address_3[13:2]),
         .data_out2(shared13_out_3),
         .be2(dmem_cmd_payload_mask_3),
         .we2(dmem_cmd_payload_address_3[31:28]==4 && dmem_cmd_valid_3 && dmem_cmd_ready_3 && dmem_cmd_payload_write_3),
         .data_in2(dmem_cmd_payload_data_3),
-        .addr1(dmem_cmd_payload_address_1[12:2]),
-        .clk1(clk30),
+        .addr1(dmem_cmd_payload_address_1[13:2]),
+        .clk1(clk60),
         .data_in1(dmem_cmd_payload_data_1),
         .we1(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
         .be1(dmem_cmd_payload_mask_1),
@@ -339,19 +408,10 @@ module mpeg_video (
         .LsuCachelessPlugin_logic_bus_rsp_payload_id(dmem_rsp_payload_id_1),
         .LsuCachelessPlugin_logic_bus_rsp_payload_error(dmem_rsp_payload_error_1),
         .LsuCachelessPlugin_logic_bus_rsp_payload_data(dmem_rsp_payload_data_1),
-        .clk(clk30),
-        .reset(reset || !dsp_enable)
+        .clk(clk60),
+        .reset(reset_dsp_enabled_clk60)
     );
 
-
-    flag_cross_domain cross_reset (
-        .clk_a(clk30),
-        .clk_b(clk60),
-        .flag_in_clk_a(reset_dsp_enabled),
-        .flag_out_clk_b(reset_dsp_enabled_clk60)
-    );
-    wire reset_dsp_enabled = reset || !dsp_enable;
-    wire reset_dsp_enabled_clk60;
 
     VexiiRiscv vexii2 (
         .PrivilegedPlugin_logic_rdtime(0),
@@ -419,23 +479,106 @@ module mpeg_video (
 
     /*verilator tracing_on*/
 
-    wire [31:0] frame_adr  /*verilator public_flat_rd*/ = dmem_cmd_payload_data_1;
-    wire expose_frame /*verilator public_flat_rd*/ = (dmem_cmd_payload_address_1 == 32'h10000010 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
+    bit [31:0] frame_struct_adr  /*verilator public_flat_rd*/;
+    bit [31:0] frame_y_adr  /*verilator public_flat_rd*/;
+    wire expose_frame_struct_adr_clk60  = (dmem_cmd_payload_address_1 == 32'h10000010 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
+    wire expose_frame_y_adr_clk60  = (dmem_cmd_payload_address_1 == 32'h10000018 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
     bit [31:0] soft_state1  /*verilator public_flat_rd*/ = 0;
     bit [31:0] soft_state2  /*verilator public_flat_rd*/ = 0;
     bit [31:0] soft_state3  /*verilator public_flat_rd*/ = 0;
+    wire expose_frame_struct_adr  /*verilator public_flat_rd*/;
+    wire expose_frame_y_adr  /*verilator public_flat_rd*/;
+
+    flag_cross_domain cross_expose_frame_struct_adr (
+        .clk_a(clk60),
+        .clk_b(clk30),
+        .flag_in_clk_a(expose_frame_struct_adr_clk60),
+        .flag_out_clk_b(expose_frame_struct_adr)
+    );
+
+    flag_cross_domain cross_expose_frame_y_adr (
+        .clk_a(clk60),
+        .clk_b(clk30),
+        .flag_in_clk_a(expose_frame_y_adr_clk60),
+        .flag_out_clk_b(expose_frame_y_adr)
+    );
+
+    always_ff @(posedge clk60) begin
+        if (expose_frame_struct_adr_clk60) frame_struct_adr <= dmem_cmd_payload_data_1;
+        if (expose_frame_y_adr_clk60) frame_y_adr <= dmem_cmd_payload_data_1;
+    end
+
+    bit cache_miss_2;
+    bit [2:0] cache_hit_adr_2;
+    bit cache_miss_2_q;
+    bit [2:0] cache_hit_adr_2_q;
+    bit [63:0] cache_2[8][3];
+    bit [1:0] data_burst_cnt_2;
+    bit [27-3:0] cache_adr_2[8] = '{default: 8000};
+    bit [2:0] cache_write_adr_2 = 0;
+
+`ifdef VERILATOR
+    bit [27-3:0] missed_cache_adr_2[16] = '{default: 8000};
+    bit [3:0] missed_cache_adr_index_2;
+`endif
+
+    bit cache_miss_3;
+    bit [2:0] cache_hit_adr_3;
+    bit [2:0] cache_hit_adr_3_q;
+    bit [63:0] cache_3[8][3];
+    bit [1:0] data_burst_cnt_3;
+    bit [27-3:0] cache_adr_3[8] = '{default: 8000};
+    bit [2:0] cache_write_adr_3 = 0;
+
+`ifdef VERILATOR
+    bit [27-3:0] missed_cache_adr_3[16] = '{default: 8000};
+    bit [3:0] missed_cache_adr_index_3;
+`endif
 
     always_comb begin
+        integer i;
+        bit cache_hit;
+
         imem_cmd_ready_3 = 1;
         imem_rsp_payload_word_3 = memory_out_i3;
 
         dmem_cmd_ready_3 = 1;
         dmem_rsp_payload_data_3 = memory_out_d3;
 
-        if (dmem_cmd_valid_3_q && dmem_cmd_ready_3_q) begin
+        // Stall on DDR write until resolved
+        if (worker_3_ddr.acquire && dmem_cmd_valid_3 && dmem_cmd_payload_write_3 && dmem_cmd_payload_address_3[31:28] == 4'd5)
+            dmem_cmd_ready_3 = 0;
+
+        // Stall on DDR read until resolved
+        if (dmem_cmd_payload_address_3_q[31:28] == 4'd5 && !dmem_cmd_payload_write_3_q && dmem_cmd_valid_3_q && worker_3_ddr.acquire)
+            dmem_cmd_ready_3 = 0;
+
+        // Handle read directly after write to avoid read and write at the same time
+        if (dmem_cmd_payload_address_3[31:28] == 4'd5 && !dmem_cmd_payload_write_3 && dmem_cmd_valid_3 && worker_3_ddr.acquire)
+            dmem_cmd_ready_3 = 0;
+
+        cache_hit_adr_3 = 0;
+        cache_miss_3 = 0;
+        cache_hit_adr_3_q = 0;
+        cache_hit = 0;
+        for (i = 0; i < 8; i++) begin
+            if ((dmem_cmd_payload_address_3[27:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3[27:3] <= cache_adr_3[i] + 2)) begin
+                cache_hit_adr_3 = 3'(i);
+                cache_hit = 1;
+            end
+
+            if ((dmem_cmd_payload_address_3_q[27:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3_q[27:3] <= cache_adr_3[i] + 2)) begin
+                cache_hit_adr_3_q = 3'(i);
+            end
+        end
+        cache_miss_3 = !cache_hit;
+
+        if (dmem_cmd_valid_3_q) begin
             case (dmem_cmd_payload_address_3_q[31:28])
                 4'd5: begin  // Video SRAM region
-                    dmem_rsp_payload_data_3 = 0;
+                    dmem_rsp_payload_data_3 = dmem_cmd_payload_address_3_q[2] ?
+                     cache_3[cache_hit_adr_3_q][2'(dmem_cmd_payload_address_3_q[27:3]-cache_adr_3[cache_hit_adr_3_q])][63:32] :
+                     cache_3[cache_hit_adr_3_q][2'(dmem_cmd_payload_address_3_q[27:3]-cache_adr_3[cache_hit_adr_3_q])][31:0];
                 end
                 4'd4: begin  // Shared SRAM region
                     dmem_rsp_payload_data_3 = shared13_out_3;
@@ -456,20 +599,49 @@ module mpeg_video (
     end
 
     always_comb begin
+        integer i;
+        bit cache_hit;
+
         imem_cmd_ready_2 = 1;
         imem_rsp_payload_word_2 = memory_out_i2;
 
         dmem_cmd_ready_2 = 1;
         dmem_rsp_payload_data_2 = memory_out_d2;
 
-        if (worker_ddr.acquire && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_address_2[31:28] == 4'd5)
+        // Stall on DDR write until resolved
+        if (worker_2_ddr.acquire && dmem_cmd_valid_2 && dmem_cmd_payload_write_2 && dmem_cmd_payload_address_2[31:28] == 4'd5)
             dmem_cmd_ready_2 = 0;
 
+        // Stall on DDR read until resolved
+        if (dmem_cmd_payload_address_2_q[31:28] == 4'd5 && !dmem_cmd_payload_write_2_q && dmem_cmd_valid_2_q && worker_2_ddr.acquire)
+            dmem_cmd_ready_2 = 0;
 
-        if (dmem_cmd_valid_2_q && dmem_cmd_ready_2_q) begin
+        // Handle read directly after write to avoid read and write at the same time
+        if (dmem_cmd_payload_address_2[31:28] == 4'd5 && !dmem_cmd_payload_write_2 && dmem_cmd_valid_2 && worker_2_ddr.acquire)
+            dmem_cmd_ready_2 = 0;
+
+        cache_hit_adr_2 = 0;
+        cache_miss_2 = 0;
+        cache_hit_adr_2_q = 0;
+        cache_hit = 0;
+        for (i = 0; i < 8; i++) begin
+            if ((dmem_cmd_payload_address_2[27:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2[27:3] <= cache_adr_2[i] + 2)) begin
+                cache_hit_adr_2 = 3'(i);
+                cache_hit = 1;
+            end
+
+            if ((dmem_cmd_payload_address_2_q[27:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2_q[27:3] <= cache_adr_2[i] + 2)) begin
+                cache_hit_adr_2_q = 3'(i);
+            end
+        end
+        cache_miss_2 = !cache_hit;
+
+        if (dmem_cmd_valid_2_q) begin
             case (dmem_cmd_payload_address_2_q[31:28])
                 4'd5: begin  // Video SRAM region
-                    dmem_rsp_payload_data_2 = 0;
+                    dmem_rsp_payload_data_2 = dmem_cmd_payload_address_2_q[2] ?
+                     cache_2[cache_hit_adr_2_q][2'(dmem_cmd_payload_address_2_q[27:3]-cache_adr_2[cache_hit_adr_2_q])][63:32] :
+                     cache_2[cache_hit_adr_2_q][2'(dmem_cmd_payload_address_2_q[27:3]-cache_adr_2[cache_hit_adr_2_q])][31:0];
                 end
                 4'd4: begin  // Shared SRAM region
                     dmem_rsp_payload_data_2 = shared12_out_2;
@@ -508,7 +680,7 @@ module mpeg_video (
                     // I/O Area
                     if (!dmem_cmd_payload_write_1_q) begin
                         if (dmem_cmd_payload_address_1_q == 32'h10002000)
-                            dmem_rsp_payload_data_1 = {4'b0000, mpeg_stream_fifo_write_adr};
+                            dmem_rsp_payload_data_1 = {4'b0000, mpeg_stream_fifo_write_adr_clk60};
                         if (dmem_cmd_payload_address_1_q == 32'h10002004)
                             dmem_rsp_payload_data_1 = mpeg_stream_bit_index;
                         if (dmem_cmd_payload_address_1_q == 32'h10002008)
@@ -530,31 +702,14 @@ module mpeg_video (
     end
 
 
-    // Assuming 30 MHz clock rate and 25 Hz frame rate
-    localparam TICKS_PER_FRAME = 1200000;
+    // Assuming 90 MHz clock rate and 25 Hz frame rate
+    localparam TICKS_PER_FRAME = 1200000 * 3;
 
     bit signed [15:0] shared_buffer_level = 0;
 
     wire shared_buffer_level_inc = dmem_cmd_payload_address_1 == 32'h10000014 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1;
     wire shared_buffer_level_dec1 = dmem_cmd_payload_address_2 == 32'h10000014 && dmem_cmd_payload_write_2 && dmem_cmd_valid_2;
     wire shared_buffer_level_dec2 = dmem_cmd_payload_address_3 == 32'h10000014 && dmem_cmd_payload_write_3 && dmem_cmd_valid_3;
-
-    wire shared_buffer_level_dec1_clk30;
-    wire shared_buffer_level_dec2_clk30;
-
-    flag_cross_domain cross1 (
-        .clk_a(clk60),
-        .clk_b(clk30),
-        .flag_in_clk_a(shared_buffer_level_dec1),
-        .flag_out_clk_b(shared_buffer_level_dec1_clk30)
-    );
-
-    flag_cross_domain cross2 (
-        .clk_a(clk60),
-        .clk_b(clk30),
-        .flag_in_clk_a(shared_buffer_level_dec2),
-        .flag_out_clk_b(shared_buffer_level_dec2_clk30)
-    );
 
     bit [31:0] dmem_cmd_payload_address_1_q;
     bit dmem_cmd_valid_1_q;
@@ -571,7 +726,7 @@ module mpeg_video (
     bit dmem_cmd_ready_3_q;
     bit dmem_cmd_payload_write_3_q;
 
-    always_ff @(posedge clk30) begin
+    always_ff @(posedge clk60) begin
         imem_rsp_valid_1 <= 0;
         dmem_rsp_valid_1 <= 0;
 
@@ -580,7 +735,7 @@ module mpeg_video (
         dmem_cmd_ready_1_q <= dmem_cmd_ready_1;
         dmem_cmd_payload_write_1_q <= dmem_cmd_payload_write_1;
 
-        shared_buffer_level <= shared_buffer_level + (shared_buffer_level_inc ? 1:0) - (shared_buffer_level_dec1_clk30 ? 1 : 0) - (shared_buffer_level_dec2_clk30 ? 1:0);
+        shared_buffer_level <= shared_buffer_level + (shared_buffer_level_inc ? 1:0) - (shared_buffer_level_dec1 ? 1 : 0) - (shared_buffer_level_dec2 ? 1:0);
 
         if (dmem_cmd_payload_address_1 == 32'h1000000c && dmem_cmd_payload_write_1 && dmem_cmd_valid_1)begin
             $display("Core 1 stopped at %x with code %x", imem_cmd_payload_address_1,
@@ -590,7 +745,7 @@ module mpeg_video (
         if (dmem_cmd_payload_address_1 == 32'h10000030 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1)
             soft_state1 <= dmem_cmd_payload_data_1;
 
-        if (expose_frame) begin
+        if (expose_frame_struct_adr_clk60) begin
             frames_decoded <= frames_decoded + 1;
         end
 
@@ -623,38 +778,107 @@ module mpeg_video (
     // 0011 like the N64 core to force a base of 0x30000000
     localparam bit [3:0] DDR_CORE_BASE = 4'b0011;
 
+    // Instruction fetch logic for core 2
     always_ff @(posedge clk60) begin
-
-        if (!worker_ddr.busy) begin
-            worker_ddr.write   <= 0;
-            worker_ddr.acquire <= 0;
-        end
-
         imem_rsp_valid_2 <= 0;
-        dmem_rsp_valid_2 <= 0;
+
+        if (imem_cmd_valid_2) begin
+            imem_rsp_valid_2 <= 1;
+            imem_rsp_payload_id_2 <= imem_cmd_payload_id_2;
+        end
+    end
+
+    // Instruction fetch logic for core 3
+    always_ff @(posedge clk60) begin
         imem_rsp_valid_3 <= 0;
+
+        if (imem_cmd_valid_3) begin
+            imem_rsp_valid_3 <= 1;
+            imem_rsp_payload_id_3 <= imem_cmd_payload_id_3;
+        end
+    end
+
+    always_ff @(posedge clk60) begin
+        integer i;
+
+        dmem_rsp_valid_2 <= 0;
         dmem_rsp_valid_3 <= 0;
 
-        dmem_cmd_payload_address_2_q <= dmem_cmd_payload_address_2;
-        dmem_cmd_valid_2_q <= dmem_cmd_valid_2;
+        if (!worker_2_ddr.busy && worker_2_ddr.write) begin
+            worker_2_ddr.write   <= 0;
+            worker_2_ddr.acquire <= 0;
+        end
+
+        if (!worker_2_ddr.busy && worker_2_ddr.read) begin
+            worker_2_ddr.read <= 0;
+        end
+
+        if (data_burst_cnt_2 != 3 && worker_2_ddr.rdata_ready) begin
+            if (worker_2_ddr.rdata_ready) begin
+                data_burst_cnt_2 <= data_burst_cnt_2 + 1;
+                cache_2[cache_write_adr_2][data_burst_cnt_2] <= worker_2_ddr.rdata;
+            end
+            if (data_burst_cnt_2 == 2) begin
+                worker_2_ddr.read <= 0;
+                worker_2_ddr.acquire <= 0;
+                dmem_rsp_valid_2 <= 1;
+                cache_write_adr_2 <= cache_write_adr_2 + 1;
+            end
+        end
+
+        if (dmem_cmd_ready_2) begin
+            if (dmem_cmd_valid_2) begin
+                dmem_cmd_payload_address_2_q <= dmem_cmd_payload_address_2;
+                dmem_cmd_payload_write_2_q   <= dmem_cmd_payload_write_2;
+            end
+            dmem_cmd_valid_2_q <= dmem_cmd_valid_2;
+        end
         dmem_cmd_ready_2_q <= dmem_cmd_ready_2;
-        dmem_cmd_payload_write_2_q <= dmem_cmd_payload_write_2;
 
-        dmem_cmd_payload_address_3_q <= dmem_cmd_payload_address_3;
-        dmem_cmd_valid_3_q <= dmem_cmd_valid_3;
+        if (!worker_3_ddr.busy && worker_3_ddr.write) begin
+            worker_3_ddr.write   <= 0;
+            worker_3_ddr.acquire <= 0;
+        end
+
+        if (!worker_3_ddr.busy && worker_3_ddr.read) begin
+            worker_3_ddr.read <= 0;
+        end
+
+        if (data_burst_cnt_3 != 3 && worker_3_ddr.rdata_ready) begin
+            if (worker_3_ddr.rdata_ready) begin
+                data_burst_cnt_3 <= data_burst_cnt_3 + 1;
+                cache_3[cache_write_adr_3][data_burst_cnt_3] <= worker_3_ddr.rdata;
+            end
+            if (data_burst_cnt_3 == 2) begin
+                worker_3_ddr.read <= 0;
+                worker_3_ddr.acquire <= 0;
+                dmem_rsp_valid_3 <= 1;
+                cache_write_adr_3 <= cache_write_adr_3 + 1;
+            end
+        end
+
+        if (dmem_cmd_ready_3) begin
+            if (dmem_cmd_valid_3) begin
+                dmem_cmd_payload_address_3_q <= dmem_cmd_payload_address_3;
+                dmem_cmd_payload_write_3_q   <= dmem_cmd_payload_write_3;
+            end
+            dmem_cmd_valid_3_q <= dmem_cmd_valid_3;
+        end
         dmem_cmd_ready_3_q <= dmem_cmd_ready_3;
-        dmem_cmd_payload_write_3_q <= dmem_cmd_payload_write_3;
 
-        if (dmem_cmd_payload_address_2 == 32'h1000000c && dmem_cmd_payload_write_2 && dmem_cmd_valid_2) begin
+
+        if (dmem_cmd_payload_address_2 == 32'h1000000c && dmem_cmd_payload_write_2 && dmem_cmd_valid_2 && dmem_cmd_ready_2) begin
             $display("Core 2 stopped at %x with code %x", imem_cmd_payload_address_2,
                      dmem_cmd_payload_data_2);
             $finish();
         end
-        if (dmem_cmd_payload_address_3 == 32'h1000000c && dmem_cmd_payload_write_3 && dmem_cmd_valid_3) begin
+
+        if (dmem_cmd_payload_address_3 == 32'h1000000c && dmem_cmd_payload_write_3 && dmem_cmd_valid_3 && dmem_cmd_ready_3) begin
             $display("Core 3 stopped at %x with code %x", imem_cmd_payload_address_3,
                      dmem_cmd_payload_data_3);
             $finish();
         end
+
 
         if (dmem_cmd_payload_address_2 == 32'h10000030 && dmem_cmd_payload_write_2 && dmem_cmd_valid_2)
             soft_state2 <= dmem_cmd_payload_data_2;
@@ -671,25 +895,50 @@ module mpeg_video (
                     //assert(dmem_cmd_payload_address_2[1:0] == 2'b00);
 
                     if (dmem_cmd_payload_write_2) begin
-                        assert (worker_ddr.write == 0);
-
-                        worker_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_2[27:3]};
+                        assert (worker_2_ddr.write == 0);
+                        worker_2_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_2[27:3]};
 
                         if (dmem_cmd_payload_address_2[2] == 1'b1) begin
-                            worker_ddr.write   <= dmem_cmd_payload_mask_2[3];
-                            worker_ddr.acquire <= 1;
+                            worker_2_ddr.write <= dmem_cmd_payload_mask_2[3];
+                            worker_2_ddr.acquire <= dmem_cmd_payload_mask_2[3];
+                            worker_2_ddr.burstcnt <= 1;
                             // verilog_format: off
-                            if (dmem_cmd_payload_mask_2[0]) worker_ddr.wdata[39:32] <= dmem_cmd_payload_data_2[7:0];
-                            if (dmem_cmd_payload_mask_2[1]) worker_ddr.wdata[47:40] <= dmem_cmd_payload_data_2[15:8];
-                            if (dmem_cmd_payload_mask_2[2]) worker_ddr.wdata[55:48] <= dmem_cmd_payload_data_2[23:16];
-                            if (dmem_cmd_payload_mask_2[3]) worker_ddr.wdata[63:56] <= dmem_cmd_payload_data_2[31:24];
+                            if (dmem_cmd_payload_mask_2[0]) worker_2_ddr.wdata[39:32] <= dmem_cmd_payload_data_2[7:0];
+                            if (dmem_cmd_payload_mask_2[1]) worker_2_ddr.wdata[47:40] <= dmem_cmd_payload_data_2[15:8];
+                            if (dmem_cmd_payload_mask_2[2]) worker_2_ddr.wdata[55:48] <= dmem_cmd_payload_data_2[23:16];
+                            if (dmem_cmd_payload_mask_2[3]) worker_2_ddr.wdata[63:56] <= dmem_cmd_payload_data_2[31:24];
                         end else begin
-                            if (dmem_cmd_payload_mask_2[0]) worker_ddr.wdata[7:0] <= dmem_cmd_payload_data_2[7:0];
-                            if (dmem_cmd_payload_mask_2[1]) worker_ddr.wdata[15:8] <= dmem_cmd_payload_data_2[15:8];
-                            if (dmem_cmd_payload_mask_2[2]) worker_ddr.wdata[23:16] <= dmem_cmd_payload_data_2[23:16];
-                            if (dmem_cmd_payload_mask_2[3]) worker_ddr.wdata[31:24] <= dmem_cmd_payload_data_2[31:24];
+                            if (dmem_cmd_payload_mask_2[0]) worker_2_ddr.wdata[7:0] <= dmem_cmd_payload_data_2[7:0];
+                            if (dmem_cmd_payload_mask_2[1]) worker_2_ddr.wdata[15:8] <= dmem_cmd_payload_data_2[15:8];
+                            if (dmem_cmd_payload_mask_2[2]) worker_2_ddr.wdata[23:16] <= dmem_cmd_payload_data_2[23:16];
+                            if (dmem_cmd_payload_mask_2[3]) worker_2_ddr.wdata[31:24] <= dmem_cmd_payload_data_2[31:24];
                         end
                         // verilog_format: on
+                    end else if (cache_miss_2) begin
+                        // $display("Cache Miss 2 %x %x", dmem_cmd_payload_address_2, dmem_cmd_payload_address_2[27:3]);
+                        worker_2_ddr.read <= 1;
+                        worker_2_ddr.acquire <= 1;
+                        worker_2_ddr.burstcnt <= 3;
+                        data_burst_cnt_2 <= 0;
+                        dmem_rsp_valid_2 <= 0;
+                        worker_2_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_2[27:3]};
+                        cache_adr_2[cache_write_adr_2] <= dmem_cmd_payload_address_2[27:3];
+
+`ifdef VERILATOR
+                        // Check quality of cache. Can we get faster with a bigger cache?
+                        for (i = 0; i < 16; i++) begin
+                            if (dmem_cmd_payload_address_2[27:3] == missed_cache_adr_2[i]) begin
+                                $display("Cache 2 Miss with recently requested address %x %x",
+                                         dmem_cmd_payload_address_2,
+                                         dmem_cmd_payload_address_2[27:3]);
+                                //$finish();
+                            end
+                        end
+                        missed_cache_adr_2[missed_cache_adr_index_2] <= dmem_cmd_payload_address_2[27:3];
+                        missed_cache_adr_index_2 <= missed_cache_adr_index_2 + 1;
+`endif
+                    end else begin
+                        //$display("Cache Hit %x %x",dmem_cmd_payload_address_2,dmem_cmd_payload_address_2[27:3]);
                     end
 
                 end
@@ -703,31 +952,73 @@ module mpeg_video (
             endcase
         end
 
-        // Instruction fetch logic for core 2
-        if (imem_cmd_valid_2) begin
-            imem_rsp_valid_2 <= 1;
-            imem_rsp_payload_id_2 <= imem_cmd_payload_id_2;
-        end
-
         // Core 3 memory access
         if (dmem_cmd_valid_3 && dmem_cmd_ready_3) begin
             dmem_rsp_payload_id_3 <= dmem_cmd_payload_id_3;
             dmem_rsp_valid_3 <= 1;
 
             case (dmem_cmd_payload_address_3[31:28])
+                4'd5: begin  // Core 1 private memory
+                    //assert(dmem_cmd_payload_address_3[1:0] == 2'b00);
+
+                    if (dmem_cmd_payload_write_3) begin
+                        assert (worker_3_ddr.write == 0);
+                        worker_3_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_3[27:3]};
+
+                        if (dmem_cmd_payload_address_3[2] == 1'b1) begin
+                            worker_3_ddr.write <= dmem_cmd_payload_mask_3[3];
+                            worker_3_ddr.acquire <= dmem_cmd_payload_mask_3[3];
+                            worker_3_ddr.burstcnt <= 1;
+                            // verilog_format: off
+                            if (dmem_cmd_payload_mask_3[0]) worker_3_ddr.wdata[39:32] <= dmem_cmd_payload_data_3[7:0];
+                            if (dmem_cmd_payload_mask_3[1]) worker_3_ddr.wdata[47:40] <= dmem_cmd_payload_data_3[15:8];
+                            if (dmem_cmd_payload_mask_3[2]) worker_3_ddr.wdata[55:48] <= dmem_cmd_payload_data_3[23:16];
+                            if (dmem_cmd_payload_mask_3[3]) worker_3_ddr.wdata[63:56] <= dmem_cmd_payload_data_3[31:24];
+                        end else begin
+                            if (dmem_cmd_payload_mask_3[0]) worker_3_ddr.wdata[7:0] <= dmem_cmd_payload_data_3[7:0];
+                            if (dmem_cmd_payload_mask_3[1]) worker_3_ddr.wdata[15:8] <= dmem_cmd_payload_data_3[15:8];
+                            if (dmem_cmd_payload_mask_3[2]) worker_3_ddr.wdata[23:16] <= dmem_cmd_payload_data_3[23:16];
+                            if (dmem_cmd_payload_mask_3[3]) worker_3_ddr.wdata[31:24] <= dmem_cmd_payload_data_3[31:24];
+                        end
+                        // verilog_format: on
+                    end else if (cache_miss_3) begin
+                        //$display("Cache Miss %x %x", dmem_cmd_payload_address_3,
+                        //         dmem_cmd_payload_address_3[27:3]);
+                        worker_3_ddr.read <= 1;
+                        worker_3_ddr.acquire <= 1;
+                        worker_3_ddr.burstcnt <= 3;
+                        data_burst_cnt_3 <= 0;
+                        dmem_rsp_valid_3 <= 0;
+                        worker_3_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_3[27:3]};
+                        cache_adr_3[cache_write_adr_3] <= dmem_cmd_payload_address_3[27:3];
+
+`ifdef VERILATOR
+                        // Check quality of cache. Can we get faster with a bigger cache?
+                        for (i = 0; i < 16; i++) begin
+                            if (dmem_cmd_payload_address_3[27:3] == missed_cache_adr_3[i]) begin
+                                $display("Cache 3 Miss with recently requested address %x %x",
+                                         dmem_cmd_payload_address_3,
+                                         dmem_cmd_payload_address_3[27:3]);
+                                //$finish();
+                            end
+                        end
+                        missed_cache_adr_3[missed_cache_adr_index_3] <= dmem_cmd_payload_address_3[27:3];
+                        missed_cache_adr_index_3 <= missed_cache_adr_index_3 + 1;
+`endif
+                    end else begin
+                        //$display("Cache Hit %x %x",dmem_cmd_payload_address_3,dmem_cmd_payload_address_3[27:3]);
+                    end
+
+                end
                 4'd4: begin  // Shared SRAM region
                 end
                 4'd0: begin  // Core 3 private memory
+
                 end
                 default: ;
+
             endcase
         end
-
-        if (imem_cmd_valid_3) begin
-            imem_rsp_valid_3 <= 1;
-            imem_rsp_payload_id_3 <= imem_cmd_payload_id_3;
-        end
-
     end
 
     frameplayer frameplayer (
@@ -739,8 +1030,9 @@ module mpeg_video (
         .hsync,
         .vsync,
         .hblank,
-        .vblank
+        .vblank,
+        .frame_adr(dmem_cmd_payload_data_1[28:0]),
+        .latch_frame(expose_frame_y_adr_clk60)
     );
-
 endmodule
 

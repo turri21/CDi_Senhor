@@ -320,6 +320,7 @@ module cditop (
 
     rgb888_s fmv_video_out;
     rgb888_s mcd212_video_out;
+    wire debug_video_fifo_overflow;
 
     vmpeg vmpeg_inst (
         .clk(clk30),
@@ -342,6 +343,7 @@ module cditop (
         .done_in(dma_done_out),
         .done_out(),
         .mpeg_ram_enabled(mpeg_ram_enabled),
+        .debug_video_fifo_overflow(debug_video_fifo_overflow),
         .hsync(HSync),
         .vsync(VSync),
         .hblank(HBlank),
@@ -353,7 +355,7 @@ module cditop (
         .ddrif
     );
 
-    assign vidout = mcd212_vsd ? fmv_video_out : mcd212_video_out;
+    assign vidout = (mcd212_vsd && !debug_video_fifo_overflow) ? fmv_video_out : mcd212_video_out;
 
 `ifndef DISABLE_MAIN_CPU
     wire reset68k;

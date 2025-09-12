@@ -36,7 +36,8 @@ module vmpeg (
     output signed [15:0] audio_right,
     input sample_tick44,
 
-    output bit mpeg_ram_enabled  // Prohibits detection of MPEG RAM by the OS RAM crawler
+    output bit mpeg_ram_enabled,  // Prohibits detection of MPEG RAM by the OS RAM crawler
+    output bit debug_video_fifo_overflow
 );
     wire access = cs && (uds || lds);
 
@@ -51,7 +52,7 @@ module vmpeg (
     wire fma_packet_body  /*verilator public_flat_rd*/;
     wire fmv_packet_body  /*verilator public_flat_rd*/;
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         mpeg_word_valid_q <= mpeg_word_valid;
         if (mpeg_word_valid) mpeg_temp <= din[7:0];
     end
@@ -114,6 +115,11 @@ module vmpeg (
         .vblank,
         .vidout
     );
+
+    always_ff @(posedge clk) begin
+        if (reset) debug_video_fifo_overflow <= 0;
+        else if (video_fifo_full) debug_video_fifo_overflow <= 1;
+    end
 
     mpeg_video_start_code_decoder startcode (
         .clk,
