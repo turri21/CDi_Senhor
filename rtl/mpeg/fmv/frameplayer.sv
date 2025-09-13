@@ -23,12 +23,12 @@ module frameplayer (
     assign ddrif.byteenable = 8'hff;
     assign ddrif.write = 0;
 
-    bit [28:0] latched_frame_adr=100;
+    bit [28:0] latched_frame_adr = 0;
 
     always_ff @(posedge clkddr) begin
         if (latch_frame) begin
             latched_frame_adr <= frame_adr;
-            $display("Latched frame %x",latched_frame_adr);
+            $display("Latched frame %x", latched_frame_adr);
         end
     end
 
@@ -121,13 +121,19 @@ module frameplayer (
 
 
     bit [10:0] pixelcnt;
+    bit [8:0] linecnt;
     bit hsync_q;
     bit line_alternate;
     bit u_requested;
     bit v_requested;
+    bit [8:0] frame_width = 368;
+    bit [8:0] frame_height = 240;
 
     always_ff @(posedge clk) begin
         hsync_q <= hsync;
+
+        if (reset || vsync) linecnt <= 0;
+        else if (!vblank && hsync && !hsync_q) linecnt <= linecnt + 1;
 
         if (chroma_fifo_strobe) chroma_read_addr <= chroma_read_addr + 1;
 
@@ -136,10 +142,10 @@ module frameplayer (
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
-        end else if (!vblank && !hblank && pixelcnt < 368 * 4) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width << 2 && linecnt < frame_height) begin
             pixelcnt <= pixelcnt + 1;
-            luma_fifo_strobe <= pixelcnt[1:0] == 3;
-            chroma_fifo_strobe <= pixelcnt[2:0] == 7;
+            luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
+            chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
             assert (y_valid);
         end else begin
             chroma_fifo_strobe <= 0;
@@ -177,10 +183,10 @@ module frameplayer (
             u_requested <= 0;
             v_requested <= 0;
         end else begin
-            if (new_line_started_clkddr) begin
+            if (new_line_started_clkddr && linecnt < frame_height) begin
                 line_alternate <= !line_alternate;
 
-                if (!line_alternate) begin
+                if (line_alternate) begin
                     u_requested <= 0;
                     v_requested <= 0;
                 end
@@ -265,6 +271,12 @@ module frameplayer (
         vidout.r = clamp8(r);
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
+
+        if (pixelcnt >= (frame_width << 2) || linecnt >= frame_height) begin
+            vidout.r = 0;
+            vidout.g = 0;
+            vidout.b = 0;
+        end
     end
 
 endmodule

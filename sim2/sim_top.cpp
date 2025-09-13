@@ -21,7 +21,7 @@
 
 #define SCC68070
 #define SLAVE
-// #define TRACE
+#define TRACE
 // #define SIMULATE_RC5
 
 #define PL_MPEG_IMPLEMENTATION
@@ -869,7 +869,7 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        do_trace = false;
+        //do_trace = false;
         fprintf(stderr, "Trace off!\n");
 #endif
 
