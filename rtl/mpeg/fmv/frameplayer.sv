@@ -16,19 +16,19 @@ module frameplayer (
     input           hblank,
     input           vblank,
 
-    input [28:0] frame_adr,
+    input planar_yuv_s frame,
     input latch_frame
 );
 
     assign ddrif.byteenable = 8'hff;
     assign ddrif.write = 0;
 
-    bit [28:0] latched_frame_adr = 0;
+    planar_yuv_s latched_frame;
 
     always_ff @(posedge clkddr) begin
         if (latch_frame) begin
-            latched_frame_adr <= frame_adr;
-            $display("Latched frame %x", latched_frame_adr);
+            latched_frame <= frame;
+            //$display("Latched frame %x", latched_frame);
         end
     end
 
@@ -173,9 +173,9 @@ module frameplayer (
 
         if (reset_clkddr || vblank_clkddr) begin
             fetchstate <= IDLE;
-            address_y <= latched_frame_adr + 29'h0;
-            address_v <= latched_frame_adr + 29'h15900;  // 368*240 = 88320
-            address_u <= latched_frame_adr + 29'h1af40;  // 368*240 + 88320/4
+            address_y <= latched_frame.y_adr;
+            address_u <= latched_frame.u_adr;
+            address_v <= latched_frame.v_adr;
             target_y <= 0;
             target_u <= 0;
             target_v <= 0;

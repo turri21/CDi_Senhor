@@ -6,6 +6,7 @@ module mpeg_video (
     input clk60,
     input reset,
     input dsp_enable,
+    input playback_active,
 
     input  [7:0] data_byte,
     input        data_strobe,
@@ -698,12 +699,9 @@ module mpeg_video (
                 end
             endcase
         end
-
     end
 
-
-    // Assuming 90 MHz clock rate and 25 Hz frame rate
-    localparam TICKS_PER_FRAME = 1200000 * 3;
+    planar_yuv_s just_decoded;
 
     bit signed [15:0] shared_buffer_level = 0;
 
@@ -761,6 +759,12 @@ module mpeg_video (
                 4'd4: begin  // Shared SRAM region
                 end
                 4'd1: begin
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3000)
+                        just_decoded.y_adr <= dmem_cmd_payload_data_1[28:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3004)
+                        just_decoded.u_adr <= dmem_cmd_payload_data_1[28:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3008)
+                        just_decoded.v_adr <= dmem_cmd_payload_data_1[28:0];
                 end
                 4'd0: begin
                 end
@@ -1021,6 +1025,55 @@ module mpeg_video (
         end
     end
 
+
+    planar_yuv_s for_display;
+    wire just_decoded_commit = dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_address_1==32'h10003010;
+    wire for_display_valid;
+    bit for_display_strobe;
+    bit latch_frame_for_display;
+    wire latch_frame_for_display_clk60;
+
+    // Assuming 30 MHz clock rate and 25 Hz frame rate
+    localparam bit [23:0] TICKS_PER_FRAME = 24'(int'(30e6) / 25);
+    bit [23:0] playback_frame_cnt;
+
+    // In theory this machine could run with clk60.
+    // But I'm not so sure about the final frequency and timing is vital
+    always_ff @(posedge clk30) begin
+        latch_frame_for_display <= 0;
+
+        if (!playback_active) playback_frame_cnt <= 0;
+        else begin
+            playback_frame_cnt <= playback_frame_cnt + 1;
+
+            // Only for simulation. Ensure that frames are always available - no underflow
+            if (playback_frame_cnt == 0) assert (for_display_valid);
+
+            if (playback_frame_cnt == TICKS_PER_FRAME - 1) playback_frame_cnt <= 0;
+            if (playback_frame_cnt == 0 && for_display_valid) latch_frame_for_display <= 1;
+        end
+    end
+
+    flag_cross_domain cross_latch_frame (
+        .clk_a(clk30),
+        .clk_b(clk60),
+        .flag_in_clk_a(latch_frame_for_display),
+        .flag_out_clk_b(latch_frame_for_display_clk60)
+    );
+
+
+    yuv_frame_adr_fifo readyframes (
+        .clk_in(clk60),
+        .reset_in(reset_dsp_enabled_clk60),
+        .wdata(just_decoded),
+        .we(just_decoded_commit),
+        .reset_out(reset_dsp_enabled_clk60),
+        .clk_out(clk60),
+        .strobe(latch_frame_for_display_clk60),
+        .valid(for_display_valid),
+        .q(for_display)
+    );
+
     frameplayer frameplayer (
         .clk(clk30),
         .clkddr(clk60),
@@ -1031,8 +1084,8 @@ module mpeg_video (
         .vsync,
         .hblank,
         .vblank,
-        .frame_adr(dmem_cmd_payload_data_1[28:0]),
-        .latch_frame(expose_frame_y_adr_clk60)
+        .frame(for_display),
+        .latch_frame(latch_frame_for_display)
     );
 endmodule
 

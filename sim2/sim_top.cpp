@@ -21,7 +21,7 @@
 
 #define SCC68070
 #define SLAVE
-#define TRACE
+// #define TRACE
 // #define SIMULATE_RC5
 
 #define PL_MPEG_IMPLEMENTATION
@@ -638,10 +638,13 @@ class CDi {
 
             } else {
                 // PAL
-                
-                if (frame_index == 144) { // Skip Philips Logo
-                    if ((frame_index % 25) == 20)
-                        press_button_signal = true;
+
+                if (frame_index == 137) { // Skip Philips Logo
+                    press_button_signal = true;
+                }
+
+                if (frame_index == 430) { // Skip Dragons Lair Intro
+                    press_button_signal = true;
                 }
             }
 
@@ -869,7 +872,7 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        //do_trace = false;
+        do_trace = false;
         fprintf(stderr, "Trace off!\n");
 #endif
 

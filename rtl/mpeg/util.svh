@@ -1,6 +1,12 @@
 `ifndef HEADER_UTIL
 `define HEADER_UTIL
 
+typedef struct {
+    bit [28:0] y_adr;
+    bit [28:0] u_adr;
+    bit [28:0] v_adr;
+} planar_yuv_s;
+
 function [31:0] ones_mask(bit [4:0] n);
     begin
         ones_mask = (32'h1 << n) - 1;  // n ones at LSB

@@ -11,11 +11,13 @@ module mpeg_video_start_code_decoder (
     output bit [31:0] timecode
 );
 
-    bit [9:0] temperal_sequence_number;
+    bit [9:0] temporal_sequence_number;
     bit [9:0] next_sequence_number;
     bit [9:0] gop_cnt = 0;
+    bit [2:0] coding_type;
+    bit [15:0] vbv_delay;
 
-    enum bit [3:0] {
+    enum bit [4:0] {
         IDLE,
         MAGIC0,
         MAGIC1,
@@ -30,6 +32,7 @@ module mpeg_video_start_code_decoder (
         PIC1,
         PIC2,
         PIC3,
+        PIC4,
         SLICE0,
         SEQHDR
     } finder_state = IDLE;
@@ -46,29 +49,38 @@ module mpeg_video_start_code_decoder (
             })
                 // verilog_format: off
 
-                {PIC3, 8'h??}: begin finder_state <= IDLE; 
-                    $display ("PIC3 %x",mpeg_data);
+                {PIC4, 8'h??}: begin
+                    finder_state <= IDLE; 
+                    $display ("PIC4 %d %d %d", temporal_sequence_number, coding_type, vbv_delay);
                     event_picture <= 1;
+                end
+                {PIC3, 8'h??}: begin
+                    finder_state <= PIC4; 
+                    //$display ("PIC3");
+                    vbv_delay[4:0] <= mpeg_data[7:3];
                 end
                 {PIC2, 8'h??}: begin
                     finder_state <= PIC3;
-                    if (next_sequence_number == temperal_sequence_number)
+                    if (next_sequence_number == temporal_sequence_number)
                     begin
-                        tmpref[11:2] <= temperal_sequence_number;
-                        $display ("PIC2 %x %d",mpeg_data,temperal_sequence_number);
+                        tmpref[11:2] <= temporal_sequence_number;
+                        $display ("PIC2 %d", temporal_sequence_number);
                         next_sequence_number <= next_sequence_number + 1;
                     end
-                    end
+                    vbv_delay[12:5] <= mpeg_data;
+                end
                 {PIC1, 8'h??}: begin
                     finder_state <= PIC2;
                     //$display ("PIC1 %x",mpeg_data);
-                    temperal_sequence_number[1:0] <= mpeg_data[7:6];
-                    end
+                    temporal_sequence_number[1:0] <= mpeg_data[7:6];
+                    coding_type <= mpeg_data[5:3];
+                    vbv_delay[15:13] <= mpeg_data[2:0];
+                end
                 {PIC0, 8'h??}: begin
                     finder_state <= PIC1;
                     //$display ("PIC0 %x",mpeg_data);
-                    temperal_sequence_number[9:2] <= mpeg_data;
-                    end
+                    temporal_sequence_number[9:2] <= mpeg_data;
+                end
                 {GOP3, 8'h??}: begin
                     finder_state <= IDLE;
                     $display ("GOP3 %x",mpeg_data);

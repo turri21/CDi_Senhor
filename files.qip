@@ -30,6 +30,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/mpeg_input_stream_fi
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/mpeg_video_start_code_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/mpeg_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/worker_firmware_memory.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/fmv/yuv_frame_adr_fifo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mpeg/VexiiRiscv.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/pointing_device.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/resetdelay.sv

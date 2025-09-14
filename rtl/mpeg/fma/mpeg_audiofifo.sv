@@ -21,13 +21,13 @@ module mpeg_audiofifo (
     bit indizes_equal_during_write_d;
     bit indizes_equal_during_write_q;
 
-    assign out.write = count != 0 && !reset && !indizes_equal_during_write_q;
-    assign in.strobe = count < 510 && !reset && in.write;
+    assign out.write   = count != 0 && !reset && !indizes_equal_during_write_q;
+    assign in.strobe   = count < 510 && !reset && in.write;
 
     // Every MPEG synthesis will create 32 samples
     // Let's have at least 70 samples to not starve during frame change
     assign nearly_full = count >= 510;
-    assign half_full = count >= 70;
+    assign half_full   = count >= 70;
 
     always_comb begin
         read_index_d = read_index_q;

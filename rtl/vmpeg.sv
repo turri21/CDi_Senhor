@@ -99,12 +99,14 @@ module vmpeg (
     // [5:0] 6 Bit Minutes? Not BCD
     // Where are the hours?
     wire [31:0] fmv_timecode;
+    bit fmv_playback_active;
 
     mpeg_video video (
         .clk30(clk),
         .clk60(clk_mpeg),
         .reset,
         .dsp_enable(1'b1),
+        .playback_active(fmv_playback_active),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
         .fifo_full(video_fifo_full),
@@ -134,29 +136,35 @@ module vmpeg (
     );
 
     bit dsp_enable = 0;
-    wire signed [32:0] system_clock_reference_start_time;
-    wire system_clock_reference_start_time_valid;
+    wire signed [32:0] fma_system_clock_reference_start_time;
+    wire fma_system_clock_reference_start_time_valid;
+    wire signed [32:0] fmv_system_clock_reference_start_time;
+    wire fmv_system_clock_reference_start_time_valid;
 
-    mpeg_demuxer audio_demuxer (
+    mpeg_demuxer #(
+        .unit("FMA")
+    ) audio_demuxer (
         .clk,
         .reset(reset || (fma_command_register == 1)),
         .mpeg_data(mpeg_data),
         .data_valid(fma_data_valid),
         .mpeg_packet_body(fma_packet_body),
         .dclk(fma_dclk),
-        .system_clock_reference_start_time(system_clock_reference_start_time),
-        .system_clock_reference_start_time_valid(system_clock_reference_start_time_valid)
+        .system_clock_reference_start_time(fma_system_clock_reference_start_time),
+        .system_clock_reference_start_time_valid(fma_system_clock_reference_start_time_valid)
     );
 
-    mpeg_demuxer video_demuxer (
+    mpeg_demuxer #(
+        .unit("FMV")
+    ) video_demuxer (
         .clk,
         .reset(reset),
         .mpeg_data(mpeg_data),
         .data_valid(fmv_data_valid),
         .mpeg_packet_body(fmv_packet_body),
         .dclk(fma_dclk),
-        .system_clock_reference_start_time(),
-        .system_clock_reference_start_time_valid()
+        .system_clock_reference_start_time(fmv_system_clock_reference_start_time),
+        .system_clock_reference_start_time_valid(fmv_system_clock_reference_start_time_valid)
     );
 
     typedef struct packed {
@@ -328,6 +336,8 @@ module vmpeg (
             mpeg_ram_enabled_cnt <= 0;
             timer_cnt <= 0;
             dma_active <= 0;
+            dsp_enable <= 0;
+            fmv_playback_active <= 0;
         end else begin
             if (vsync && !vsync_q) interrupt_status_register.vsync <= 1;
 
@@ -370,9 +380,14 @@ module vmpeg (
                     timer_cnt <= timer_cnt + 1;
                 end
 
-                if (system_clock_reference_start_time_valid && fma_dclk == system_clock_reference_start_time[32:1] && !dsp_enable) begin
+                if (fma_system_clock_reference_start_time_valid && fma_dclk == fma_system_clock_reference_start_time[32:1] && !dsp_enable) begin
                     dsp_enable <= 1;
                 end
+
+                if (fmv_system_clock_reference_start_time_valid && fma_dclk == fmv_system_clock_reference_start_time[32:1] && !fmv_playback_active) begin
+                    fmv_playback_active <= 1;
+                end
+
             end else begin
                 fma_dclk_shadow_cnt <= fma_dclk_shadow_cnt + 1;
             end
