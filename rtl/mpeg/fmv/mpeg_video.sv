@@ -511,9 +511,8 @@ module mpeg_video (
 
     bit cache_miss_2;
     bit [2:0] cache_hit_adr_2;
-    bit cache_miss_2_q;
-    bit [2:0] cache_hit_adr_2_q;
     bit [63:0] cache_2[8][3];
+    bit [63:0] cache_2_out;
     bit [1:0] data_burst_cnt_2;
     bit [27-3:0] cache_adr_2[8] = '{default: 8000};
     bit [2:0] cache_write_adr_2 = 0;
@@ -525,8 +524,8 @@ module mpeg_video (
 
     bit cache_miss_3;
     bit [2:0] cache_hit_adr_3;
-    bit [2:0] cache_hit_adr_3_q;
     bit [63:0] cache_3[8][3];
+    bit [63:0] cache_3_out;
     bit [1:0] data_burst_cnt_3;
     bit [27-3:0] cache_adr_3[8] = '{default: 8000};
     bit [2:0] cache_write_adr_3 = 0;
@@ -560,16 +559,11 @@ module mpeg_video (
 
         cache_hit_adr_3 = 0;
         cache_miss_3 = 0;
-        cache_hit_adr_3_q = 0;
         cache_hit = 0;
         for (i = 0; i < 8; i++) begin
             if ((dmem_cmd_payload_address_3[27:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3[27:3] <= cache_adr_3[i] + 2)) begin
                 cache_hit_adr_3 = 3'(i);
                 cache_hit = 1;
-            end
-
-            if ((dmem_cmd_payload_address_3_q[27:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3_q[27:3] <= cache_adr_3[i] + 2)) begin
-                cache_hit_adr_3_q = 3'(i);
             end
         end
         cache_miss_3 = !cache_hit;
@@ -578,8 +572,8 @@ module mpeg_video (
             case (dmem_cmd_payload_address_3_q[31:28])
                 4'd5: begin  // Video SRAM region
                     dmem_rsp_payload_data_3 = dmem_cmd_payload_address_3_q[2] ?
-                     cache_3[cache_hit_adr_3_q][2'(dmem_cmd_payload_address_3_q[27:3]-cache_adr_3[cache_hit_adr_3_q])][63:32] :
-                     cache_3[cache_hit_adr_3_q][2'(dmem_cmd_payload_address_3_q[27:3]-cache_adr_3[cache_hit_adr_3_q])][31:0];
+                     cache_3_out[63:32] :
+                     cache_3_out[31:0];
                 end
                 4'd4: begin  // Shared SRAM region
                     dmem_rsp_payload_data_3 = shared13_out_3;
@@ -623,16 +617,11 @@ module mpeg_video (
 
         cache_hit_adr_2 = 0;
         cache_miss_2 = 0;
-        cache_hit_adr_2_q = 0;
         cache_hit = 0;
         for (i = 0; i < 8; i++) begin
             if ((dmem_cmd_payload_address_2[27:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2[27:3] <= cache_adr_2[i] + 2)) begin
                 cache_hit_adr_2 = 3'(i);
                 cache_hit = 1;
-            end
-
-            if ((dmem_cmd_payload_address_2_q[27:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2_q[27:3] <= cache_adr_2[i] + 2)) begin
-                cache_hit_adr_2_q = 3'(i);
             end
         end
         cache_miss_2 = !cache_hit;
@@ -641,8 +630,8 @@ module mpeg_video (
             case (dmem_cmd_payload_address_2_q[31:28])
                 4'd5: begin  // Video SRAM region
                     dmem_rsp_payload_data_2 = dmem_cmd_payload_address_2_q[2] ?
-                     cache_2[cache_hit_adr_2_q][2'(dmem_cmd_payload_address_2_q[27:3]-cache_adr_2[cache_hit_adr_2_q])][63:32] :
-                     cache_2[cache_hit_adr_2_q][2'(dmem_cmd_payload_address_2_q[27:3]-cache_adr_2[cache_hit_adr_2_q])][31:0];
+                     cache_2_out[63:32] :
+                     cache_2_out[31:0];
                 end
                 4'd4: begin  // Shared SRAM region
                     dmem_rsp_payload_data_2 = shared12_out_2;
@@ -830,10 +819,18 @@ module mpeg_video (
             end
         end
 
+        if (worker_2_ddr.rdata_ready && data_burst_cnt_2 == 2) begin
+            // After a cache miss, the first entry is always the right one!
+            cache_2_out <= cache_2[cache_write_adr_2][0];
+        end else begin
+            // We have hit the cache. Lookup
+            cache_2_out <= cache_2[cache_hit_adr_2][2'(dmem_cmd_payload_address_2[27:3]-cache_adr_2[cache_hit_adr_2])];
+        end
+
         if (dmem_cmd_ready_2) begin
             if (dmem_cmd_valid_2) begin
                 dmem_cmd_payload_address_2_q <= dmem_cmd_payload_address_2;
-                dmem_cmd_payload_write_2_q   <= dmem_cmd_payload_write_2;
+                dmem_cmd_payload_write_2_q <= dmem_cmd_payload_write_2;
             end
             dmem_cmd_valid_2_q <= dmem_cmd_valid_2;
         end
@@ -861,6 +858,15 @@ module mpeg_video (
             end
         end
 
+        if (worker_3_ddr.rdata_ready && data_burst_cnt_3 == 2) begin
+            // After a cache miss, the first entry is always the right one!
+            cache_3_out <= cache_3[cache_write_adr_3][0];
+        end else begin
+            // We have hit the cache. Lookup
+            cache_3_out <= cache_3[cache_hit_adr_3][2'(dmem_cmd_payload_address_3[27:3]-cache_adr_3[cache_hit_adr_3])];
+        end
+
+        
         if (dmem_cmd_ready_3) begin
             if (dmem_cmd_valid_3) begin
                 dmem_cmd_payload_address_3_q <= dmem_cmd_payload_address_3;

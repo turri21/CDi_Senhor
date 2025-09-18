@@ -33,9 +33,9 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  24,331 / 41,910 ( 58 % )
-    Total registers              28509
-    Total block memory bits      1,897,911 / 5,662,720 ( 34 % )
+    Logic utilization (in ALMs)  21,696 / 41,910 ( 52 % )
+    Total registers              23925
+    Total block memory bits      1,899,959 / 5,662,720 ( 34 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
 Expected synthesis times with Quartus 17.0.2
