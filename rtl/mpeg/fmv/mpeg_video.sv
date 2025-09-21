@@ -791,23 +791,23 @@ module mpeg_video (
     end
 
     bit [2:0] cache_temp_adr_20;
-    bit [1:0] cache_temp_adr_21;
+    bit [1:0] cache_temp_adr_21;  // range 0 to 2. never 3
     bit [2:0] cache_temp_adr_30;
-    bit [1:0] cache_temp_adr_31;
+    bit [1:0] cache_temp_adr_31;  // range 0 to 2. never 3
 
-    simple_dual_port_ram_single_clock cache_2 (
+    cache64_8_3 cache_2 (
         .data(worker_2_ddr.rdata),
-        .read_addr({cache_temp_adr_20, cache_temp_adr_21}),
-        .write_addr({cache_write_adr_2, data_burst_cnt_2}),
+        .read_addr({cache_temp_adr_21, cache_temp_adr_20}),
+        .write_addr({data_burst_cnt_2, cache_write_adr_2}),
         .we(data_burst_cnt_2 != 3 && worker_2_ddr.rdata_ready),
         .clk(clk60),
         .q(cache_2_out)
     );
 
-    simple_dual_port_ram_single_clock cache_3 (
+    cache64_8_3 cache_3 (
         .data(worker_3_ddr.rdata),
-        .read_addr({cache_temp_adr_30, cache_temp_adr_31}),
-        .write_addr({cache_write_adr_3, data_burst_cnt_3}),
+        .read_addr({cache_temp_adr_31, cache_temp_adr_30}),
+        .write_addr({data_burst_cnt_3, cache_write_adr_3}),
         .we(data_burst_cnt_3 != 3 && worker_3_ddr.rdata_ready),
         .clk(clk60),
         .q(cache_3_out)
@@ -1132,7 +1132,7 @@ endmodule
 // Simple Dual Port RAM with separate read/write addresses and
 // single read/write clock
 
-module simple_dual_port_ram_single_clock #(
+module cache64_8_3 #(
     parameter DATA_WIDTH = 64,
     parameter ADDR_WIDTH = 5
 ) (
@@ -1145,7 +1145,8 @@ module simple_dual_port_ram_single_clock #(
 );
 
     // Declare the RAM variable
-    reg [DATA_WIDTH-1:0] ram[2**ADDR_WIDTH-1:0];
+    // It can be smaller since only 8*3 elements are required
+    reg [DATA_WIDTH-1:0] ram[8*3];
 
     always @(posedge clk) begin
         // Write
