@@ -1243,6 +1243,9 @@ module mcd212 (
         end
 
         vsd = backdrop_pixel && image_coding_method_register.ev;
+`ifdef VERILATOR
+        vsd = 1;
+`endif
     end
 
     // Implementation of Table 5-13 Register Map

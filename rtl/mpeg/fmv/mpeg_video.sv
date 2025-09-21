@@ -479,7 +479,6 @@ module mpeg_video (
     );
 
     /*verilator tracing_on*/
-
     bit [31:0] frame_struct_adr  /*verilator public_flat_rd*/;
     bit [31:0] frame_y_adr  /*verilator public_flat_rd*/;
     wire expose_frame_struct_adr_clk60  = (dmem_cmd_payload_address_1 == 32'h10000010 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
@@ -511,10 +510,10 @@ module mpeg_video (
 
     bit cache_miss_2;
     bit [2:0] cache_hit_adr_2;
-    bit [63:0] cache_2[8][3];
-    bit [63:0] cache_2_out;
+    wire [63:0] cache_2_out;
     bit [1:0] data_burst_cnt_2;
     bit [23-3:0] cache_adr_2[8] = '{default: 8000};
+    bit [7:0] cache_entry_valid_2;
     bit [2:0] cache_write_adr_2 = 0;
 
 `ifdef VERILATOR
@@ -524,10 +523,10 @@ module mpeg_video (
 
     bit cache_miss_3;
     bit [2:0] cache_hit_adr_3;
-    bit [63:0] cache_3[8][3];
-    bit [63:0] cache_3_out;
+    wire [63:0] cache_3_out;
     bit [1:0] data_burst_cnt_3;
     bit [23-3:0] cache_adr_3[8] = '{default: 8000};
+    bit [7:0] cache_entry_valid_3;
     bit [2:0] cache_write_adr_3 = 0;
 
 `ifdef VERILATOR
@@ -561,7 +560,7 @@ module mpeg_video (
         cache_miss_3 = 0;
         cache_hit = 0;
         for (i = 0; i < 8; i++) begin
-            if ((dmem_cmd_payload_address_3[23:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3[23:3] <= cache_adr_3[i] + 2)) begin
+            if (cache_entry_valid_3[i] && (dmem_cmd_payload_address_3[23:3] >= cache_adr_3[i]) && (dmem_cmd_payload_address_3[23:3] <= cache_adr_3[i] + 2)) begin
                 cache_hit_adr_3 = 3'(i);
                 cache_hit = 1;
             end
@@ -619,7 +618,7 @@ module mpeg_video (
         cache_miss_2 = 0;
         cache_hit = 0;
         for (i = 0; i < 8; i++) begin
-            if ((dmem_cmd_payload_address_2[23:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2[23:3] <= cache_adr_2[i] + 2)) begin
+            if (cache_entry_valid_2[i] && (dmem_cmd_payload_address_2[23:3] >= cache_adr_2[i]) && (dmem_cmd_payload_address_2[23:3] <= cache_adr_2[i] + 2)) begin
                 cache_hit_adr_2 = 3'(i);
                 cache_hit = 1;
             end
@@ -791,6 +790,49 @@ module mpeg_video (
         end
     end
 
+    bit [2:0] cache_temp_adr_20;
+    bit [1:0] cache_temp_adr_21;
+    bit [2:0] cache_temp_adr_30;
+    bit [1:0] cache_temp_adr_31;
+
+    simple_dual_port_ram_single_clock cache_2 (
+        .data(worker_2_ddr.rdata),
+        .read_addr({cache_temp_adr_20, cache_temp_adr_21}),
+        .write_addr({cache_write_adr_2, data_burst_cnt_2}),
+        .we(data_burst_cnt_2 != 3 && worker_2_ddr.rdata_ready),
+        .clk(clk60),
+        .q(cache_2_out)
+    );
+
+    simple_dual_port_ram_single_clock cache_3 (
+        .data(worker_3_ddr.rdata),
+        .read_addr({cache_temp_adr_30, cache_temp_adr_31}),
+        .write_addr({cache_write_adr_3, data_burst_cnt_3}),
+        .we(data_burst_cnt_3 != 3 && worker_3_ddr.rdata_ready),
+        .clk(clk60),
+        .q(cache_3_out)
+    );
+
+    always_comb begin
+        cache_temp_adr_20 = cache_hit_adr_2;
+        cache_temp_adr_21 = 2'(dmem_cmd_payload_address_2[23:3] - cache_adr_2[cache_hit_adr_2]);
+        // Handle special case of reading directly after burst has finished
+        if (worker_2_ddr.rdata_ready && data_burst_cnt_2 == 2) begin
+            cache_temp_adr_20 = cache_write_adr_2;
+            cache_temp_adr_21 = 0;
+        end
+    end
+
+    always_comb begin
+        cache_temp_adr_30 = cache_hit_adr_3;
+        cache_temp_adr_31 = 2'(dmem_cmd_payload_address_3[23:3] - cache_adr_3[cache_hit_adr_3]);
+        // Handle special case of reading directly after burst has finished
+        if (worker_3_ddr.rdata_ready && data_burst_cnt_3 == 2) begin
+            cache_temp_adr_30 = cache_write_adr_3;
+            cache_temp_adr_31 = 0;
+        end
+    end
+
     always_ff @(posedge clk60) begin
         integer i;
 
@@ -807,24 +849,13 @@ module mpeg_video (
         end
 
         if (data_burst_cnt_2 != 3 && worker_2_ddr.rdata_ready) begin
-            if (worker_2_ddr.rdata_ready) begin
-                data_burst_cnt_2 <= data_burst_cnt_2 + 1;
-                cache_2[cache_write_adr_2][data_burst_cnt_2] <= worker_2_ddr.rdata;
-            end
+            data_burst_cnt_2 <= data_burst_cnt_2 + 1;
             if (data_burst_cnt_2 == 2) begin
                 worker_2_ddr.read <= 0;
                 worker_2_ddr.acquire <= 0;
                 dmem_rsp_valid_2 <= 1;
                 cache_write_adr_2 <= cache_write_adr_2 + 1;
             end
-        end
-
-        if (worker_2_ddr.rdata_ready && data_burst_cnt_2 == 2) begin
-            // After a cache miss, the first entry is always the right one!
-            cache_2_out <= cache_2[cache_write_adr_2][0];
-        end else begin
-            // We have hit the cache. Lookup
-            cache_2_out <= cache_2[cache_hit_adr_2][2'(dmem_cmd_payload_address_2[27:3]-cache_adr_2[cache_hit_adr_2])];
         end
 
         if (dmem_cmd_ready_2) begin
@@ -846,10 +877,7 @@ module mpeg_video (
         end
 
         if (data_burst_cnt_3 != 3 && worker_3_ddr.rdata_ready) begin
-            if (worker_3_ddr.rdata_ready) begin
-                data_burst_cnt_3 <= data_burst_cnt_3 + 1;
-                cache_3[cache_write_adr_3][data_burst_cnt_3] <= worker_3_ddr.rdata;
-            end
+            data_burst_cnt_3 <= data_burst_cnt_3 + 1;
             if (data_burst_cnt_3 == 2) begin
                 worker_3_ddr.read <= 0;
                 worker_3_ddr.acquire <= 0;
@@ -857,15 +885,6 @@ module mpeg_video (
                 cache_write_adr_3 <= cache_write_adr_3 + 1;
             end
         end
-
-        if (worker_3_ddr.rdata_ready && data_burst_cnt_3 == 2) begin
-            // After a cache miss, the first entry is always the right one!
-            cache_3_out <= cache_3[cache_write_adr_3][0];
-        end else begin
-            // We have hit the cache. Lookup
-            cache_3_out <= cache_3[cache_hit_adr_3][2'(dmem_cmd_payload_address_3[27:3]-cache_adr_3[cache_hit_adr_3])];
-        end
-
 
         if (dmem_cmd_ready_3) begin
             if (dmem_cmd_valid_3) begin
@@ -933,6 +952,7 @@ module mpeg_video (
                         dmem_rsp_valid_2 <= 0;
                         worker_2_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_2[27:3]};
                         cache_adr_2[cache_write_adr_2] <= dmem_cmd_payload_address_2[23:3];
+                        cache_entry_valid_2[cache_write_adr_2] <= 1;
 
 `ifdef VERILATOR
                         // Check quality of cache. Can we get faster with a bigger cache?
@@ -954,8 +974,14 @@ module mpeg_video (
                 end
                 4'd4: begin  // Shared SRAM region
                 end
-                4'd0: begin  // Core 2 private memory
+                4'd1: begin  // I/O Area
+                    if (dmem_cmd_payload_address_2[15:0] == 16'h1110) begin
+                        $display("Cache clear 2 at %x", dmem_cmd_payload_address_2);
+                        cache_entry_valid_2 <= 0;
+                    end
+                end
 
+                4'd0: begin  // Core 2 private memory
                 end
                 default: ;
 
@@ -1001,6 +1027,7 @@ module mpeg_video (
                         dmem_rsp_valid_3 <= 0;
                         worker_3_ddr.addr <= {DDR_CORE_BASE, dmem_cmd_payload_address_3[27:3]};
                         cache_adr_3[cache_write_adr_3] <= dmem_cmd_payload_address_3[23:3];
+                        cache_entry_valid_3[cache_write_adr_3] <= 1;
 
 `ifdef VERILATOR
                         // Check quality of cache. Can we get faster with a bigger cache?
@@ -1024,6 +1051,12 @@ module mpeg_video (
                 end
                 4'd0: begin  // Core 3 private memory
 
+                end
+                4'd1: begin  // I/O Area
+                    if (dmem_cmd_payload_address_3[15:0] == 16'h1110) begin
+                        $display("Cache clear 3 at %x", dmem_cmd_payload_address_3);
+                        cache_entry_valid_3 <= 0;
+                    end
                 end
                 default: ;
 
@@ -1093,5 +1126,37 @@ module mpeg_video (
         .frame(for_display),
         .latch_frame(latch_frame_for_display)
     );
+endmodule
+
+// Quartus Prime Verilog Template
+// Simple Dual Port RAM with separate read/write addresses and
+// single read/write clock
+
+module simple_dual_port_ram_single_clock #(
+    parameter DATA_WIDTH = 64,
+    parameter ADDR_WIDTH = 5
+) (
+    input [(DATA_WIDTH-1):0] data,
+    input [(ADDR_WIDTH-1):0] read_addr,
+    write_addr,
+    input we,
+    clk,
+    output reg [(DATA_WIDTH-1):0] q
+);
+
+    // Declare the RAM variable
+    reg [DATA_WIDTH-1:0] ram[2**ADDR_WIDTH-1:0];
+
+    always @(posedge clk) begin
+        // Write
+        if (we) ram[write_addr] <= data;
+
+        // Read (if read_addr == write_addr, return OLD data).	To return
+        // NEW data, use = (blocking write) rather than <= (non-blocking write)
+        // in the write assignment.	 NOTE: NEW data may require extra bypass
+        // logic around the RAM.
+        q <= ram[read_addr];
+    end
+
 endmodule
 
