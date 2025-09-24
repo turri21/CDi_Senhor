@@ -17,6 +17,9 @@ module frameplayer (
     input           vblank,
 
     input planar_yuv_s frame,
+    input [8:0] frame_width,
+    input [8:0] frame_height,
+
     input latch_frame
 );
 
@@ -126,8 +129,6 @@ module frameplayer (
     bit line_alternate;
     bit u_requested;
     bit v_requested;
-    bit [8:0] frame_width = 368;
-    bit [8:0] frame_height = 240;
 
     always_ff @(posedge clk) begin
         hsync_q <= hsync;
@@ -199,9 +200,9 @@ module frameplayer (
                         ddrif.addr <= {DDR_CORE_BASE, address_u[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        address_u <= address_u + 8 * 184 / 8;
-                        ddrif.burstcnt <= 25;
-                        data_burst_cnt <= 25;
+                        address_u <= address_u + 29'(frame_width / 2);
+                        ddrif.burstcnt <= 8'(frame_width / 16);
+                        data_burst_cnt <= 6'(frame_width / 16);
                         fetchstate <= WAITING;
                         target_u <= 1;
                     end else if (!v_requested) begin
@@ -209,9 +210,9 @@ module frameplayer (
                         ddrif.addr <= {DDR_CORE_BASE, address_v[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        address_v <= address_v + 8 * 184 / 8;
-                        ddrif.burstcnt <= 25;
-                        data_burst_cnt <= 25;
+                        address_v <= address_v + 29'(frame_width / 2);
+                        ddrif.burstcnt <= 8'(frame_width / 16);
+                        data_burst_cnt <= 6'(frame_width / 16);
                         fetchstate <= WAITING;
                         target_v <= 1;
                     end else if (y_half_empty) begin

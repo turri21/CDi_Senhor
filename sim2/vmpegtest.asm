@@ -7,6 +7,8 @@ vector:
 	dc.l main
 
 main:
+	move.w #$1000,$E040C0 ; FMV SYSCMD - Decoder on
+
 	move.w #$02D4,$E040DC ; FMV IVEC
 	move.w #$F7CF,$E04060 ; FMV IER
 	move.l #fmvirq,$168
@@ -23,13 +25,14 @@ main:
 	move.w #$0024,$303C00 ; Command Register = Reset Mode 2
 	move.w #$8000,$303FFE ; Data buffer
 
-	; Designed for Dragon's Lair Intro
+	; Designed for Dragon's Lair Intro at #$01274700
+	; For FMVtest #$00323400
 	; Start reading at 00:32:34
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$0001,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$01274700,$303C02 ; Timer Register
+	move.l #$00323400,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 endless:

@@ -1,3 +1,5 @@
+rm *.bmp
+
 verilator --top-module emu  \
      --trace --trace-fst --trace-structs --cc --assert --exe --build   \
     --build-jobs 8 sim_top.cpp -I../rtl \

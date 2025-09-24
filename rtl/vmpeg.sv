@@ -496,13 +496,13 @@ module vmpeg (
 	                          8000 Start DMA
                             */
 
-                            if (din[15]) begin
+                            if (din[15]) begin  // 8000 DMA
                                 dma_active  <= 1;
                                 dma_for_fma <= 0;
                             end
 
-                            if (din[14]) fmv_dsp_enable <= 0;
-                            if (din[13]) fmv_dsp_enable <= 1;
+                            if (din[13]) fmv_dsp_enable <= 0;
+                            if (din[12]) fmv_dsp_enable <= 1;
                         end
                         15'h2061: begin
                             $display("FMV Write VIDCMD Register %x %x", address[15:1], din);

@@ -860,7 +860,7 @@ class CDi {
             clock();
         }
 
-#if 1
+#if 0
         FILE *f = fopen("ddramdump.bin", "rb");
         assert(f);
         fread(&dut.rootp->emu__DOT__ddram[0], 1, 500000, f);
@@ -872,7 +872,7 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        do_trace = false;
+        //do_trace = false;
         fprintf(stderr, "Trace off!\n");
 #endif
 

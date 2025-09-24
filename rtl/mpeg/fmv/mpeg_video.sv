@@ -753,6 +753,8 @@ module mpeg_video (
     end
 
     planar_yuv_s just_decoded;
+    bit [8:0] decoder_width = 100;
+    bit [8:0] decoder_height = 100;
 
     bit signed [15:0] shared_buffer_level = 0;
 
@@ -816,6 +818,10 @@ module mpeg_video (
                         just_decoded.u_adr <= dmem_cmd_payload_data_1[28:0];
                     if (dmem_cmd_payload_address_1[15:0] == 16'h3008)
                         just_decoded.v_adr <= dmem_cmd_payload_data_1[28:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h300c)
+                        decoder_width <= dmem_cmd_payload_data_1[8:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
+                        decoder_height <= dmem_cmd_payload_data_1[8:0];
                 end
                 4'd0: begin
                 end
@@ -1190,6 +1196,8 @@ module mpeg_video (
         .hblank,
         .vblank,
         .frame(for_display),
+        .frame_width(decoder_width),
+        .frame_height(decoder_height),
         .latch_frame(latch_frame_for_display)
     );
 endmodule
