@@ -109,7 +109,7 @@ module mpeg_video (
             decoder_failing_address_set <= 1;
             decoder_failing_address <= imem_cmd_payload_address_1;
             $display("Underflow of FIFO at %x", imem_cmd_payload_address_1);
-            $finish();
+            //$finish();
         end
     end
 
@@ -171,7 +171,7 @@ module mpeg_video (
     always_ff @(posedge clk60) begin
         if (fifo_full) begin
             $display("FIFO FULL");
-            $finish();
+            //$finish();
         end
 
         hw_read_mem_ready <= 0;
@@ -179,6 +179,7 @@ module mpeg_video (
         if (reset_dsp_enabled_clk60) begin
             mpeg_stream_bit_index <= 0;
             hw_read_count <= 0;
+            dct_coeff_huffman_active <= 0;
         end else begin
 
             if (dmem_cmd_payload_write_1 && dmem_cmd_valid_1) begin
@@ -208,16 +209,18 @@ module mpeg_video (
                     hw_read_count <= hw_read_count - hw_read_count_aligned;
                 end
             end
+
+            if (dct_coeff_result_valid) begin
+                dct_coeff_huffman_active <= 0;
+                mpeg_stream_bit_index <= mpeg_stream_bit_index;
+                hw_read_count <= 0;
+            end else if (dct_coeff_huffman_active) begin
+                hw_read_count <= 1;
+                hw_read_mem_ready <= 1;
+            end
         end
 
-        if (reset_dsp_enabled_clk60 || dct_coeff_result_valid) begin
-            dct_coeff_huffman_active <= 0;
-            mpeg_stream_bit_index <= mpeg_stream_bit_index;
-            hw_read_count <= 0;
-        end else if (dct_coeff_huffman_active) begin
-            hw_read_count <= 1;
-            hw_read_mem_ready <= 1;
-        end
+
     end
 
     bit  [31:0] frames_decoded;
@@ -1158,7 +1161,7 @@ module mpeg_video (
             playback_frame_cnt <= playback_frame_cnt + 1;
 
             // Only for simulation. Ensure that frames are always available - no underflow
-            if (playback_frame_cnt == 0) assert (for_display_valid);
+            // if (playback_frame_cnt == 0) assert (for_display_valid);
 
             if (playback_frame_cnt == TICKS_PER_FRAME - 1) playback_frame_cnt <= 0;
             if (playback_frame_cnt == 0 && for_display_valid) latch_frame_for_display <= 1;

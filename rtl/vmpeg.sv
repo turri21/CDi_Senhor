@@ -160,7 +160,7 @@ module vmpeg (
         .unit("FMV")
     ) video_demuxer (
         .clk,
-        .reset(reset),
+        .reset(reset || fmv_dsp_enable == 0),
         .mpeg_data(mpeg_data),
         .data_valid(fmv_data_valid),
         .mpeg_packet_body(fmv_packet_body),
@@ -226,13 +226,14 @@ module vmpeg (
     bit [31:0] fma_dclk;
     bit [15:0] fma_dclkl_latch;
 
-
+    // FMV SYSCMD @ 00E040C0
+    (* keep *) (* noprune *) bit [15:0] fmv_command_register = 0;
     // FMV ISR @ 00E04062
-    interrupt_flags_s interrupt_status_register;
+    interrupt_flags_s fmv_interrupt_status_register;
     // FMV IER @ 00E04060
-    interrupt_flags_s interrupt_enable_register;
+    interrupt_flags_s fmv_interrupt_enable_register;
     // FMV IVEC @ 00E040DC
-    bit [15:0] interrupt_vector_register = 0;
+    bit [15:0] fmv_interrupt_vector_register = 0;
     // FMV TCNT @ 00E04064 (also named SYS_TIM)
     // according to fmvdrv sources:
     // 29700 -1 for 5.28 seconds
@@ -242,9 +243,9 @@ module vmpeg (
     // so we have about 5,625 ticks per ms
     // this means 5625 tick per second
     // this means 90 kHz / 5625 Hz = 16 Perfect to the power of 2
-    bit [15:0] timer_compare_register = 56 - 1;
+    bit [15:0] fmv_timer_compare_register = 56 - 1;
 
-    wire fmv_intreq = (interrupt_status_register & interrupt_enable_register) != 0;
+    wire fmv_intreq = (fmv_interrupt_status_register & fmv_interrupt_enable_register) != 0;
     wire fma_intreq = (fma_interrupt_status_register & fma_interrupt_enable_register) != 0;
     assign intreq = fma_intreq || fmv_intreq;
 
@@ -293,16 +294,16 @@ module vmpeg (
             15'h202e: dout = fmv_tmpref;  // 00E0405C TMP REF?? SYS_VSR?
             15'h202f:
             dout = 16'h2000;  // 00E0405E ?? STS ? 2000 has always room for more. always 2000 on cdiemu
-            15'h2030: dout = interrupt_enable_register;  // 0E04060
-            15'h2031: dout = interrupt_status_register;  // 0E04062
-            15'h2032: dout = timer_compare_register;  // 0E04064
+            15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
+            15'h2031: dout = fmv_interrupt_status_register;  // 0E04062
+            15'h2032: dout = fmv_timer_compare_register;  // 0E04064
             15'h2038: dout = image_height;  // 0E04070 Only written to 0118 -> 280 dez
             15'h2039: dout = image_width;  // 0E04072 Only written to 0180 -> 384 dez
             15'h2050: dout = 16'hffff;  // 00E040A0 ?? Always ffff on cdiemu
             15'h2052: dout = 16'h0001;  // 00E040A4 ??
             15'h2055: dout = 16'h0001;  // e040aa ??
             15'h2056: dout = 16'h0001;  // e040ac ??
-            15'h206e: dout = interrupt_vector_register;  //
+            15'h206e: dout = fmv_interrupt_vector_register;  //
 
             default: ;
         endcase
@@ -310,7 +311,7 @@ module vmpeg (
         if (intack) begin
             if (fma_intreq)
                 dout = {fma_interrupt_vector_register[7:0], fma_interrupt_vector_register[7:0]};
-            else dout = {interrupt_vector_register[10:3], interrupt_vector_register[10:3]};
+            else dout = {fmv_interrupt_vector_register[10:3], fmv_interrupt_vector_register[10:3]};
         end
     end
 
@@ -334,21 +335,30 @@ module vmpeg (
         dsp_reset_input_fifo <= 0;
 
         if (reset) begin
+            dma_active <= 0;
+            fma_command_register <= 0;
+            fma_dclk <= 0;
+            fma_dsp_enable <= 0;
+            fma_interrupt_enable_register <= 0;
+            fma_interrupt_status_register <= 0;
+            fma_interrupt_vector_register <= 0;
+            fma_status_register <= 0;
+            fmv_dsp_enable <= 0;
+            fmv_interrupt_enable_register <= 0;
+            fmv_interrupt_status_register <= 0;
+            fmv_playback_active <= 0;
             mpeg_ram_enabled <= 0;
             mpeg_ram_enabled_cnt <= 0;
             timer_cnt <= 0;
-            dma_active <= 0;
-            fma_dsp_enable <= 0;
-            fmv_dsp_enable <= 0;
-            fmv_playback_active <= 0;
+
         end else begin
-            if (vsync && !vsync_q) interrupt_status_register.vsync <= 1;
+            if (vsync && !vsync_q) fmv_interrupt_status_register.vsync <= 1;
 
             if (vsync && !vsync_q) vsync_flipflop <= !vsync_flipflop;
 
-            if (fmv_event_sequence_header) interrupt_status_register.seq <= 1;
-            if (fmv_event_group_of_pictures) interrupt_status_register.gop <= 1;
-            if (fmv_event_picture) interrupt_status_register.pic <= 1;
+            if (fmv_event_sequence_header) fmv_interrupt_status_register.seq <= 1;
+            if (fmv_event_group_of_pictures) fmv_interrupt_status_register.gop <= 1;
+            if (fmv_event_picture) fmv_interrupt_status_register.pic <= 1;
 
             if (event_decoding_started) begin
                 // Decoding started
@@ -375,8 +385,8 @@ module vmpeg (
                 fma_dclk_shadow_cnt <= 0;
                 fma_dclk <= fma_dclk + 1;
 
-                if (timer_cnt[15+3:0+3] == timer_compare_register) begin
-                    interrupt_status_register.tim <= 1;
+                if (timer_cnt[15+3:0+3] == fmv_timer_compare_register) begin
+                    fmv_interrupt_status_register.tim <= 1;
                     fma_interrupt_status_register[8] <= 1;
                     timer_cnt <= 0;
                 end else begin
@@ -413,7 +423,7 @@ module vmpeg (
                 if (!write_strobe && bus_ack) begin
                     if (address[15:1] == 15'h2031) begin
                         // Reading the Interrupt Status Register probably resets it? TODO
-                        interrupt_status_register <= 0;
+                        fmv_interrupt_status_register <= 0;
                     end
 
                     if (address[15:1] == 15'h180D) begin
@@ -466,7 +476,7 @@ module vmpeg (
                         end
 
                         15'h2030: begin
-                            interrupt_enable_register <= din;
+                            fmv_interrupt_enable_register <= din;
                             $display("FMV Write IER Register %x %x", address[15:1], din);
                         end
                         15'h2031: begin
@@ -474,7 +484,7 @@ module vmpeg (
                         end
                         15'h2032: begin  // 0E04064
                             $display("FMV Write TCNT Register %x %x", address[15:1], din);
-                            timer_compare_register <= din;
+                            fmv_timer_compare_register <= din;
                         end
                         15'h2057: begin
                             $display("FMV Write TRLD Register %x %x", address[15:1], din);
@@ -490,19 +500,33 @@ module vmpeg (
 	                          FMV SYSCMD 8000 DMA
 
 	                        according to fmvd.txt
+                              0010 Pause
 	                          0100 Clear FIFO
-	                          2000 Decoder off
 	                          1000 Decoder on
+	                          2000 Decoder off
 	                          8000 Start DMA
                             */
+                            fmv_command_register <= din;
 
                             if (din[15]) begin  // 8000 DMA
                                 dma_active  <= 1;
                                 dma_for_fma <= 0;
                             end
 
-                            if (din[13]) fmv_dsp_enable <= 0;
-                            if (din[12]) fmv_dsp_enable <= 1;
+                            if (din[8]) begin  // 0100 Clear FIFO? What to do?
+                                fmv_dsp_enable <= 0;
+                                fmv_playback_active <= 0;
+                            end
+
+                            if (din[13]) begin  // 2000 Decoder off
+                                fmv_dsp_enable <= 0;
+                                fmv_playback_active <= 0;
+                            end
+
+                            if (din[12]) begin  // 1000 Decoder on
+                                fmv_dsp_enable <= 1;
+                            end
+
                         end
                         15'h2061: begin
                             $display("FMV Write VIDCMD Register %x %x", address[15:1], din);
@@ -511,7 +535,7 @@ module vmpeg (
                             $display("FMV Write XFER Register %x %x", address[15:1], din);
                         end
                         15'h206E: begin
-                            interrupt_vector_register <= din;
+                            fmv_interrupt_vector_register <= din;
                             $display("FMV Write IVEC Register %x %x", address[15:1], din);
                         end
                         15'h2038: begin

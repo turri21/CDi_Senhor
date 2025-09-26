@@ -35,6 +35,26 @@ module frameplayer (
         end
     end
 
+    wire latch_frame_clk30;
+
+    flag_cross_domain cross_latch_frame (
+        .clk_a(clkddr),
+        .clk_b(clk),
+        .flag_in_clk_a(latch_frame),
+        .flag_out_clk_b(latch_frame_clk30)
+    );
+
+    bit [8:0] frame_width_clk30;
+    bit [8:0] frame_height_clk30;
+
+    always_ff @(posedge clk) begin
+        if (latch_frame_clk30) begin
+            frame_width_clk30  <= frame_width;
+            frame_height_clk30 <= frame_height;
+        end
+    end
+
+
     bit [28:0] address_y;
     bit [28:0] address_u;
     bit [28:0] address_v;
@@ -143,7 +163,7 @@ module frameplayer (
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
-        end else if (!vblank && !hblank && pixelcnt < frame_width << 2 && linecnt < frame_height) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clk30 << 2 && linecnt < frame_height_clk30) begin
             pixelcnt <= pixelcnt + 1;
             luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
             chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
@@ -273,7 +293,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if (pixelcnt >= (frame_width << 2) || linecnt >= frame_height) begin
+        if (pixelcnt >= (frame_width_clk30 << 2) || linecnt >= frame_height_clk30) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

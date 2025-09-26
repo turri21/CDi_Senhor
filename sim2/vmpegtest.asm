@@ -7,6 +7,16 @@ vector:
 	dc.l main
 
 main:
+	move.w #$0000,$303FFE ; Data buffer
+
+	move.w #$2000,$E040C0 ; FMV SYSCMD - Decoder off
+	nop
+	nop
+	nop
+	move.w #$0100,$E040C0 ; FMV SYSCMD - Clear FIFO
+	nop
+	nop
+	nop
 	move.w #$1000,$E040C0 ; FMV SYSCMD - Decoder on
 
 	move.w #$02D4,$E040DC ; FMV IVEC
@@ -36,18 +46,42 @@ main:
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 endless:
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	
+	bra main
+
+WaitForSectorAndUse:
 	jsr waitforcdicirq
-	
-	; Debug print mode 2 header
-	;move.b 0(a0),$80002019 ; Timecode M
-	;move.b 1(a0),$80002019 ; Timecode S
-	;move.b 2(a0),$80002019 ; Timecode F
-	move.b 10(a0),$80002019 ; Mode 2 Header
-	move.b 11(a0),$80002019 ; Coding
-	;move.b 5(a0),$80002019
-	;move.b 6(a0),$80002019
-	;move.b 7(a0),$80002019
-	
+
 	; We need to check for the Mode 2 header now. It can be either MPEG Audio or MPEG Video
 	; MPEG Video should have submode 0x62 (Real Time Sector, Form and Video)
 	; followed by a coding of 0x0f (for MPEG Video)
@@ -59,8 +93,7 @@ endless:
 	cmp.b #$62,d2
 	beq video
 
-	; Continue loop if nothing matches
-	bra endless
+	rts
 
 audio:
 	; DMA CDIC to Memory
@@ -83,7 +116,7 @@ audio:
 	move.w #$8002,$00E03000 ; Syscmd = Start DMA
 
 	; Continue loop
-	bra endless
+	rts
 
 video:
 	; DMA CDIC to Memory
@@ -115,7 +148,7 @@ video:
 
 	move.w #$8000,$00E040C0 ; Syscmd = Start DMA
 
-	bra endless
+	rts
 
 
 waitforcdicirq:
