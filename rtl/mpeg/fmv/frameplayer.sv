@@ -4,7 +4,7 @@
 `include "../util.svh"
 
 module frameplayer (
-    input clk,
+    input clkvideo,
     input clkddr,
     input reset,
 
@@ -17,10 +17,11 @@ module frameplayer (
     input           vblank,
 
     input planar_yuv_s frame,
-    input [8:0] frame_width,
-    input [8:0] frame_height,
+    input [8:0] frame_width,  // expected to be clocked at clkddr
+    input [8:0] frame_height,  // expected to be clocked at clkddr
 
-    input latch_frame
+    input latch_frame_clkvideo,
+    input latch_frame_clkddr
 );
 
     assign ddrif.byteenable = 8'hff;
@@ -29,31 +30,22 @@ module frameplayer (
     planar_yuv_s latched_frame;
 
     always_ff @(posedge clkddr) begin
-        if (latch_frame) begin
+        if (latch_frame_clkddr) begin
             latched_frame <= frame;
             //$display("Latched frame %x", latched_frame);
         end
     end
 
-    wire latch_frame_clk30;
+    bit [8:0] frame_width_clkvideo;
+    bit [8:0] frame_height_clkvideo;
 
-    flag_cross_domain cross_latch_frame (
-        .clk_a(clkddr),
-        .clk_b(clk),
-        .flag_in_clk_a(latch_frame),
-        .flag_out_clk_b(latch_frame_clk30)
-    );
 
-    bit [8:0] frame_width_clk30;
-    bit [8:0] frame_height_clk30;
-
-    always_ff @(posedge clk) begin
-        if (latch_frame_clk30) begin
-            frame_width_clk30  <= frame_width;
-            frame_height_clk30 <= frame_height;
+    always_ff @(posedge clkvideo) begin
+        if (latch_frame_clkvideo) begin
+            frame_width_clkvideo  <= frame_width;
+            frame_height_clkvideo <= frame_height;
         end
     end
-
 
     bit [28:0] address_y;
     bit [28:0] address_u;
@@ -93,28 +85,28 @@ module frameplayer (
         .wdata(ddrif.rdata),
         .we(ddrif.rdata_ready && target_y),
         .half_empty(y_half_empty),
-        .clk_out(clk),
+        .clk_out(clkvideo),
         .strobe(luma_fifo_strobe),
         .valid(y_valid),
         .q(current_color.y)
     );
 
     flag_cross_domain cross_new_line_started (
-        .clk_a(clk),
+        .clk_a(clkvideo),
         .clk_b(clkddr),
         .flag_in_clk_a(new_line_started),
         .flag_out_clk_b(new_line_started_clkddr)
     );
 
     flag_cross_domain cross_reset (
-        .clk_a(clk),
+        .clk_a(clkvideo),
         .clk_b(clkddr),
         .flag_in_clk_a(reset),
         .flag_out_clk_b(reset_clkddr)
     );
 
     signal_cross_domain cross_vblank (
-        .clk_a(clk),
+        .clk_a(clkvideo),
         .clk_b(clkddr),
         .signal_in_clk_a(vblank),
         .signal_out_clk_b(vblank_clkddr)
@@ -127,7 +119,7 @@ module frameplayer (
         .reset(new_line_started_clkddr),
         .wdata(ddrif.rdata),
         .we(ddrif.rdata_ready && target_u),
-        .clk_out(clk),
+        .clk_out(clkvideo),
         .q(current_color.u),
         .raddr(chroma_read_addr)
     );
@@ -137,7 +129,7 @@ module frameplayer (
         .reset(new_line_started_clkddr),
         .wdata(ddrif.rdata),
         .we(ddrif.rdata_ready && target_v),
-        .clk_out(clk),
+        .clk_out(clkvideo),
         .q(current_color.v),
         .raddr(chroma_read_addr)
     );
@@ -150,7 +142,7 @@ module frameplayer (
     bit u_requested;
     bit v_requested;
 
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clkvideo) begin
         hsync_q <= hsync;
 
         if (reset || vsync) linecnt <= 0;
@@ -163,7 +155,7 @@ module frameplayer (
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clk30 << 2 && linecnt < frame_height_clk30) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo) begin
             pixelcnt <= pixelcnt + 1;
             luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
             chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
@@ -293,7 +285,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if (pixelcnt >= (frame_width_clk30 << 2) || linecnt >= frame_height_clk30) begin
+        if (pixelcnt >= (frame_width_clkvideo << 2) || linecnt >= frame_height_clkvideo) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

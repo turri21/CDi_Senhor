@@ -1158,7 +1158,7 @@ module mpeg_video (
     // But I'm not so sure about the final frequency and timing is vital
     always_ff @(posedge clk30) begin
         frame_period <= frame_period_clk60;
-        
+
         latch_frame_for_display <= 0;
 
         if (!playback_active) playback_frame_cnt <= 0;
@@ -1194,7 +1194,7 @@ module mpeg_video (
     );
 
     frameplayer frameplayer (
-        .clk(clk30),
+        .clkvideo(clk30),
         .clkddr(clk60),
         .reset,
         .ddrif(player_ddr),
@@ -1206,7 +1206,8 @@ module mpeg_video (
         .frame(for_display),
         .frame_width(decoder_width),
         .frame_height(decoder_height),
-        .latch_frame(latch_frame_for_display)
+        .latch_frame_clkvideo(latch_frame_for_display),
+        .latch_frame_clkddr(latch_frame_for_display_clk60)
     );
 endmodule
 
