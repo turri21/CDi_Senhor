@@ -825,6 +825,8 @@ module mpeg_video (
                         decoder_width <= dmem_cmd_payload_data_1[8:0];
                     if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
                         decoder_height <= dmem_cmd_payload_data_1[8:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3014)
+                        frame_period_clk60 <= dmem_cmd_payload_data_1[23:0];
                 end
                 4'd0: begin
                 end
@@ -1147,13 +1149,16 @@ module mpeg_video (
     bit latch_frame_for_display;
     wire latch_frame_for_display_clk60;
 
-    // Assuming 30 MHz clock rate and 25 Hz frame rate
-    localparam bit [23:0] TICKS_PER_FRAME = 24'(int'(30e6) / 25);
+    // 30 MHz clock rate and 25 Hz frame rate -> 1200000
+    bit [23:0] frame_period_clk60 = 1200000;
+    bit [23:0] frame_period = 1200000;
     bit [23:0] playback_frame_cnt;
 
     // In theory this machine could run with clk60.
     // But I'm not so sure about the final frequency and timing is vital
     always_ff @(posedge clk30) begin
+        frame_period <= frame_period_clk60;
+        
         latch_frame_for_display <= 0;
 
         if (!playback_active) playback_frame_cnt <= 0;
@@ -1163,7 +1168,7 @@ module mpeg_video (
             // Only for simulation. Ensure that frames are always available - no underflow
             // if (playback_frame_cnt == 0) assert (for_display_valid);
 
-            if (playback_frame_cnt == TICKS_PER_FRAME - 1) playback_frame_cnt <= 0;
+            if (playback_frame_cnt == frame_period - 1) playback_frame_cnt <= 0;
             if (playback_frame_cnt == 0 && for_display_valid) latch_frame_for_display <= 1;
         end
     end
