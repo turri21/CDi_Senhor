@@ -19,6 +19,8 @@ module frameplayer (
     input planar_yuv_s frame,
     input [8:0] frame_width,  // expected to be clocked at clkddr
     input [8:0] frame_height,  // expected to be clocked at clkddr
+    input [8:0] offset_y,  // expected to be clocked at clkvideo
+    input [8:0] offset_x,  // expected to be clocked at clkvideo
 
     input latch_frame_clkvideo,
     input latch_frame_clkddr
@@ -38,7 +40,6 @@ module frameplayer (
 
     bit [8:0] frame_width_clkvideo;
     bit [8:0] frame_height_clkvideo;
-
 
     always_ff @(posedge clkvideo) begin
         if (latch_frame_clkvideo) begin
@@ -72,7 +73,7 @@ module frameplayer (
     bit target_u;
     bit target_v;
 
-    wire new_line_started = hsync && !hsync_q;
+    wire new_line_started = hsync && !hsync_q && (vertical_offset_wait == 0);
     wire new_line_started_clkddr;
 
     wire reset_clkddr;
@@ -142,11 +143,19 @@ module frameplayer (
     bit u_requested;
     bit v_requested;
 
+    bit [8:0] vertical_offset_wait;
+    bit [8:0] horizontal_offset_wait;
+
     always_ff @(posedge clkvideo) begin
         hsync_q <= hsync;
 
-        if (reset || vsync) linecnt <= 0;
-        else if (!vblank && hsync && !hsync_q) linecnt <= linecnt + 1;
+        if (reset || vsync) begin
+            linecnt <= 0;
+            vertical_offset_wait <= offset_y;
+        end else if (!vblank && hsync && !hsync_q) begin
+            if (vertical_offset_wait != 0) vertical_offset_wait <= vertical_offset_wait - 1;
+            else linecnt <= linecnt + 1;
+        end
 
         if (chroma_fifo_strobe) chroma_read_addr <= chroma_read_addr + 1;
 
@@ -155,11 +164,16 @@ module frameplayer (
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo) begin
-            pixelcnt <= pixelcnt + 1;
-            luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
-            chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
-            assert (y_valid);
+            horizontal_offset_wait <= offset_x;
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0) begin
+
+            if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
+            else begin
+                pixelcnt <= pixelcnt + 1;
+                luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
+                chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
+                assert (y_valid);
+            end
         end else begin
             chroma_fifo_strobe <= 0;
             luma_fifo_strobe   <= 0;
@@ -179,12 +193,20 @@ module frameplayer (
     // 0011 like the N64 core to force a base of 0x30000000
     localparam bit [3:0] DDR_CORE_BASE = 4'b0011;
 
+    wire vertical_offset_wait_not_null_clkddr;
+    signal_cross_domain cross_vertical_offset_wait_not_null (
+        .clk_a(clkvideo),
+        .clk_b(clkddr),
+        .signal_in_clk_a(vertical_offset_wait != 0),
+        .signal_out_clk_b(vertical_offset_wait_not_null_clkddr)
+    );
+
     always_ff @(posedge clkddr) begin
         if (!ddrif.busy) begin
             ddrif.read <= 0;
         end
 
-        if (reset_clkddr || vblank_clkddr) begin
+        if (reset_clkddr || vblank_clkddr || vertical_offset_wait_not_null_clkddr) begin
             fetchstate <= IDLE;
             address_y <= latched_frame.y_adr;
             address_u <= latched_frame.u_adr;
@@ -285,7 +307,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if (pixelcnt >= (frame_width_clkvideo << 2) || linecnt >= frame_height_clkvideo) begin
+        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0)) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

@@ -117,7 +117,9 @@ module vmpeg (
         .vsync,
         .hblank,
         .vblank,
-        .vidout
+        .vidout,
+        .display_offset_x(video_ctrl_x_display[8:0]),
+        .display_offset_y(video_ctrl_y_display[8:0])
     );
 
     always_ff @(posedge clk) begin
@@ -249,8 +251,12 @@ module vmpeg (
     wire fma_intreq = (fma_interrupt_status_register & fma_interrupt_enable_register) != 0;
     assign intreq = fma_intreq || fmv_intreq;
 
-    bit [15:0] image_height = 0;
-    bit [15:0] image_width = 0;
+    bit [15:0] video_ctrl_y_active = 0;
+    bit [15:0] video_ctrl_x_active = 0;
+    bit [15:0] video_ctrl_y_offset = 0;
+    bit [15:0] video_ctrl_x_offset = 0;
+    bit [15:0] video_ctrl_y_display = 0;
+    bit [15:0] video_ctrl_x_display = 0;
     bit [15:0] image_height2 = 0;
     bit [15:0] image_width2 = 0;
     bit [15:0] image_rt;
@@ -292,13 +298,16 @@ module vmpeg (
             15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High??
             15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low??
             15'h202e: dout = fmv_tmpref;  // 00E0405C TMP REF?? SYS_VSR?
-            15'h202f:
-            dout = 16'h2000;  // 00E0405E ?? STS ? 2000 has always room for more. always 2000 on cdiemu
+            15'h202f: dout = 16'h2000;  // 00E0405E ?? STS ? always 2000 on cdiemu
             15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
             15'h2031: dout = fmv_interrupt_status_register;  // 0E04062
             15'h2032: dout = fmv_timer_compare_register;  // 0E04064
-            15'h2038: dout = image_height;  // 0E04070 Only written to 0118 -> 280 dez
-            15'h2039: dout = image_width;  // 0E04072 Only written to 0180 -> 384 dez
+            15'h2036: dout = video_ctrl_y_offset;  // 0E0406C
+            15'h2037: dout = video_ctrl_x_offset;  // 0E0406E
+            15'h2038: dout = video_ctrl_y_active;  // 0E04070
+            15'h2039: dout = video_ctrl_x_active;  // 0E04072
+            15'h203a: dout = video_ctrl_y_display;  // 0E04074
+            15'h203b: dout = video_ctrl_x_display;  // 0E04076
             15'h2050: dout = 16'hffff;  // 00E040A0 ?? Always ffff on cdiemu
             15'h2052: dout = 16'h0001;  // 00E040A4 ??
             15'h2055: dout = 16'h0001;  // e040aa ??
@@ -538,13 +547,30 @@ module vmpeg (
                             fmv_interrupt_vector_register <= din;
                             $display("FMV Write IVEC Register %x %x", address[15:1], din);
                         end
+
+                        15'h2036: begin
+                            $display("FMV Write Y Offset %x %x", address[15:1], din);
+                            video_ctrl_y_offset <= din;  // seems to be always 001A
+                        end
+                        15'h2037: begin
+                            $display("FMV Write X Offset %x %x", address[15:1], din);
+                            video_ctrl_x_offset <= din;  // seems to be always 004A
+                        end
                         15'h2038: begin
-                            $display("FMV Write Image Height %x %x", address[15:1], din);
-                            image_height <= din;
+                            $display("FMV Write Y Active %x %x", address[15:1], din);
+                            video_ctrl_y_active <= din;
                         end
                         15'h2039: begin
-                            $display("FMV Write Image Width %x %x", address[15:1], din);
-                            image_width <= din;
+                            $display("FMV Write X Active %x %x", address[15:1], din);
+                            video_ctrl_x_active <= din;
+                        end
+                        15'h203a: begin
+                            $display("FMV Write Y Display %x %x ?", address[15:1], din);
+                            video_ctrl_y_display <= din;
+                        end
+                        15'h203b: begin
+                            $display("FMV Write X Display %x %x ?", address[15:1], din);
+                            video_ctrl_x_display <= din;
                         end
                         15'h2001: begin
                             $display("FMV Write Image Width2 %x %x", address[15:1], din);

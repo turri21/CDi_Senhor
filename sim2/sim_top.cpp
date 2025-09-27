@@ -639,12 +639,24 @@ class CDi {
             } else {
                 // PAL
 
-                if (frame_index == 137) { // Skip Philips Logo
-                    press_button_signal = true;
-                }
+                if (instanceid == 9) {
+                    // Space Ace
+                    if (frame_index == 144) { // Skip Philips Logo
+                        press_button_signal = true;
+                    }
+                    if (frame_index == 410) { // Skip Logo
+                        press_button_signal = true;
+                    }
 
-                if (frame_index == 430) { // Skip Dragons Lair Intro
-                    press_button_signal = true;
+                } else if (instanceid == 8) {
+                    // Dragon's Lair
+                    if (frame_index == 137) { // Skip Philips Logo
+                        press_button_signal = true;
+                    }
+
+                    if (frame_index == 430) { // Skip Logo
+                        press_button_signal = true;
+                    }
                 }
             }
 
@@ -717,7 +729,7 @@ class CDi {
             assert(pixels);
             plm_frame_to_bgr(&frame_convert, pixels, w * 3); // BMP expects BGR ordering
 
-            sprintf(bmp_name, "%06d.bmp", fmv_frame_cnt);
+            sprintf(bmp_name, "%d/%03d.bmp", instanceid, fmv_frame_cnt);
             printf("FMV Writing %s at Fifo Level %d\n", bmp_name,
                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level);
             fprintf(stderr, "FMV Writing %s at Fifo Level %d\n", bmp_name,
@@ -731,9 +743,9 @@ class CDi {
 #if 0
             FILE *f = fopen("ddramdump.bin", "wb");
             assert(f);
-            fwrite(&dut.rootp->emu__DOT__ddram[0], 1, 500000, f);
+            fwrite(&dut.rootp->emu__DOT__ddram[0], 1, 5000000, f);
             fclose(f);
-            // exit(0);
+            exit(0);
 #endif
         }
 
@@ -863,7 +875,7 @@ class CDi {
 #if 0
         FILE *f = fopen("ddramdump.bin", "rb");
         assert(f);
-        fread(&dut.rootp->emu__DOT__ddram[0], 1, 500000, f);
+        fread(&dut.rootp->emu__DOT__ddram[0], 1, 5000000, f);
         fclose(f);
 #endif
 
@@ -872,7 +884,7 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        do_trace = false;
+        //do_trace = false;
         fprintf(stderr, "Trace off!\n");
 #endif
 
@@ -969,10 +981,14 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/FMVTEST.BIN", "rb");
         break;
     case 7:
-        f_cd_bin = fopen("images/mpeg_only_audio.bin", "rb");
+        f_cd_bin = fopen("images/7thguest_german.bin", "rb");
         break;
     case 8:
         f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
+        prepare_apprentice_usa_toc();
+        break;
+    case 9:
+        f_cd_bin = fopen("images/space_ace_eu.bin", "rb");
         prepare_apprentice_usa_toc();
         break;
     }

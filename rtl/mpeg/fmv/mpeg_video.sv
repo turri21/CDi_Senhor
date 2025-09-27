@@ -18,7 +18,10 @@ module mpeg_video (
     input           hsync,
     input           vsync,
     input           hblank,
-    input           vblank
+    input           vblank,
+
+    input [8:0] display_offset_y,
+    input [8:0] display_offset_x
 );
 
     ddr_if worker_2_ddr ();
@@ -341,32 +344,6 @@ module mpeg_video (
     );
 `endif
 
-    bit collect_sharedr_2;
-    bit collect_sharedr_3;
-    (* keep *) (* noprune *) bit [31:0] debug_core_2r;
-    (* keep *) (* noprune *) bit [31:0] debug_core_3r;
-    (* keep *) (* noprune *) bit [31:0] debug_core_2w;
-    (* keep *) (* noprune *) bit [31:0] debug_core_3w;
-    int debug_core2_cnt;
-    int debug_core3_cnt;
-
-    always_ff @(posedge clk60) begin
-        if (collect_sharedr_2 && soft_state2 != 35) begin
-            debug_core_2r   <= debug_core_2r + dmem_cmd_payload_address_2_q + shared12_out_2;
-            debug_core2_cnt <= debug_core2_cnt + 1;
-        end
-        if (collect_sharedr_3 && soft_state3 != 35) begin
-            debug_core_3r   <= debug_core_3r + dmem_cmd_payload_address_3_q + shared13_out_3;
-            debug_core3_cnt <= debug_core3_cnt + 1;
-        end
-
-        if (dmem_cmd_payload_address_2[31:28]==4 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_write_2)
-            debug_core_2w <= debug_core_2w + dmem_cmd_payload_address_2 + dmem_cmd_payload_data_2;
-        if (dmem_cmd_payload_address_3[31:28]==4 && dmem_cmd_valid_3 && dmem_cmd_ready_3 && dmem_cmd_payload_write_3)
-            debug_core_3w <= debug_core_3w + dmem_cmd_payload_address_3 + dmem_cmd_payload_data_3;
-
-    end
-
     // Core 1 signals
     wire        imem_cmd_valid_1;
     bit         imem_cmd_ready_1;
@@ -568,8 +545,6 @@ module mpeg_video (
     always_ff @(posedge clk60) begin
         if (expose_frame_struct_adr_clk60) begin
             frame_struct_adr <= dmem_cmd_payload_data_1;
-            $display("Core Debug %x %x %x %x   %d %d", debug_core_2r, debug_core_2w, debug_core_3r,
-                     debug_core_3w, debug_core2_cnt, debug_core3_cnt);
         end
         if (expose_frame_y_adr_clk60) frame_y_adr <= dmem_cmd_payload_data_1;
     end
@@ -910,10 +885,8 @@ module mpeg_video (
     always_ff @(posedge clk60) begin
         integer i;
 
-        dmem_rsp_valid_2  <= 0;
-        dmem_rsp_valid_3  <= 0;
-        collect_sharedr_2 <= 0;
-        collect_sharedr_3 <= 0;
+        dmem_rsp_valid_2 <= 0;
+        dmem_rsp_valid_3 <= 0;
 
         if (!worker_2_ddr.busy && worker_2_ddr.write) begin
             worker_2_ddr.write   <= 0;
@@ -1049,7 +1022,6 @@ module mpeg_video (
 
                 end
                 4'd4: begin  // Shared SRAM region
-                    if (!dmem_cmd_payload_write_2) collect_sharedr_2 <= 1;
                 end
                 4'd1: begin  // I/O Area
                     if (dmem_cmd_payload_address_2[15:0] == 16'h1110) begin
@@ -1125,7 +1097,6 @@ module mpeg_video (
 
                 end
                 4'd4: begin  // Shared SRAM region
-                    if (!dmem_cmd_payload_write_3) collect_sharedr_3 <= 1;
                 end
                 4'd0: begin  // Core 3 private memory
                 end
@@ -1206,6 +1177,8 @@ module mpeg_video (
         .frame(for_display),
         .frame_width(decoder_width),
         .frame_height(decoder_height),
+        .offset_y(display_offset_y),
+        .offset_x(display_offset_x),
         .latch_frame_clkvideo(latch_frame_for_display),
         .latch_frame_clkddr(latch_frame_for_display_clk60)
     );
