@@ -280,16 +280,14 @@ module mpeg_video (
     wire [31:0] shared12_out_2;
     wire [31:0] shared12_out_1;
 
-`ifdef VERILATOR
     dualport_shared_ram shared12 (
-        .clk2(clk60),
+        .clk(clk60),
         .addr2(dmem_cmd_payload_address_2[13:2]),
         .data_out2(shared12_out_2),
         .be2(dmem_cmd_payload_mask_2),
         .we2(dmem_cmd_payload_address_2[31:28]==4 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_write_2),
         .data_in2(dmem_cmd_payload_data_2),
         .addr1(dmem_cmd_payload_address_1[13:2]),
-        .clk1(clk60),
         .data_in1(dmem_cmd_payload_data_1),
         .we1(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 1 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
         .be1(dmem_cmd_payload_mask_1),
@@ -299,50 +297,18 @@ module mpeg_video (
     wire [31:0] shared13_out_3;
     wire [31:0] shared13_out_1;
     dualport_shared_ram shared13 (
-        .clk2(clk60),
+        .clk(clk60),
         .addr2(dmem_cmd_payload_address_3[13:2]),
         .data_out2(shared13_out_3),
         .be2(dmem_cmd_payload_mask_3),
         .we2(dmem_cmd_payload_address_3[31:28]==4 && dmem_cmd_valid_3 && dmem_cmd_ready_3 && dmem_cmd_payload_write_3),
         .data_in2(dmem_cmd_payload_data_3),
         .addr1(dmem_cmd_payload_address_1[13:2]),
-        .clk1(clk60),
         .data_in1(dmem_cmd_payload_data_1),
         .we1(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
         .be1(dmem_cmd_payload_mask_1),
         .data_out1(shared13_out_1)
     );
-`else
-    sharedportram shared12 (
-        .address_b(dmem_cmd_payload_address_2[13:2]),
-        .q_b(shared12_out_2),
-        .byteena_b(dmem_cmd_payload_mask_2),
-        .wren_b(dmem_cmd_payload_address_2[31:28]==4 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_write_2),
-        .data_b(dmem_cmd_payload_data_2),
-        .address_a(dmem_cmd_payload_address_1[13:2]),
-        .clock(clk60),
-        .data_a(dmem_cmd_payload_data_1),
-        .wren_a(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 1 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
-        .byteena_a(dmem_cmd_payload_mask_1),
-        .q_a(shared12_out_1)
-    );
-
-    wire [31:0] shared13_out_3;
-    wire [31:0] shared13_out_1;
-    sharedportram shared13 (
-        .address_b(dmem_cmd_payload_address_3[13:2]),
-        .q_b(shared13_out_3),
-        .byteena_b(dmem_cmd_payload_mask_3),
-        .wren_b(dmem_cmd_payload_address_3[31:28]==4 && dmem_cmd_valid_3 && dmem_cmd_ready_3 && dmem_cmd_payload_write_3),
-        .data_b(dmem_cmd_payload_data_3),
-        .address_a(dmem_cmd_payload_address_1[13:2]),
-        .clock(clk60),
-        .data_a(dmem_cmd_payload_data_1),
-        .wren_a(dmem_cmd_payload_address_1[31:28]==4 && dmem_cmd_payload_address_1[27:24] == 0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
-        .byteena_a(dmem_cmd_payload_mask_1),
-        .q_a(shared13_out_1)
-    );
-`endif
 
     // Core 1 signals
     wire        imem_cmd_valid_1;

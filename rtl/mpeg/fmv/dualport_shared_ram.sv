@@ -22,12 +22,16 @@ module dualport_shared_ram #(
     input [DATA_WIDTH_R-1:0] data_in2,
     input we1,
     input we2,
-    input clk1,
-    input clk2,
+    input clk,
     output [DATA_WIDTH_R-1:0] data_out1,
     output [DATA_WIDTH_R-1:0] data_out2
 );
-    localparam RAM_DEPTH = 16384 >> 2;
+
+    // For reasons yet unknown, Quartus is synthesizing this
+    // templated RAM, but the data read from it is corrupted.
+    // Because of this, black box RAM from Quartus is used instead for synthesis
+`ifdef VERILATOR
+    localparam RAM_DEPTH = 4096;
 
     // model the RAM with two dimensional packed array
     /* verilator lint_off MULTIDRIVEN */
@@ -38,7 +42,7 @@ module dualport_shared_ram #(
     reg [DATA_WIDTH_R-1:0] data_reg2;
 
     // port A
-    always @(posedge clk1) begin
+    always @(posedge clk) begin
         if (we1) begin
             // edit this code if using other than four bytes per word
             if (be1[0]) ram[addr1][0] <= data_in1[7:0];
@@ -52,7 +56,7 @@ module dualport_shared_ram #(
     assign data_out1 = data_reg1;
 
     // port B
-    always @(posedge clk2) begin
+    always @(posedge clk) begin
         if (we2) begin
             // edit this code if using other than four bytes per word
             if (be2[0]) ram[addr2][0] <= data_in2[7:0];
@@ -65,4 +69,64 @@ module dualport_shared_ram #(
 
     assign data_out2 = data_reg2;
 
+`else
+
+    altsyncram altsyncram_component (
+        .address_a(addr1),
+        .address_b(addr2),
+        .byteena_a(be1),
+        .byteena_b(be2),
+        .clock0(clk),
+        .data_a(data_in1),
+        .data_b(data_in2),
+        .wren_a(we1),
+        .wren_b(we2),
+        .q_a(data_out1),
+        .q_b(data_out2),
+        .aclr0(1'b0),
+        .aclr1(1'b0),
+        .addressstall_a(1'b0),
+        .addressstall_b(1'b0),
+        .clock1(1'b1),
+        .clocken0(1'b1),
+        .clocken1(1'b1),
+        .clocken2(1'b1),
+        .clocken3(1'b1),
+        .eccstatus(),
+        .rden_a(1'b1),
+        .rden_b(1'b1)
+    );
+
+    // verilog_format: off
+	defparam
+		altsyncram_component.address_reg_b = "CLOCK0",
+		altsyncram_component.byteena_reg_b = "CLOCK0",
+		altsyncram_component.byte_size = 8,
+		altsyncram_component.clock_enable_input_a = "BYPASS",
+		altsyncram_component.clock_enable_input_b = "BYPASS",
+		altsyncram_component.clock_enable_output_a = "BYPASS",
+		altsyncram_component.clock_enable_output_b = "BYPASS",
+		altsyncram_component.indata_reg_b = "CLOCK0",
+		altsyncram_component.intended_device_family = "Cyclone V",
+		altsyncram_component.lpm_type = "altsyncram",
+		altsyncram_component.numwords_a = 4096,
+		altsyncram_component.numwords_b = 4096,
+		altsyncram_component.operation_mode = "BIDIR_DUAL_PORT",
+		altsyncram_component.outdata_aclr_a = "NONE",
+		altsyncram_component.outdata_aclr_b = "NONE",
+		altsyncram_component.outdata_reg_a = "UNREGISTERED",
+		altsyncram_component.outdata_reg_b = "UNREGISTERED",
+		altsyncram_component.power_up_uninitialized = "FALSE",
+		altsyncram_component.read_during_write_mode_mixed_ports = "OLD_DATA",
+		altsyncram_component.read_during_write_mode_port_a = "NEW_DATA_NO_NBE_READ",
+		altsyncram_component.read_during_write_mode_port_b = "NEW_DATA_NO_NBE_READ",
+		altsyncram_component.widthad_a = 12,
+		altsyncram_component.widthad_b = 12,
+		altsyncram_component.width_a = 32,
+		altsyncram_component.width_b = 32,
+		altsyncram_component.width_byteena_a = 4,
+		altsyncram_component.width_byteena_b = 4,
+		altsyncram_component.wrcontrol_wraddress_reg_b = "CLOCK0";
+    // verilog_format: on
+`endif
 endmodule : dualport_shared_ram
