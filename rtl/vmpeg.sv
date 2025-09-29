@@ -70,11 +70,13 @@ module vmpeg (
     wire event_frame_decoded;
     wire event_underflow;
     bit  dsp_reset_input_fifo;
+    bit  fma_dsp_enable = 0;
+    bit  fmv_dsp_enable = 0;
 
     mpeg_audio audio (
         .clk(clk),
         .reset,
-        .dsp_enable(dsp_enable),
+        .dsp_enable(fma_dsp_enable),
         .reset_input_fifo(dsp_reset_input_fifo),
         .data_byte(mpeg_data),
         .data_strobe(fma_data_valid && fma_packet_body),
@@ -105,7 +107,7 @@ module vmpeg (
         .clk30(clk),
         .clk60(clk_mpeg),
         .reset,
-        .dsp_enable(1'b1),
+        .dsp_enable(fmv_dsp_enable),
         .playback_active(fmv_playback_active),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
@@ -135,7 +137,7 @@ module vmpeg (
         .timecode(fmv_timecode)
     );
 
-    bit dsp_enable = 0;
+
     wire signed [32:0] fma_system_clock_reference_start_time;
     wire fma_system_clock_reference_start_time_valid;
     wire signed [32:0] fmv_system_clock_reference_start_time;
@@ -336,7 +338,8 @@ module vmpeg (
             mpeg_ram_enabled_cnt <= 0;
             timer_cnt <= 0;
             dma_active <= 0;
-            dsp_enable <= 0;
+            fma_dsp_enable <= 0;
+            fmv_dsp_enable <= 0;
             fmv_playback_active <= 0;
         end else begin
             if (vsync && !vsync_q) interrupt_status_register.vsync <= 1;
@@ -380,8 +383,8 @@ module vmpeg (
                     timer_cnt <= timer_cnt + 1;
                 end
 
-                if (fma_system_clock_reference_start_time_valid && fma_dclk == fma_system_clock_reference_start_time[32:1] && !dsp_enable) begin
-                    dsp_enable <= 1;
+                if (fma_system_clock_reference_start_time_valid && fma_dclk == fma_system_clock_reference_start_time[32:1] && !fma_dsp_enable) begin
+                    fma_dsp_enable <= 1;
                 end
 
                 if (fmv_system_clock_reference_start_time_valid && fma_dclk == fmv_system_clock_reference_start_time[32:1] && !fmv_playback_active) begin
@@ -449,7 +452,7 @@ module vmpeg (
 
                             if (din == 2 && fma_command_register == 1) begin
                                 // Stop command?
-                                dsp_enable <= 0;
+                                fma_dsp_enable <= 0;
                                 dsp_reset_input_fifo <= 1;
                             end
                         end
@@ -460,7 +463,6 @@ module vmpeg (
                         15'h180E: begin
                             fma_interrupt_enable_register <= din;
                             $display("FMA IER %x %x", address[15:1], din);
-
                         end
 
                         15'h2030: begin
@@ -480,10 +482,27 @@ module vmpeg (
                         end
                         15'h2060: begin
                             $display("FMV Write SYSCMD Register %x %x", address[15:1], din);
-                            if (din == 16'h8000) begin
+                            /*
+                            according to cdiemu in this order when playing videos
+	                          FMV SYSCMD 2000 RELEASE
+	                          FMV SYSCMD 0100 RESET
+	                          FMV SYSCMD 1000 START
+	                          FMV SYSCMD 8000 DMA
+
+	                        according to fmvd.txt
+	                          0100 Clear FIFO
+	                          2000 Decoder off
+	                          1000 Decoder on
+	                          8000 Start DMA
+                            */
+
+                            if (din[15]) begin
                                 dma_active  <= 1;
                                 dma_for_fma <= 0;
                             end
+
+                            if (din[14]) fmv_dsp_enable <= 0;
+                            if (din[13]) fmv_dsp_enable <= 1;
                         end
                         15'h2061: begin
                             $display("FMV Write VIDCMD Register %x %x", address[15:1], din);

@@ -161,7 +161,7 @@ module mpeg_video (
     end
 
     always_ff @(posedge clk30) begin
-        if (reset) begin
+        if (reset_dsp_enabled) begin
             mpeg_stream_fifo_write_adr <= 0;
         end else if (data_strobe) begin
             mpeg_stream_fifo_write_adr <= mpeg_stream_fifo_write_adr + 1;
