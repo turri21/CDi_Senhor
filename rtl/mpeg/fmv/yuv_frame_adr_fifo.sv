@@ -49,7 +49,7 @@ module yuv_frame_adr_fifo (
     
     // verilog_format: on
 
-    wire [3:0] cnt_clkin = waddr - raddr_clkin;
+    wire [3:0] cnt_clkin  /*verilator public_flat_rd*/ = waddr - raddr_clkin;
     wire [3:0] cnt_clkout = waddr_clkout - raddr;
 
     always_ff @(posedge clk_in) begin

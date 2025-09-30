@@ -730,10 +730,12 @@ class CDi {
             plm_frame_to_bgr(&frame_convert, pixels, w * 3); // BMP expects BGR ordering
 
             sprintf(bmp_name, "%d/%03d.bmp", instanceid, fmv_frame_cnt);
-            printf("FMV Writing %s at Fifo Level %d\n", bmp_name,
-                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level);
-            fprintf(stderr, "FMV Writing %s at Fifo Level %d\n", bmp_name,
-                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level);
+            printf("FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
+                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
+                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__readyframes__DOT__cnt_clkin);
+            fprintf(stderr, "FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
+                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
+                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__readyframes__DOT__cnt_clkin);
 
             write_bmp(bmp_name, w, h, pixels);
 
@@ -872,6 +874,8 @@ class CDi {
             clock();
         }
 
+        memset(&dut.rootp->emu__DOT__ddram[0], 0x80, 5000000);
+
 #if 0
         FILE *f = fopen("ddramdump.bin", "rb");
         assert(f);
@@ -884,7 +888,7 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        //do_trace = false;
+        do_trace = false;
         fprintf(stderr, "Trace off!\n");
 #endif
 

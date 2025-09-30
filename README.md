@@ -44,6 +44,13 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* VCD resolution for white book
+* Burger King audio tracks blend together
+* VCDs are stopping at some point?
+* Sound bugs on the police procedures disk?
+* Base case audio is screeching.
+* Hang of 7th Guest
+* Hang of Space Ace Intro
 * Find a better solution for reducing CPU speed
 * Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode
     * A workaround is CPU overclocking. Problem not visible on real machine.

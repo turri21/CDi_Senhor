@@ -21,7 +21,8 @@ module mpeg_video (
     input           vblank,
 
     input [8:0] display_offset_y,
-    input [8:0] display_offset_x
+    input [8:0] display_offset_x,
+    output event_playback_underflow
 );
 
     ddr_if worker_2_ddr ();
@@ -1082,7 +1083,6 @@ module mpeg_video (
     planar_yuv_s for_display;
     wire just_decoded_commit = dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_address_1==32'h10003010;
     wire for_display_valid;
-    bit for_display_strobe;
     bit latch_frame_for_display;
     wire latch_frame_for_display_clk60;
 
@@ -1091,19 +1091,25 @@ module mpeg_video (
     bit [23:0] frame_period = 1200000;
     bit [23:0] playback_frame_cnt;
 
+    bit playback_underflow_latch;
+    bit playback_underflow_latch_q;
+    assign event_playback_underflow = playback_underflow_latch && !playback_underflow_latch_q;
     // In theory this machine could run with clk60.
     // But I'm not so sure about the final frequency and timing is vital
     always_ff @(posedge clk30) begin
         frame_period <= frame_period_clk60;
+        playback_underflow_latch_q <= playback_underflow_latch;
 
         latch_frame_for_display <= 0;
 
-        if (!playback_active) playback_frame_cnt <= 0;
-        else begin
+        if (!playback_active) begin
+            playback_frame_cnt <= 0;
+            playback_underflow_latch <= 0;
+        end else begin
             playback_frame_cnt <= playback_frame_cnt + 1;
 
             // Only for simulation. Ensure that frames are always available - no underflow
-            // if (playback_frame_cnt == 0) assert (for_display_valid);
+            if (playback_frame_cnt == 0 && !for_display_valid) playback_underflow_latch <= 1;
 
             if (playback_frame_cnt == frame_period - 1) playback_frame_cnt <= 0;
             if (playback_frame_cnt == 0 && for_display_valid) latch_frame_for_display <= 1;
@@ -1146,7 +1152,8 @@ module mpeg_video (
         .offset_y(display_offset_y),
         .offset_x(display_offset_x),
         .latch_frame_clkvideo(latch_frame_for_display),
-        .latch_frame_clkddr(latch_frame_for_display_clk60)
+        .latch_frame_clkddr(latch_frame_for_display_clk60),
+        .invalidate_latched_frame(reset_dsp_enabled_clk60)
     );
 endmodule
 

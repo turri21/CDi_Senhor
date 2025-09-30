@@ -102,6 +102,7 @@ module vmpeg (
     // Where are the hours?
     wire [31:0] fmv_timecode;
     bit fmv_playback_active;
+    wire fmv_event_playback_underflow;
 
     mpeg_video video (
         .clk30(clk),
@@ -119,7 +120,8 @@ module vmpeg (
         .vblank,
         .vidout,
         .display_offset_x(video_ctrl_x_display[8:0]),
-        .display_offset_y(video_ctrl_y_display[8:0])
+        .display_offset_y(video_ctrl_y_display[8:0]),
+        .event_playback_underflow(fmv_event_playback_underflow)
     );
 
     always_ff @(posedge clk) begin
@@ -184,8 +186,8 @@ module vmpeg (
 
         bit dcl;   // ?
         bit ovf;   // Overflow ?
-        bit ndat;  // ?
-        bit rfb;   // ?
+        bit ndat;  // No data ?
+        bit rfb;   // Request for bits ?
 
         bit eod;  // End Of Data
         bit pic;  // Picture Decoded
@@ -368,6 +370,10 @@ module vmpeg (
             if (fmv_event_sequence_header) fmv_interrupt_status_register.seq <= 1;
             if (fmv_event_group_of_pictures) fmv_interrupt_status_register.gop <= 1;
             if (fmv_event_picture) fmv_interrupt_status_register.pic <= 1;
+            if (fmv_event_playback_underflow) begin
+                fmv_interrupt_status_register.eod  <= 1;
+                fmv_interrupt_status_register.ndat <= 1;
+            end
 
             if (event_decoding_started) begin
                 // Decoding started

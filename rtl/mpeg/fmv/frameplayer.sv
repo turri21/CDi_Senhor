@@ -23,23 +23,29 @@ module frameplayer (
     input [8:0] offset_x,  // expected to be clocked at clkvideo
 
     input latch_frame_clkvideo,
-    input latch_frame_clkddr
+    input latch_frame_clkddr,
+    input invalidate_latched_frame
 );
 
     assign ddrif.byteenable = 8'hff;
     assign ddrif.write = 0;
 
     planar_yuv_s latched_frame;
+    bit latched_frame_valid;
+    bit current_frame_valid;
 
     always_ff @(posedge clkddr) begin
-        if (latch_frame_clkddr) begin
+        if (reset_clkddr || invalidate_latched_frame) begin
+            latched_frame_valid <= 0;
+        end else if (latch_frame_clkddr) begin
             latched_frame <= frame;
+            latched_frame_valid <= 1;
             //$display("Latched frame %x", latched_frame);
         end
     end
 
-    bit [8:0] frame_width_clkvideo;
-    bit [8:0] frame_height_clkvideo;
+    bit [8:0] frame_width_clkvideo = 100;
+    bit [8:0] frame_height_clkvideo = 100;
 
     always_ff @(posedge clkvideo) begin
         if (latch_frame_clkvideo) begin
@@ -165,7 +171,7 @@ module frameplayer (
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
             horizontal_offset_wait <= offset_x;
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && current_frame_valid) begin
 
             if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
             else begin
@@ -211,13 +217,14 @@ module frameplayer (
             address_y <= latched_frame.y_adr;
             address_u <= latched_frame.u_adr;
             address_v <= latched_frame.v_adr;
+            current_frame_valid <= latched_frame_valid;
             target_y <= 0;
             target_u <= 0;
             target_v <= 0;
             line_alternate <= 0;
             u_requested <= 0;
             v_requested <= 0;
-        end else begin
+        end else if (current_frame_valid) begin
             if (new_line_started_clkddr && linecnt < frame_height) begin
                 line_alternate <= !line_alternate;
 
@@ -307,7 +314,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0)) begin
+        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !current_frame_valid) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;
