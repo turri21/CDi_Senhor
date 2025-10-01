@@ -41,11 +41,12 @@ main:
 	; #$55387000 7th Guest ?
 	; #$01341100 Space Ace Intro
 	; #$00425900 2 Unlimited – Beyond Limits (Channel 0001)
+	; #$42252600 Burger King - Multilanguage?
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$0001,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$00425900,$303C02 ; Timer Register
+	move.l #$42252600,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 endless:

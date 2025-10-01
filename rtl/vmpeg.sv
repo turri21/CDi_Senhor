@@ -147,6 +147,9 @@ module vmpeg (
     wire signed [32:0] fmv_system_clock_reference_start_time;
     wire fmv_system_clock_reference_start_time_valid;
 
+    bit [3:0] fmv_stream_number;
+    bit [3:0] fma_stream_number;
+
     mpeg_demuxer #(
         .unit("FMA")
     ) audio_demuxer (
@@ -155,6 +158,7 @@ module vmpeg (
         .mpeg_data(mpeg_data),
         .data_valid(fma_data_valid),
         .mpeg_packet_body(fma_packet_body),
+        .stream_filter(fma_stream_number),
         .dclk(fma_dclk),
         .system_clock_reference_start_time(fma_system_clock_reference_start_time),
         .system_clock_reference_start_time_valid(fma_system_clock_reference_start_time_valid)
@@ -168,6 +172,7 @@ module vmpeg (
         .mpeg_data(mpeg_data),
         .data_valid(fmv_data_valid),
         .mpeg_packet_body(fmv_packet_body),
+        .stream_filter(fmv_stream_number),
         .dclk(fma_dclk),
         .system_clock_reference_start_time(fmv_system_clock_reference_start_time),
         .system_clock_reference_start_time_valid(fmv_system_clock_reference_start_time_valid)
@@ -460,6 +465,8 @@ module vmpeg (
                     end
 
                     case (address[15:1])
+
+                        // FMA Registers
                         15'h1800: begin
                             $display("FMA CMD %x %x", address[15:1], din);
 
@@ -481,6 +488,12 @@ module vmpeg (
                                 dsp_reset_input_fifo <= 1;
                             end
                         end
+                        15'h1804: begin
+                            // According to mv_selstrm() this can be 0-15
+                            $display("FMA Write Stream Number %x %x", address[15:1], din);
+                            fma_stream_number <= din[3:0];
+                        end
+
                         15'h1806: begin
                             $display("FMA IVEC %x %x", address[15:1], din);
                             fma_interrupt_vector_register <= din;
@@ -490,6 +503,7 @@ module vmpeg (
                             $display("FMA IER %x %x", address[15:1], din);
                         end
 
+                        // FMV Registers
                         15'h2030: begin
                             fmv_interrupt_enable_register <= din;
                             $display("FMV Write IER Register %x %x", address[15:1], din);
@@ -589,6 +603,11 @@ module vmpeg (
                         15'h2003: begin
                             $display("FMV Write Image RT? %x %x", address[15:1], din);
                             image_rt <= din;
+                        end
+                        15'h2062: begin
+                            // According to mv_selstrm() this can be 0-15
+                            $display("FMV Write Stream Number %x %x", address[15:1], din);
+                            fmv_stream_number <= din[3:0];
                         end
                         default: ;
                     endcase

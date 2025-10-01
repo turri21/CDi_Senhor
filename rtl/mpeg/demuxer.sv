@@ -5,6 +5,7 @@ module mpeg_demuxer (
     input data_valid,
     output bit mpeg_packet_body,
     input [31:0] dclk,  // Increments with 45 kHz
+    input [3:0] stream_filter,
     output bit signed [32:0] system_clock_reference_start_time,
     output bit system_clock_reference_start_time_valid
 );
@@ -193,10 +194,12 @@ module mpeg_demuxer (
                     demux_state <= PACK0;
                 end
                 {MAGIC_MATCH, 8'hC?} : begin
-                    demux_state <= PES0;
+                    // Audio Stream
+                    if (mpeg_data[3:0]==stream_filter) demux_state <= PES0;
                 end
                 {MAGIC_MATCH, 8'hE?} : begin
-                    demux_state <= PES0;
+                    // Video Stream
+                    if (mpeg_data[3:0]==stream_filter) demux_state <= PES0;
                 end
                 {MAGIC2, 8'h01} : demux_state <= MAGIC_MATCH;
                 {MAGIC2, 8'h00} : demux_state <= MAGIC2;
