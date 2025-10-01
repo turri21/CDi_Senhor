@@ -201,7 +201,9 @@ module mpeg_demuxer (
                 {MAGIC2, 8'h01} : demux_state <= MAGIC_MATCH;
                 {MAGIC2, 8'h00} : demux_state <= MAGIC2;
                 {MAGIC0, 8'h00} : demux_state <= MAGIC2;
-                {IDLE, 8'h00} : demux_state <= MAGIC0;
+                {IDLE, 8'h00} : begin
+                    if (!mpeg_packet_body) demux_state <= MAGIC0;
+                end
                 default: demux_state <= IDLE;
             // verilog_format: on
             endcase
