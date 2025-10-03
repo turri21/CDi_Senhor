@@ -266,8 +266,8 @@ class CDi {
 #endif
 
     Vemu dut;
-    uint64_t step = 0;
-    uint64_t sim_time = 0;
+    uint64_t time30mhz = 0;
+    uint64_t tracetime = 0;
     int frame_index = 0;
     int release_button_frame{-1};
     int fmv_frame_cnt{0};
@@ -358,28 +358,68 @@ class CDi {
 
     uint16_t phase_accumulator;
 
-    void clock() {
-        for (int i = 0; i < 4; i++) {
-            // clk_sys is 30 MHz
-            dut.rootp->emu__DOT__clk_sys = (sim_time & 2);
+    void clockmpeg() {
+        mpeg_clk_calc_ticks++;
 
-            // clk_mpeg is 60 MHz
-            dut.rootp->emu__DOT__clk_mpeg = (sim_time & 1);
+        for (int i = 0; i < 2; i++) {
+            dut.rootp->emu__DOT__clk_mpeg = i & 1;
+            dut.eval();
+#ifdef TRACE
+            if (do_trace) {
+                m_trace.dump(tracetime);
+            }
+#endif
+            tracetime++;
+        }
+    }
+
+    // These two are used to calculate the actual MPEG frequency
+    // required to do the job on a frame basis
+    uint32_t mpeg_clk_calc_ticks30{0}; ///< counts 30 MHz clock ticks
+    uint32_t mpeg_clk_calc_ticks{0};   ///< counts MPEG clock ticks
+
+    /*
+    Primarily creates a 30 MHz clock and
+    derives 22.2264 MHz audio clock from that.
+    Dynamically creates a frequency for clk_mpeg
+    from 30 to 90 MHz depending on MPEG load to
+    speed up the simulation when the performance is not required.
+    */
+    void clock30() {
+        mpeg_clk_calc_ticks30++;
+        mpeg_clk_calc_ticks++;
+
+        uint32_t fmv_fifo_level = dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level;
+
+        for (int i = 0; i < 2; i++) {
+            // clk_sys is 30 MHz
+            dut.rootp->emu__DOT__clk_sys = (i & 1);
+
+            // clk_mpeg is 30 MHz when no work is to be done
+            dut.rootp->emu__DOT__clk_mpeg = (i & 1);
 
             // clk_audio is 22.2264 MHz
-            phase_accumulator += 24277 / 2;
+            phase_accumulator += 24277;
             dut.rootp->emu__DOT__clk_audio = (phase_accumulator & 0x8000) ? 1 : 0;
 
             dut.eval();
 #ifdef TRACE
             if (do_trace) {
-                // emu__DOT__clk_sys is 30 MHz
-                // One period is 33333.3333 ps
-                // sim_time counts the half periods
-                m_trace.dump(sim_time * 33333 / 2);
+                m_trace.dump(tracetime);
             }
 #endif
-            sim_time++;
+            tracetime++;
+        }
+
+        // The FPGA PLL is configured for 80 MHz, but
+        // the power is not always required. Scale it up to 60 MHZ
+        if (fmv_fifo_level > 2000) {
+            clockmpeg();
+        }
+
+        // Ok, scale it up to 90 MHz
+        if (fmv_fifo_level > 8000) {
+            clockmpeg();
         }
     }
 
@@ -396,24 +436,24 @@ class CDi {
 
         // make some clocks before starting
         for (int step = 0; step < 300; step++) {
-            clock();
+            clock30();
         }
 
         while (fread(&transferword, 2, 1, f) == 1) {
             dut.rootp->emu__DOT__ioctl_wr = 1;
             dut.rootp->emu__DOT__ioctl_dout = transferword;
 
-            clock();
+            clock30();
             dut.rootp->emu__DOT__ioctl_wr = 0;
 
             // make some clocks to avoid asking for busy
             // the real MiSTer has 31 clocks between writes
             // we are going for ~20 to put more stress on it.
             for (int i = 0; i < 20; i++) {
-                clock();
+                clock30();
             }
             dut.rootp->emu__DOT__ioctl_addr += 2;
-            clock();
+            clock30();
         }
         fclose(f);
     }
@@ -436,11 +476,11 @@ class CDi {
     }
 
     void modelstep() {
-        step++;
-        clock();
+        time30mhz++;
+        clock30();
 
 #ifdef SIMULATE_RC5
-        if (sim_time >= rc5_fliptime) {
+        if (time30mhz >= rc5_fliptime) {
             dut.rootp->emu__DOT__rc_eye = rc5_nextstate;
 
             fprintf(stderr, "Set RC5!\n");
@@ -457,12 +497,12 @@ class CDi {
         }
 #endif
 
-        if ((step % 100000) == 0) {
-            printf("%d\n", step);
+        if ((time30mhz % 100000) == 0) {
+            printf("%d\n", time30mhz);
         }
 
-        dut.rootp->emu__DOT__cd_media_change = (step == 1300000);
-        if (step == 1300000)
+        dut.rootp->emu__DOT__cd_media_change = (time30mhz == 1300000);
+        if (time30mhz == 1300000)
             printf("Media change!\n");
 
 #ifdef SCC68070
@@ -473,7 +513,7 @@ class CDi {
         }
 #endif
 
-        dut.rootp->emu__DOT__nvram_media_change = (step == 2000);
+        dut.rootp->emu__DOT__nvram_media_change = (time30mhz == 2000);
         // Simulate CD data delivery from HPS
         if (dut.rootp->emu__DOT__cd_hps_req && sd_rd_q == 0 && dut.rootp->emu__DOT__nvram_hps_ack == 0) {
             assert(dut.rootp->emu__DOT__cd_hps_ack == 0);
@@ -530,7 +570,7 @@ class CDi {
         }
 
         dut.rootp->emu__DOT__sd_buff_wr = 0;
-        if (dut.rootp->emu__DOT__cd_hps_ack && (step % 200) == 15) {
+        if (dut.rootp->emu__DOT__cd_hps_ack && (time30mhz % 200) == 15) {
             if (hps_buffer_index == kWordsPerSector) {
                 dut.rootp->emu__DOT__cd_hps_ack = 0;
                 printf("Sector transferred!\n");
@@ -541,7 +581,7 @@ class CDi {
             }
         }
 
-        if (dut.rootp->emu__DOT__nvram_hps_ack && (step % 20) == 15) {
+        if (dut.rootp->emu__DOT__nvram_hps_ack && (time30mhz % 20) == 15) {
             if (hps_nvram_backup_active) {
                 if (hps_buffer_index == 4096) {
                     dut.rootp->emu__DOT__nvram_hps_ack = 0;
@@ -682,8 +722,16 @@ class CDi {
                 sprintf(filename, "%d/video_%03d.png", instanceid, frame_index);
                 write_png_file(filename);
                 printf("Written %s %d\n", filename, pixel_index);
-                printf("We are at step=%ld\n", step);
-                fprintf(stderr, "Written %s after %.2fs\n", filename, elapsed_seconds.count());
+                printf("We are at time30mhz=%ld\n", time30mhz);
+
+                uint32_t mpeg_frequency = mpeg_clk_calc_ticks * 30 / mpeg_clk_calc_ticks30;
+
+                fprintf(stderr, "Written %s after %.2fs. FMV at %d MHz\n", filename, elapsed_seconds.count(),
+                        mpeg_frequency);
+
+                mpeg_clk_calc_ticks30 = 0;
+                mpeg_clk_calc_ticks = 0;
+
                 frame_index++;
             }
             pixel_index = 0;
@@ -871,7 +919,7 @@ class CDi {
 
         // wait for SDRAM to initialize
         for (int y = 0; y < 300; y++) {
-            clock();
+            clock30();
         }
 
         memset(&dut.rootp->emu__DOT__ddram[0], 0x80, 5000000);
@@ -899,7 +947,7 @@ class CDi {
 
     void reset() {
         dut.RESET = 1;
-        clock();
+        clock30();
         dut.RESET = 0;
     }
 
