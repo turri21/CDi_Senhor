@@ -40,14 +40,26 @@ module mpeg_video (
     assign worker_2_ddr.byteenable = 8'hff;
     assign worker_3_ddr.byteenable = 8'hff;
 
+    wire reset_clk60;
+
     flag_cross_domain cross_reset (
         .clk_a(clk30),
         .clk_b(clk60),
-        .flag_in_clk_a(reset_dsp_enabled),
-        .flag_out_clk_b(reset_dsp_enabled_clk60)
+        .flag_in_clk_a(reset),
+        .flag_out_clk_b(reset_clk60)
     );
+
+    wire dsp_enable_clk60;
+
+    signal_cross_domain cross_reset2 (
+        .clk_a(clk30),
+        .clk_b(clk60),
+        .signal_in_clk_a(dsp_enable),
+        .signal_out_clk_b(dsp_enable_clk60)
+    );
+
     wire reset_dsp_enabled = reset || !dsp_enable;
-    wire reset_dsp_enabled_clk60;
+    wire reset_dsp_enabled_clk60 = reset_clk60 || !dsp_enable_clk60;
 
     bit [15:0] dct_coeff_result;
     bit dct_coeff_huffman_active = 0;
