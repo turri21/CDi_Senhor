@@ -77,6 +77,8 @@ module dual_ad7528_attenuation (
 
     // MAC register
     // To save some ressources, we use only one DSP block for all 4 multiplications here
+    // How wide does the Accu need to be? We have 3 sources (VMPEG, CDIC Left, CDIC Right) and
+    // we use 8 bits for fractions. So 16 + 8 + 2 = 26 bits
     bit signed [25:0] temp;
     bit signed [23:8] temp_clipped;
 
@@ -98,7 +100,7 @@ module dual_ad7528_attenuation (
                 audio_left_out <= temp_clipped[23:8];
 
                 state <= LEFT_B;
-                temp <= signed'({1'b0, factor_left_a}) * audio_left_in + {mpeg_right_in[15],mpeg_right_in[15],mpeg_right_in,8'b10000000};
+                temp <= signed'({1'b0, factor_left_a}) * audio_left_in + 26'(signed'({mpeg_right_in,8'b10000000}));
             end
             LEFT_B: begin
                 state <= RIGHT_A;
@@ -108,7 +110,7 @@ module dual_ad7528_attenuation (
                 audio_right_out <= temp_clipped[23:8];
 
                 state <= RIGHT_B;
-                temp <= signed'({1'b0, factor_right_a}) * audio_right_in + {mpeg_left_in[15],mpeg_left_in[15],mpeg_left_in,8'b10000000};
+                temp <= signed'({1'b0, factor_right_a}) * audio_right_in + 26'(signed'({mpeg_left_in,8'b10000000}));
             end
             RIGHT_B: begin
                 state <= LEFT_A;

@@ -33,22 +33,21 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  21,958 / 41,910 ( 52 % )
-    Total registers              24491
-    Total block memory bits      1,925,456 / 5,662,720 ( 34 % )
+    Logic utilization (in ALMs)  22,208 / 41,910 ( 53 % )
+    Total registers              24939
+    Total block memory bits      2,056,456 / 5,662,720 ( 36 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
 Expected synthesis times with Quartus 17.0.2
 
-    AMD Ryzen 7 3700X 8-Core    13 minutes
+    AMD Ryzen 7 3700X 8-Core    14 minutes
 
 ### TODOs
 
 * VCD resolution for white book
-* Burger King audio tracks blend together
+* Glitches during Top Gun (Might be Pause command related)
 * VCDs are stopping at some point?
 * Sound bugs on the police procedures disk?
-* Base case audio is screeching.
 * Hang of 7th Guest
 * Hang of Space Ace Intro
 * Find a better solution for reducing CPU speed
@@ -64,7 +63,6 @@ Expected synthesis times with Quartus 17.0.2
     * Vincent Halver has found a solution for MAME. Need to check that.
 * Fix hang on audio track stop or change in media player
 * Cheat support?
-* Digital Video Cartridge MPEG Decoder
 * Investigate "Gray border glitch" at the top of "Myst" gameplay (seems to be only one plane)
 * Fix reset behaviour (Core is sometimes hanging after reset)
 * Investigate desaturated colors / low contrast in "Photo CD Sample Disc"
