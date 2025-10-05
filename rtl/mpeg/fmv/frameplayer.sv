@@ -211,6 +211,12 @@ module frameplayer (
         if (!ddrif.busy) begin
             ddrif.read <= 0;
         end
+        if (ddrif.rdata_ready) begin
+            data_burst_cnt <= data_burst_cnt - 1;
+        end
+        if (data_burst_cnt == 0) begin
+            ddrif.acquire <= 0;
+        end
 
         if (reset_clkddr || vblank_clkddr || vertical_offset_wait_not_null_clkddr) begin
             fetchstate <= IDLE;
@@ -268,15 +274,11 @@ module frameplayer (
                     end
                 end
                 WAITING: begin
-                    if (ddrif.rdata_ready) begin
-                        data_burst_cnt <= data_burst_cnt - 1;
-                    end
                     if (data_burst_cnt == 0) begin
                         fetchstate <= IDLE;
-                        target_y <= 0;
-                        target_u <= 0;
-                        target_v <= 0;
-                        ddrif.acquire <= 0;
+                        target_y   <= 0;
+                        target_u   <= 0;
+                        target_v   <= 0;
                     end
                 end
                 default: begin
