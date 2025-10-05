@@ -123,6 +123,13 @@ void signal_handler(int signum, siginfo_t *info, void *context) {
         // example: killall -s USR1 Vemu
         press_button_signal = true;
         break;
+    case SIGUSR2:
+        // example: killall -s USR2 Vemu
+#ifdef TRACE
+        do_trace = !do_trace;
+        fprintf(stderr, "Trace %s\n", do_trace ? "on" : "off");
+#endif
+        break;
     }
 }
 
@@ -301,7 +308,6 @@ class CDi {
     int instanceid;
 
     std::chrono::_V2::system_clock::time_point start;
-    int sd_rd_q;
     static constexpr uint32_t kSectorHeaderSize{12};
     static constexpr uint32_t kSectorSize{2352};
     static constexpr uint32_t kWordsPerSubcodeFrame{12};
@@ -515,7 +521,8 @@ class CDi {
 
         dut.rootp->emu__DOT__nvram_media_change = (time30mhz == 2000);
         // Simulate CD data delivery from HPS
-        if (dut.rootp->emu__DOT__cd_hps_req && sd_rd_q == 0 && dut.rootp->emu__DOT__nvram_hps_ack == 0) {
+        if (dut.rootp->emu__DOT__cd_hps_req && dut.rootp->emu__DOT__cd_hps_ack == 0 &&
+            dut.rootp->emu__DOT__nvram_hps_ack == 0) {
             assert(dut.rootp->emu__DOT__cd_hps_ack == 0);
             dut.rootp->emu__DOT__cd_hps_ack = 1;
 
@@ -543,7 +550,8 @@ class CDi {
             hps_buffer_index = 0;
         }
 
-        if (dut.rootp->emu__DOT__nvram_hps_rd && sd_rd_q == 0 && dut.rootp->emu__DOT__cd_hps_ack == 0) {
+        if (dut.rootp->emu__DOT__nvram_hps_rd && dut.rootp->emu__DOT__nvram_hps_ack == 0 &&
+            dut.rootp->emu__DOT__cd_hps_ack == 0) {
             assert(dut.rootp->emu__DOT__nvram_hps_ack == 0);
             dut.rootp->emu__DOT__nvram_hps_ack = 1;
 
@@ -558,7 +566,8 @@ class CDi {
             }
         }
 
-        if (dut.rootp->emu__DOT__nvram_hps_wr && sd_rd_q == 0 && dut.rootp->emu__DOT__cd_hps_ack == 0) {
+        if (dut.rootp->emu__DOT__nvram_hps_wr && dut.rootp->emu__DOT__nvram_hps_ack == 0 &&
+            dut.rootp->emu__DOT__cd_hps_ack == 0) {
             assert(dut.rootp->emu__DOT__nvram_hps_ack == 0);
             dut.rootp->emu__DOT__nvram_hps_ack = 1;
 
@@ -570,7 +579,7 @@ class CDi {
         }
 
         dut.rootp->emu__DOT__sd_buff_wr = 0;
-        if (dut.rootp->emu__DOT__cd_hps_ack && (time30mhz % 200) == 15) {
+        if (dut.rootp->emu__DOT__cd_hps_ack && (time30mhz % 180) == 15) {
             if (hps_buffer_index == kWordsPerSector) {
                 dut.rootp->emu__DOT__cd_hps_ack = 0;
                 printf("Sector transferred!\n");
@@ -616,9 +625,6 @@ class CDi {
                 }
             }
         }
-
-        sd_rd_q =
-            dut.rootp->emu__DOT__cd_hps_req || dut.rootp->emu__DOT__nvram_hps_rd || dut.rootp->emu__DOT__nvram_hps_wr;
 
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__uart_tx_data_valid) {
             fputc(dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__uart_transmit_holding_register, f_uart);
@@ -806,9 +812,9 @@ class CDi {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv_m1v);
             }
 #ifdef TRACE
-            if (!do_trace)
-                fprintf(stderr, "Trace on!\n");
-            do_trace = true;
+            // if (!do_trace)
+            //     fprintf(stderr, "Trace on!\n");
+            // do_trace = true;
 #endif
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
@@ -818,9 +824,9 @@ class CDi {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fma_mp2);
             }
 #ifdef TRACE
-            if (!do_trace)
-                fprintf(stderr, "Trace on!\n");
-            do_trace = true;
+            // if (!do_trace)
+            //     fprintf(stderr, "Trace on!\n");
+            // do_trace = true;
 #endif
         }
 
@@ -1000,6 +1006,7 @@ int main(int argc, char **argv) {
 
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
 
     int machineindex = 0;
 
@@ -1010,7 +1017,8 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
+        f_cd_bin = fopen("images/Apprentice_USA_single.bin", "rb");
+        prepare_apprentice_usa_toc();
         break;
     case 1:
         f_cd_bin = fopen("images/LuckyLuke.bin", "rb");
