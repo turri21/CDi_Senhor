@@ -3,6 +3,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE CDi.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/audiodecoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/audiofifo.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/audioplayer.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cdic_clock_gen.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cdic.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cditop.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/clut_rle.sv
@@ -10,6 +11,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/delta_yuv_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/display_file_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/dual_ad7528.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/flag_cross_domain.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/hps_cd_sector_cache.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ica_dca_ctrl.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mcd212.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mk48t08b.sv

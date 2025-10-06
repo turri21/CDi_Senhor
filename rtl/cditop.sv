@@ -52,11 +52,14 @@ module cditop (
     input rc_eye,
     output slave_rts,
 
-    output [31:0] cd_hps_lba,
-    output cd_hps_req,
-    input cd_hps_ack,
-    input cd_hps_data_valid,
-    input [15:0] cd_hps_data,
+    // IO for CD data
+    output bit [31:0] cd_seek_lba,
+    output bit cd_seek_lba_valid,
+    input [15:0] cd_data,
+    input cd_data_valid,
+    output cd_sector_tick,
+    input cd_sector_delivered,
+
     input cd_img_mount,
     input cd_img_mounted,
 
@@ -245,6 +248,20 @@ module cditop (
     wire signed [15:0] cdic_audio_left;
     wire signed [15:0] cdic_audio_right;
 
+    wire sample_tick37;
+    wire sample_tick44;
+
+    cdic_clock_gen cdic_clk_gen (
+        .clk(clk30),
+        .clk_audio(clk_audio),
+        .reset,
+        .sector_tick(cd_sector_tick),
+        .sample_tick37,
+        .sample_tick44
+    );
+
+    wire cdic_intreq;
+    wire cdic_intack;
     cdic cdic_inst (
         .clk(clk30),
         .clk_audio(clk_audio),
@@ -265,13 +282,16 @@ module cditop (
         .dtc(cdic_dma_dtc),
         .done_in(cdic_dma_done_out),
         .done_out(cdic_dma_done_in),
-        .cd_hps_lba(cd_hps_lba),
-        .cd_hps_req(cd_hps_req),
-        .cd_hps_ack,
-        .cd_hps_data_valid,
-        .cd_hps_data,
+        .cd_seek_lba,
+        .cd_seek_lba_valid,
+        .cd_data_valid,
+        .cd_data,
+        .cd_sector_tick,
+        .cd_sector_delivered,
         .audio_left(cdic_audio_left),
         .audio_right(cdic_audio_right),
+        .sample_tick37,
+        .sample_tick44,
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data)
     );

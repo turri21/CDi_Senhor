@@ -281,7 +281,7 @@ module emu (
     wire         nvram_hps_ack  /*verilator public_flat_rw*/;
     bit          nvram_hps_wr;
     bit          nvram_hps_rd  /*verilator public_flat_rd*/;
-    bit  [ 15:0] nvram_hps_din;
+    bit  [ 15:0] nvram_hps_din  /*verilator public_flat_rd*/;
     wire         nvram_media_change  /*verilator public_flat_rw*/;
 
     wire [  7:0] sd_buff_addr  /*verilator public_flat_rw*/;
@@ -683,6 +683,33 @@ module emu (
         .overclock(overclock_pointing_device)
     );
 
+    wire cd_sector_tick;
+    wire cd_sector_delivered;
+    wire [31:0] cd_seek_lba;
+    wire cd_seek_lba_valid;
+    wire [15:0] cd_data;
+    wire cd_data_valid;
+
+    hps_cd_sector_cache hps_cd_sector_cache (
+        .clk(clk_sys),
+        .reset(cditop_reset),
+        .cd_hps_req(cd_hps_req),
+        .cd_hps_lba(cd_hps_lba),
+        .cd_hps_ack(cd_hps_ack),
+        .cd_hps_data_valid(sd_buff_wr && cd_hps_ack),
+        // MiSTer uses little endian on linux. Swap over to big endian
+        // to actually fit the way the 68k wants it
+        .cd_hps_data({sd_buff_dout[7:0], sd_buff_dout[15:8]}),
+
+        // Interface to CDi
+        .cd_data_valid(cd_data_valid),
+        .cd_data(cd_data),
+        .seek_lba(cd_seek_lba),
+        .seek_lba_valid(cd_seek_lba_valid),
+        .sector_tick(cd_sector_tick),
+        .sector_delivered(cd_sector_delivered)
+    );
+
     wire fail_not_enough_words;
     wire fail_too_much_data;
     wire debug_irq_hangup;
@@ -743,13 +770,12 @@ module emu (
         .slave_rts(slave_rts),
         .rc_eye(rc_eye),
 
-        .cd_hps_req(cd_hps_req),
-        .cd_hps_lba(cd_hps_lba),
-        .cd_hps_ack(cd_hps_ack),
-        .cd_hps_data_valid(sd_buff_wr && cd_hps_ack),
-        // MiSTer uses little endian on linux. Swap over to big endian
-        // to actually fit the way the 68k wants it
-        .cd_hps_data({sd_buff_dout[7:0], sd_buff_dout[15:8]}),
+        .cd_seek_lba(cd_seek_lba),
+        .cd_seek_lba_valid(cd_seek_lba_valid),
+        .cd_data_valid(cd_data_valid),
+        .cd_data(cd_data),
+        .cd_sector_tick(cd_sector_tick),
+        .cd_sector_delivered(cd_sector_delivered),
         .cd_img_mount(cd_img_mount),
         .cd_img_mounted(cd_img_mounted),
 

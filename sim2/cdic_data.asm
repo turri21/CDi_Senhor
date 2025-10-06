@@ -18,73 +18,24 @@ main:
 	move.w #$2480,$303FFC ; Interrupt Vector
 	move.w #$0029,$303C00 ; Read Mode 1
 	move.l #$0021600,$303C02 ; Time Register
-	move.w #$8000,$303FFE ; Start the Read
+	move.w #$C000,$303FFE ; Start the Read
 
 	move.l #$2000,A3
-	move.b #'O',$80002019
+	move.b #'A',$80002019
 
 	jsr waitforirq
 
-	move.b #'A',$80002019
-	move.w $303FF6,d0
-	move.w $303FF6,d0
-	move.w $303FFE,d0
-
-	; Check CDIC ram like the driver does
-	move.w $300002,d0
-	move.w $30000a,d0
-	move.w $300a02,d0
-	move.w $300a0a,d0
-
-	move.b d0,$80004000 ; reset status
-	move.l A3,$8000400c
-	move.w #$498,$8000400a
-	;move.w #$4,$8000400a
-
-	move.b #$92,$80004005
-	move.b #$80,$80004007 ; start DMA
-	move.w #$8a00,$303FF8 ; DMA Control Register = Start Transmission at a00
-
-	adda.l #$930,a3
 	move.b #'B',$80002019
-
-
-	move.w #$0000,$303FFE ; Data buffer = 0, disable reading
-
-
-	move.w #800,d0
-	jsr wait
-
-	move.w #$0029,$303C00 ; Read Mode 1
-	move.l #$0021600,$303C02 ; Time Register
-	move.w #$8000,$303FFE ; Start the Read
-
-
 
 	jsr waitforirq
 
-	move.b #'A',$80002019
-	move.w $303FF6,d0
-	move.w $303FF6,d0
-	move.w $303FFE,d0
+	move.b #'C',$80002019
 
-	; Check CDIC ram like the driver does
-	move.w $300002,d0
-	move.w $30000a,d0
-	move.w $300a02,d0
-	move.w $300a0a,d0
+	move.w #$0000,$303FFE ; Stop the Read
+	move.w #$C000,$303FFE ; Start the Read
 
-	move.b d0,$80004000 ; reset status
-	move.l A3,$8000400c
-	move.w #$498,$8000400a
-	;move.w #$4,$8000400a
-
-	move.b #$92,$80004005
-	move.b #$80,$80004007 ; start DMA
-	move.w #$8a00,$303FF8 ; DMA Control Register = Start Transmission at a00
-
-	adda.l #$930,a3
-	move.b #'B',$80002019
+	jsr waitforirq
+	jsr waitforirq
 
 endless:
 	bra endless

@@ -28,28 +28,23 @@ module cdic (
     input done_in,
     output done_out,
 
-    output bit [31:0] cd_hps_lba,
-    output bit cd_hps_req,
-    input cd_hps_ack,
-    input cd_hps_data_valid,
-    input [15:0] cd_hps_data,
+    // IO for CD data
+    output bit [31:0] cd_seek_lba,
+    output bit cd_seek_lba_valid,
+    input [15:0] cd_data,
+    input cd_data_valid,
+    input cd_sector_tick,
+    input cd_sector_delivered,
+
 
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
+    input sample_tick37,
+    input sample_tick44,
 
     output bit fail_not_enough_words,
     output bit fail_too_much_data
 );
-
-    // Used to detect edges of cd_hps_ack
-    bit cd_hps_ack_q;
-
-    // Sometimes when performing a seek, the MiSTer main doesn't deliver
-    // a CD sector for multiple sector times.
-    // As long as this is bit is set, the data must not be processed.
-    // This is "Free seeking time emulation" as long
-    // as this only occurs during seeking
-    wire hps_transaction_in_progress = cd_hps_req || cd_hps_ack;
 
     // Register set according to MAME and
     // https://github.com/cdifan/cdichips/blob/master/ims66490cdic.md
@@ -119,76 +114,9 @@ module cdic (
     // If the file is not matching, the sector will be ignored
     bit [15:0] file_register = 0;
 
-    wire reset_audio;
-
-    // When clocked at 30 MHz and a sector rate of 75 Hz
-    // 30e6/75 = 400000
-    // But clocked at 22226400 Hz
-    // 22226400 / 75 = 296352
-    // 22226400 / 37800 = 588
-    // 22226400 / 44100 = 504
-    localparam bit [23:0] kSectorPeriod = 296352;
-    localparam bit [23:0] kSample37Period = 588;
-    localparam bit [23:0] kSample44Period = 504;
-
-    flag_cross_domain cross_reset (
-        .clk_a(clk),
-        .clk_b(clk_audio),
-        .flag_in_clk_a(reset),
-        .flag_out_clk_b(reset_audio)
-    );
-
-    bit [23:0] sample37800counter;
-    bit [23:0] sample44100counter;
-    bit [23:0] sector75counter;
-
-    wire sample_tick37_audio = sample37800counter == 0;
-    wire sample_tick44_audio = sample44100counter == 0;
-    wire sector_tick_audio = sector75counter == 0;
-    wire sample_tick37  /*verilator public_flat_rd*/;
-    wire sample_tick44  /*verilator public_flat_rd*/;
-
 `ifdef VERILATOR
     wire sample_tick  /*verilator public_flat_rd*/ = read_cdda ? sample_tick44 : sample_tick37;
 `endif
-
-    wire sector_tick;
-    flag_cross_domain cross1 (
-        .clk_a(clk_audio),
-        .clk_b(clk),
-        .flag_in_clk_a(sample_tick37_audio),
-        .flag_out_clk_b(sample_tick37)
-    );
-    flag_cross_domain cross2 (
-        .clk_a(clk_audio),
-        .clk_b(clk),
-        .flag_in_clk_a(sample_tick44_audio),
-        .flag_out_clk_b(sample_tick44)
-    );
-    flag_cross_domain cross3 (
-        .clk_a(clk_audio),
-        .clk_b(clk),
-        .flag_in_clk_a(sector_tick_audio),
-        .flag_out_clk_b(sector_tick)
-    );
-
-    // Simulate 75 sectors per second
-    always_ff @(posedge clk_audio) begin
-        if (reset_audio) begin
-            sample37800counter <= 0;
-            sample44100counter <= 0;
-            sector75counter <= 0;
-        end else begin
-            if (sector75counter == 0) sector75counter <= kSectorPeriod - 1;
-            else sector75counter <= sector75counter - 1;
-
-            if (sample44100counter == 0) sample44100counter <= kSample44Period - 1;
-            else sample44100counter <= sample44100counter - 1;
-
-            if (sample37800counter == 0) sample37800counter <= kSample37Period - 1;
-            else sample37800counter <= sample37800counter - 1;
-        end
-    end
 
     // some info is from https://github.com/cdifan/cdichips/blob/master/ims66490cdic.md
     // behaviour is reconstructed from MAME
@@ -213,7 +141,7 @@ module cdic (
     // Also cut of the time code to later insert that. The driver seems
     // to be unhappy when it is presented too early.
     // TODO This is not yet confirmed
-    wire mem_cd_hps_we = cd_hps_data_valid && (sector_word_index >= 8 || read_raw) && use_sector_data;
+    wire mem_cd_hps_we = cd_data_valid && (sector_word_index >= 8 || read_raw) && use_sector_data;
 
     wire [15:0] mem_cdic_readout;
     bit [15:0] mem_cdic_data;
@@ -289,8 +217,8 @@ module cdic (
         .audio_right(adpcm_right)
     );
 
-    bit cd_hps_data_valid_q;
-    bit cd_hps_data_valid_q2;
+    bit cd_data_valid_q;
+    bit cd_data_valid_q2;
     bit data_target_buffer;
     bit audio_target_buffer;
 
@@ -305,7 +233,7 @@ module cdic (
 
         mem_cdic_addr = cd_data_target_adr;
         mem_cdic_we = mem_cd_hps_we;
-        mem_cdic_data = cd_hps_data;
+        mem_cdic_data = cd_data;
         mem_cd_audio_ack = 0;
 
         if (mem_cd_hps_we) begin
@@ -380,27 +308,15 @@ module cdic (
     // HPS will be advised to give data as long as this is set
     bit cd_reading_active = 0;
 
-    // Number of sectors to wait until requesting the first
-    // after the reading was instructed to start.
-`ifdef VERILATOR
-    localparam bit [5:0] kSeekTime = 1;
-`else
-    // Seeking on a real 210/05 takes about 200ms
-    // But 19 (250ms) seems to be more stable
-    localparam bit [5:0] kSeekTime = 19;
-`endif
-    // Simulates reading time. Remaining sectors to wait.
-    bit [5:0] start_cd_reading_cnt = 0;
-
     // Reset if MODE2 filters decided to skip the current sector
     // Set on every start of a sector
     bit use_sector_data = 0;
 
 `ifdef VERILATOR
     always_ff @(posedge clk) begin
-        if (cd_hps_data_valid && use_sector_data)
+        if (cd_data_valid && use_sector_data)
             `dp_hps_data(("CDIC CD Data %x %d %x WE:%d", {cd_data_target_adr, 1'b0
-                         }, sector_word_index, cd_hps_data, mem_cd_hps_we));
+                         }, sector_word_index, cd_data, mem_cd_hps_we));
 
         if (mem_dma_we) begin
             `dp_dma_write(("DMA Write %x %x", {mem_cpu_addr, 1'b0}, mem_cpu_data));
@@ -422,9 +338,9 @@ module cdic (
     always_ff @(posedge clk) begin
         bus_ack <= 0;
         rdy <= 0;
-        cd_hps_data_valid_q2 <= cd_hps_data_valid_q;
-        cd_hps_data_valid_q <= cd_hps_data_valid;
-        cd_hps_ack_q <= cd_hps_ack;
+        cd_data_valid_q2 <= cd_data_valid_q;
+        cd_data_valid_q <= cd_data_valid;
+        cd_seek_lba_valid <= 0;
 
         audio_start_playback <= 0;
         audio_stop_playback <= 0;
@@ -433,7 +349,6 @@ module cdic (
         if (reset_write_timecode2) write_timecode2 <= 0;
 
         if (reset) begin
-            start_cd_reading_cnt <= 0;
             data_target_buffer <= 0;
             audio_target_buffer <= 0;
             bus_ack <= 0;
@@ -452,8 +367,7 @@ module cdic (
             cd_reading_active <= 0;
             use_sector_data <= 0;
             header_coding <= 0;
-            cd_hps_lba <= 0;
-            cd_hps_req <= 0;
+            cd_seek_lba <= 0;
             cd_data_target_adr <= 0;
             file_match <= 0;
             audio_channel_match <= 0;
@@ -465,22 +379,17 @@ module cdic (
             write_timecode1 <= 0;
             write_timecode2 <= 0;
         end else begin
-
-            if (cd_hps_ack) cd_hps_req <= 0;
-
             if (mem_cd_hps_we) begin
                 cd_data_target_adr <= cd_data_target_adr + 1;
             end
 
-            if (cd_hps_ack_q && !cd_hps_ack && cd_reading_active) begin
+            if (cd_sector_delivered && cd_reading_active) begin
                 $display("Sector written to RAM / has ended");
-                //Get next sector
-                cd_hps_lba <= cd_hps_lba + 1;
                 write_timecode1 <= !read_raw;
                 write_timecode2 <= !read_raw;
             end
 
-            if (cd_hps_data_valid && cd_reading_active) begin
+            if (cd_data_valid && cd_reading_active) begin
                 sector_word_index <= sector_word_index + 1;
 
                 // Reading Order of MODE2 Header Information
@@ -497,48 +406,48 @@ module cdic (
 
                 if (sector_word_index == kSectorHeader_Mode) begin
                     // Mode is in Low byte
-                    header_mode2 <= (cd_hps_data[7:0] == 2) && read_mode2;
+                    header_mode2 <= (cd_data[7:0] == 2) && read_mode2;
                 end
 
                 if (header_mode2) begin
                     if (sector_word_index == kSectorHeader_Submode) begin
                         // Submode is in High Byte
                         // Coding is in Low Byte
-                        header_submode <= cd_hps_data[15:8];
-                        header_coding  <= cd_hps_data[7:0];
+                        header_submode <= cd_data[15:8];
+                        header_coding  <= cd_data[7:0];
                     end
 
                     if (sector_word_index == kSectorHeader_File) begin
                         // File header value must match the file register for all MODE2 sectors
-                        $display("File / Channel %x %x", file_register, cd_hps_data);
-                        if (file_register[15:8] != cd_hps_data[15:8]) begin
+                        $display("File / Channel %x %x", file_register, cd_data);
+                        if (file_register[15:8] != cd_data[15:8]) begin
                             $display("File ignored!");
                         end
 
                         // High Byte is File
-                        file_match <= file_register[15:8] == cd_hps_data[15:8];
+                        file_match <= file_register[15:8] == cd_data[15:8];
                         // Low Byte is Channel
-                        audio_channel_match <= audio_channel_register[cd_hps_data[3:0]];
-                        channel_match <= channel_register[cd_hps_data[4:0]];
+                        audio_channel_match <= audio_channel_register[cd_data[3:0]];
+                        channel_match <= channel_register[cd_data[4:0]];
 
-                        $display("File Match ? %x %x", file_register[15:8], cd_hps_data[15:8]);
+                        $display("File Match ? %x %x", file_register[15:8], cd_data[15:8]);
                         $display("Channel match %b %b bit %d", audio_channel_register,
-                                 channel_register, cd_hps_data[3:0]);
+                                 channel_register, cd_data[3:0]);
                     end
 
                 end
 
                 if (sector_word_index == 6) begin
                     // Time Code 1
-                    header_timecode1 <= cd_hps_data;
+                    header_timecode1 <= cd_data;
                 end
                 if (sector_word_index == 7) begin
                     // Time Code 2 and Mode
-                    header_timecode2 <= cd_hps_data;
+                    header_timecode2 <= cd_data;
                 end
             end
 
-            if (cd_hps_data_valid_q) begin
+            if (cd_data_valid_q) begin
                 if (sector_word_index == 10) begin
                     // Inspired by cdicdic_device::is_mode2_sector_selected(const uint8_t *buffer)
                     // Only apply the filter if MODE2 is used
@@ -564,7 +473,7 @@ module cdic (
             end
 
 
-            if (cd_hps_data_valid_q2) begin
+            if (cd_data_valid_q2) begin
                 if (header_mode2 && use_sector_data && audio_channel_match && sector_word_index == 10 && header_submode.audio) begin
 `ifdef VERILATOR
                     $display("Switching to ADPCM Buffer %x : %s %s %s", header_coding,
@@ -607,17 +516,11 @@ module cdic (
 
             if (done_in) dma_control_register[15] <= 0;
 
-            if (sector_tick) begin
-                if (!hps_transaction_in_progress) sector_word_index <= 0;
-
-                // Simulate seeking time
-                if (start_cd_reading_cnt != 0) begin
-                    if (start_cd_reading_cnt == 1) cd_reading_active <= 1;
-                    start_cd_reading_cnt <= start_cd_reading_cnt - 1;
-                end
+            if (cd_sector_tick) begin
+                sector_word_index <= 0;
             end
 
-            if (cd_reading_active && sector_tick && !hps_transaction_in_progress) begin
+            if (cd_reading_active && cd_sector_tick) begin
                 // Use the same sector buffer again if the current one was filtered out
                 // MAME does that too and it makes sense.
                 // Offset 2 for skipping Time Code, which is inserted later
@@ -627,7 +530,7 @@ module cdic (
                 // With a real CD, it takes one sector to read one sector.
                 // This is not the case here as the CD emulator should be
                 // faster, so we wait until the next sector tick until evaluating it.
-                if (use_sector_data) begin
+                if (use_sector_data && sector_word_index != 0) begin
                     assert (sector_word_index == kWordsPerSector);
                     if (sector_word_index < kWordsPerSector) fail_not_enough_words <= 1;
                     if (sector_word_index > kWordsPerSector) fail_too_much_data <= 1;
@@ -675,9 +578,6 @@ module cdic (
                     end
                 end
 
-                // Request the next sector from HPS if the last one
-                // is fully received
-                cd_hps_req <= 1;
                 use_sector_data <= 1;
             end
 
@@ -692,13 +592,13 @@ module cdic (
                 case (command_register)
                     16'h23: begin
                         $display("CDIC Command: Reset Mode 1");
-                        cd_hps_lba <= time_register_as_lba;
-                        read_mode2 <= 0;
+                        cd_seek_lba <= time_register_as_lba;
+                        read_mode2  <= 0;
                     end
                     16'h24: begin
                         $display("CDIC Command: Reset Mode 2");
-                        cd_hps_lba <= time_register_as_lba;
-                        read_mode2 <= 1;
+                        cd_seek_lba <= time_register_as_lba;
+                        read_mode2  <= 1;
                     end
                     16'h2b: begin
                         // Unknown purpose
@@ -709,37 +609,42 @@ module cdic (
                     end
                     16'h27: begin
                         $display("CDIC Command: Fetch TOC");
-                        start_cd_reading_cnt <= kSeekTime;
                         // Use negative LBA ask for TOC
-                        cd_hps_lba <= 32'hffff0000;
+                        cd_seek_lba <= 32'hffff0000;
+                        cd_seek_lba_valid <= 1;
+                        cd_reading_active <= 1;
                         read_raw <= 1;
                         read_mode2 <= 0;
                     end
                     16'h28: begin
                         $display("CDIC Command: Play CDDA");
-                        cd_hps_lba <= time_register_as_lba;
-                        start_cd_reading_cnt <= kSeekTime;
+                        cd_seek_lba <= time_register_as_lba;
+                        cd_seek_lba_valid <= 1;
+                        cd_reading_active <= 1;
                         read_raw <= 1;
                         read_cdda <= 1;
                         read_mode2 <= 0;
                     end
                     16'h29: begin
                         $display("CDIC Command: Read Mode 1");
-                        start_cd_reading_cnt <= kSeekTime;
-                        cd_hps_lba <= time_register_as_lba;
+                        cd_reading_active <= 1;
+                        cd_seek_lba <= time_register_as_lba;
+                        cd_seek_lba_valid <= 1;
                         read_mode2 <= 0;
                     end
                     16'h2c: begin
                         $display("CDIC Command: Seek");
                         // MAME and cdiemu implement seek as Read Mode 1
-                        start_cd_reading_cnt <= kSeekTime;
-                        cd_hps_lba <= time_register_as_lba;
+                        cd_reading_active <= 1;
+                        cd_seek_lba <= time_register_as_lba;
+                        cd_seek_lba_valid <= 1;
                         read_mode2 <= 0;
                     end
                     16'h2a: begin
                         $display("CDIC Command: Read Mode 2");
-                        start_cd_reading_cnt <= kSeekTime;
-                        cd_hps_lba <= time_register_as_lba;
+                        cd_reading_active <= 1;
+                        cd_seek_lba <= time_register_as_lba;
+                        cd_seek_lba_valid <= 1;
                         read_mode2 <= 1;
                     end
                     default: begin
@@ -857,7 +762,6 @@ module cdic (
                                 // Only then, the Unmute will be performed
                                 audio_control_register[0] <= 0;
                                 sector_word_index <= 0;
-                                start_cd_reading_cnt <= 0;
                             end
                         end
                         default: begin
