@@ -40,6 +40,7 @@ main:
 	; #$00397400 7th Guest Philips Logo
 	; #$55387000 7th Guest ?
 	; #$01341100 Space Ace Intro
+	; #$02140600 Space Ace Intro - Nearly the end (15 frames left)
 	; #$00425900 2 Unlimited – Beyond Limits (Channel 0001)
 	; #$42252600 Burger King - Multilanguage?
 	; #$00152100 VideoCD Example (Channel ffff)
@@ -47,13 +48,22 @@ main:
 	move.w #$0100,$303C06 ; File Register
 	move.l #$ffffffff,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$00323400,$303C02 ; Timer Register
+	move.l #$01341100,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
-
 endless:
+
 	jsr WaitForSectorAndUse
 	jsr WaitForSectorAndUse
-	
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+
 	bra endless
 
 WaitForSectorAndUse:

@@ -12,23 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-struct io_fifo_control
-{
-  uint32_t write_byte_index;
-  uint32_t read_bit_index;
-  uint32_t hw_read_count;
-  uint32_t hw_huffman_read_dct_coeff;
-};
-
-struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;
-
-#define OUTPORT 0x10000000
-#define OUTPORT_END 0x1000000c
-#define OUTPORT_FRAME 0x10000010
-#define OUTPORT_HANDLE_SHARED 0x10000014
-#define OUT_DEBUG *(volatile uint32_t *)0x10000030
-#define INVALIDATE_CACHE *(volatile uint32_t *)0x10001110
-
+#include "hwreg.h"
 #include "memtest.h"
 #include "shared.h"
 

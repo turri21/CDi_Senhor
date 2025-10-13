@@ -91,9 +91,12 @@ module vmpeg (
     );
 
     wire video_fifo_full;
-    wire fmv_event_sequence_header;
-    wire fmv_event_group_of_pictures;
-    wire fmv_event_picture;
+    wire fmv_event_picture_starts_display;
+    wire fmv_event_last_picture_starts_display;
+    wire fmv_event_first_intra_frame_starts_display;
+    wire fmv_event_sequence_header = fmv_event_first_intra_frame_starts_display;
+    wire fmv_event_group_of_pictures = fmv_event_first_intra_frame_starts_display;
+    wire fmv_event_picture = fmv_event_picture_starts_display;
     wire [15:0] fmv_tmpref;
     // TIMECD @ 00E04058
     // [21:16] 6 Bit Frames? Not BCD
@@ -102,7 +105,9 @@ module vmpeg (
     // Where are the hours?
     wire [31:0] fmv_timecode;
     bit fmv_playback_active;
-    wire fmv_event_playback_underflow;
+    wire fmv_event_sequence_end;
+    wire fmv_event_buffer_underflow;
+    wire [3:0] fmv_pictures_in_fifo;
 
     mpeg_video video (
         .clk30(clk),
@@ -121,7 +126,12 @@ module vmpeg (
         .vidout,
         .display_offset_x(video_ctrl_x_display[8:0]),
         .display_offset_y(video_ctrl_y_display[8:0]),
-        .event_playback_underflow(fmv_event_playback_underflow)
+        .event_sequence_end(fmv_event_sequence_end),
+        .event_buffer_underflow(fmv_event_buffer_underflow),
+        .event_picture_starts_display(fmv_event_picture_starts_display),
+        .event_last_picture_starts_display(fmv_event_last_picture_starts_display),
+        .event_first_intra_frame_starts_display(fmv_event_first_intra_frame_starts_display),
+        .pictures_in_fifo(fmv_pictures_in_fifo)
     );
 
     always_ff @(posedge clk) begin
@@ -134,9 +144,9 @@ module vmpeg (
         .reset,
         .mpeg_data(mpeg_data),
         .data_valid(fmv_data_valid && fmv_packet_body),
-        .event_sequence_header(fmv_event_sequence_header),
-        .event_group_of_pictures(fmv_event_group_of_pictures),
-        .event_picture(fmv_event_picture),
+        .event_sequence_header(),
+        .event_group_of_pictures(),
+        .event_picture(),
         .tmpref(fmv_tmpref),
         .timecode(fmv_timecode)
     );
@@ -146,9 +156,13 @@ module vmpeg (
     wire fma_system_clock_reference_start_time_valid;
     wire signed [32:0] fmv_system_clock_reference_start_time;
     wire fmv_system_clock_reference_start_time_valid;
+    wire fmv_event_program_end;
 
     bit [3:0] fmv_stream_number;
     bit [3:0] fma_stream_number;
+
+    wire signed [32:0] fmv_decoding_timestamp;
+    wire fmv_decoding_timestamp_updated;
 
     mpeg_demuxer #(
         .unit("FMA")
@@ -161,7 +175,10 @@ module vmpeg (
         .stream_filter(fma_stream_number),
         .dclk(fma_dclk),
         .system_clock_reference_start_time(fma_system_clock_reference_start_time),
-        .system_clock_reference_start_time_valid(fma_system_clock_reference_start_time_valid)
+        .decoding_timestamp(),
+        .decoding_timestamp_updated(),
+        .system_clock_reference_start_time_valid(fma_system_clock_reference_start_time_valid),
+        .event_program_end()
     );
 
     mpeg_demuxer #(
@@ -175,7 +192,10 @@ module vmpeg (
         .stream_filter(fmv_stream_number),
         .dclk(fma_dclk),
         .system_clock_reference_start_time(fmv_system_clock_reference_start_time),
-        .system_clock_reference_start_time_valid(fmv_system_clock_reference_start_time_valid)
+        .decoding_timestamp(fmv_decoding_timestamp),
+        .decoding_timestamp_updated(fmv_decoding_timestamp_updated),
+        .system_clock_reference_start_time_valid(fmv_system_clock_reference_start_time_valid),
+        .event_program_end(fmv_event_program_end)
     );
 
     typedef struct packed {
@@ -191,7 +211,7 @@ module vmpeg (
 
         bit dcl;   // ?
         bit ovf;   // Overflow ?
-        bit ndat;  // No data ?
+        bit ndat;  // No data ? Underflow ?
         bit rfb;   // Request for bits ?
 
         bit eod;  // End Of Data
@@ -240,6 +260,8 @@ module vmpeg (
     // FMV ISR @ 00E04062
     interrupt_flags_s fmv_interrupt_status_register;
     // FMV IER @ 00E04060
+    // TODO typically 0xf7cf? Masking out NDAT, RFB and VSYNC?
+    // on real hardware it is 0xf7ef which enables NDAT
     interrupt_flags_s fmv_interrupt_enable_register;
     // FMV IVEC @ 00E040DC
     bit [15:0] fmv_interrupt_vector_register = 0;
@@ -264,6 +286,8 @@ module vmpeg (
     bit [15:0] video_ctrl_x_offset = 0;
     bit [15:0] video_ctrl_y_display = 0;
     bit [15:0] video_ctrl_x_display = 0;
+    bit [15:0] video_data_input_command_register = 0;
+
     bit [15:0] image_height2 = 0;
     bit [15:0] image_width2 = 0;
     bit [15:0] image_rt;
@@ -315,10 +339,12 @@ module vmpeg (
             15'h2039: dout = video_ctrl_x_active;  // 0E04072
             15'h203a: dout = video_ctrl_y_display;  // 0E04074
             15'h203b: dout = video_ctrl_x_display;  // 0E04076
-            15'h2050: dout = 16'hffff;  // 00E040A0 ?? Always ffff on cdiemu
-            15'h2052: dout = 16'h0001;  // 00E040A4 ??
-            15'h2055: dout = 16'h0001;  // e040aa ??
-            15'h2056: dout = 16'h0001;  // e040ac ??
+            15'h2046: dout = video_data_input_command_register;  // 0E0408C
+            15'h2050: dout = fmv_decoding_timestamp[22:7];  // 00E040A0 Decoding Timestamp
+            15'h2052: dout = {12'b0, fmv_pictures_in_fifo};  // 00E040A4 ?? Pictures in fifo?
+            15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS
+            15'h2055: dout = 16'h0708;  // e040aa ?? Display Rate ?
+            15'h2056: dout = 16'h01b8;  // e040ac ?? Frame Rate ?
             15'h206e: dout = fmv_interrupt_vector_register;  //
 
             default: ;
@@ -363,11 +389,14 @@ module vmpeg (
             fmv_interrupt_enable_register <= 0;
             fmv_interrupt_status_register <= 0;
             fmv_playback_active <= 0;
+            video_data_input_command_register <= 0;
             mpeg_ram_enabled <= 0;
             mpeg_ram_enabled_cnt <= 0;
             timer_cnt <= 0;
-
         end else begin
+
+            if (fmv_decoding_timestamp_updated) video_data_input_command_register[14] <= 1;
+
             if (vsync && !vsync_q) fmv_interrupt_status_register.vsync <= 1;
 
             if (vsync && !vsync_q) vsync_flipflop <= !vsync_flipflop;
@@ -375,9 +404,12 @@ module vmpeg (
             if (fmv_event_sequence_header) fmv_interrupt_status_register.seq <= 1;
             if (fmv_event_group_of_pictures) fmv_interrupt_status_register.gop <= 1;
             if (fmv_event_picture) fmv_interrupt_status_register.pic <= 1;
-            if (fmv_event_playback_underflow) begin
-                fmv_interrupt_status_register.eod  <= 1;
+            if (fmv_event_last_picture_starts_display) fmv_interrupt_status_register.eod <= 1;
+            if (fmv_event_program_end) fmv_interrupt_status_register.eii <= 1;
+            if (fmv_event_sequence_end) fmv_interrupt_status_register.esi <= 1;
+            if (fmv_event_buffer_underflow) begin
                 fmv_interrupt_status_register.ndat <= 1;
+                $display("FMV Underflow");
             end
 
             if (event_decoding_started) begin
@@ -418,7 +450,7 @@ module vmpeg (
                 end
 
                 if (fmv_system_clock_reference_start_time_valid && fma_dclk == fmv_system_clock_reference_start_time[32:1] && !fmv_playback_active) begin
-                    fmv_playback_active <= 1;
+                    // fmv_playback_active <= 1;
                 end
 
             end else begin
@@ -529,6 +561,7 @@ module vmpeg (
 	                          FMV SYSCMD 8000 DMA
 
 	                        according to fmvd.txt
+                              0008 Play
                               0010 Pause
 	                          0100 Clear FIFO
 	                          1000 Decoder on
@@ -540,6 +573,14 @@ module vmpeg (
                             if (din[15]) begin  // 8000 DMA
                                 dma_active  <= 1;
                                 dma_for_fma <= 0;
+                            end
+
+                            if (din[3]) begin  // 0008 Play
+                                fmv_playback_active <= 1;
+                            end
+
+                            if (din[4]) begin  // 0010 Pause
+                                fmv_playback_active <= 0;
                             end
 
                             if (din[8]) begin  // 0100 Clear FIFO? What to do?
@@ -591,6 +632,10 @@ module vmpeg (
                         15'h203b: begin
                             $display("FMV Write X Display %x %x ?", address[15:1], din);
                             video_ctrl_x_display <= din;
+                        end
+                        15'h2046: begin
+                            $display("FMV Write GEN_VDI_CMD %x %x ?", address[15:1], din);
+                            video_data_input_command_register <= din;
                         end
                         15'h2001: begin
                             $display("FMV Write Image Width2 %x %x", address[15:1], din);

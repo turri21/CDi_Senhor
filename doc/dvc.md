@@ -302,70 +302,66 @@ just before this
 
 
 
-*****************************************************************************
-*
-* UpdateSCR - Update V_SCR
-*
-* Input:	(a2) = pointer to the static storage
-*
-* Output:	Nothing
-*
-UpdateSCR:	equ		*
-			move.b	V_BufStat(a2),d0	get current state
-			cmpi.b	#waitfirst,d0		waiting for a sector?
-			beq.s	SetVSCR				yes, update always (maybe not valid)
-			cmpi.b	#waitstart,d0		filling up buffer?
-			beq.s	SetVSCR				yes, update always
-			cmpi.b	#waitnormal,d0		trying to reach normal level?
-			beq.s	SetVSCR				yes, update SCR always
-* update V_SCR according current speed
-			move.l	V_ChipSpd(a2),d1	get chipspeed
-			bne.s	TestSpeeds			not normal speed, test others
-			cmpi.b	#waitsector,d0		waiting for a sector?
-			beq.s	SkipSCRupd			yes, it is paused => no update
-	DTSRC	move.w,V_Status,d1			get current status
-			andi.w	#TIMmask+PAImask,d1		was timer or pause int.?
-			beq.s	SkipSCRupd			no, do not change SCR
-SetVSCR		equ		*
-			bsr		UpdSCR				read external source
-SkipSCRupd	equ		*
-			rts
+Interrupt Service Routine for FMV:
 
-SPTable		dc.w	0					speed = 1 (illegal)
-			dc.w	(4*TimerVal)/2		speed = 2
-			dc.w	(4*TimerVal)/3		speed = 3
-			dc.w	(4*TimerVal)/4		speed = 4
-			dc.w	(4*TimerVal)/5		speed = 5
-			dc.w	(4*TimerVal)/6		speed = 6
-			dc.w	(4*TimerVal)/7		speed = 7
-			dc.w	(4*TimerVal)/8		speed = 8
+00e52e46  00002400 00000168 00000012 00000035 00000013 00dfd3d4 0040817c 008c2000  00e52e42 00dfee60 00dfb180 00e04000 00dfcc30 00dfd3e8 00001500 00dff350
 
-TestSpeeds	equ		*
+A2 is 00dfb180 and should be the driver state
+A3 is 00e04000 which is the base of FMV registers
 
+Memory Map
 
+  00e52e46 IrqSrvc
+  00e52f54 UpdateSCR
+  00e52f5c PC inside UpdateSCR where D0 is V_BufStat(a2)
+  00e52ffe CheckSpeed
+  00e53052 CheckLevel
+  00e5312a HandleData
+  00e53312 H_DataExit (end of HandleData)
+  00e53318 NotReady
+  00e533ee WaitStart
+  00e535b4 HandleWaitS
+  00e536ee HandleFirst
+  00e53802 CopyPack
+  00e544b6 DecodTS
+  00e54546 Copy_It
+  00e54610 UpdPCLPtr
+  
 
+  00dfb180 Driver state (A2)
+  V_DataSize *(unsigned long*)(0x00dfb180 + 0x126)
+  V_Stat *(unsigned short*)(0x00dfb180 + 0x134)
+  V_BufStat *(unsigned char*)(0x00dfb180 + 0x17b)
+  V_ExtSCR *(unsigned long*)(0x00dfb180 + 0x154)
+  V_SCRF *(unsigned long*)(0x00dfb180 + 0x11c)
+  V_Count90 *(unsigned long*)(0x00dfb180 + 0x118)
+  V_SCR *(unsigned long*)(0x00dfb180 + 0xca)
+  V_CurDelta *(unsigned long*)(0x00dfb180 + 0x104)
+  V_NewDelta *(unsigned long*)(0x00dfb180 + 0x108)
+  V_SCRupd *(unsigned long*)(0x00dfb180 + 0x166)
+  V_Status  *(unsigned short*)(0x00dfb180 + 0x136)
+  V_PICCnt *(unsigned char*)(0x00dfb180 + 0x1cd)
 
-                             **************************************************************
-                             *                          FUNCTION                          *
-                             **************************************************************
-                             undefined FUN_00e52f54()
-             undefined         D0b:1          <RETURN>
-                             FUN_00e52f54                                    XREF[1]:     00e52f02(c)  
-        00e52f54 10 2a 01 7b     move.b     (0x17b,A2),D0b
-        00e52f58 0c 00 00 20     cmpi.b     #0x20,D0b
-        00e52f5c 67 22           beq.b      LAB_00e52f80
-        00e52f5e 0c 00 00 21     cmpi.b     #0x21,D0b
-        00e52f62 67 1c           beq.b      LAB_00e52f80
-        00e52f64 0c 00 00 22     cmpi.b     #0x22,D0b
-        00e52f68 67 16           beq.b      LAB_00e52f80
-        00e52f6a 22 2a 01 96     move.l     (0x196,A2),D1
-        00e52f6e 66 26           bne.b      LAB_00e52f96
-        00e52f70 0c 00 00 23     cmpi.b     #0x23,D0b
-        00e52f74 67 0e           beq.b      LAB_00e52f84
-        00e52f76 32 2a 01 36     move.w     (0x136,A2),D1w
-        00e52f7a 02 41 11 00     andi.w     #0x1100,D1w
-        00e52f7e 67 04           beq.b      LAB_00e52f84
+V_BufStat
 
-
-emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc at 00e53238 for catching
-just before this
+  normal		equ		1   
+  slow	  	equ		2
+  scanning	equ		3
+  single		equ		4
+  paused		equ		5
+  frozen		equ		6
+  decoding	equ		7
+  stopped		equ		8
+  stopping	equ		9
+  waiting		equ		10
+  released	equ		11
+  error		  equ		12
+  reading		equ		13
+  playing		equ		14
+  idle		  equ		15
+  pausing		equ		16
+  * The following values are only used in the V_BufStat field.
+  waitfirst	equ		32   0x20 operation seems to start here 
+  waitstart	equ		33   0x21 set in StrtPlay?
+  waitnormal	equ		34
+  waitsector	equ		35

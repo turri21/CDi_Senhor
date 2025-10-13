@@ -665,6 +665,10 @@ class CDi {
         // Trace CPU state
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__decodeopc &&
             dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__clkena_in) {
+
+            uint32_t pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
+            if (pc >= 0xe40000 && pc < 0xe7ffff)
+                printstate();
         }
 #endif
 
@@ -783,13 +787,17 @@ class CDi {
             assert(pixels);
             plm_frame_to_bgr(&frame_convert, pixels, w * 3); // BMP expects BGR ordering
 
+#ifdef TRACE
+            // do_trace = true;
+#endif
             sprintf(bmp_name, "%d/%03d.bmp", instanceid, fmv_frame_cnt);
             printf("FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
-                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__readyframes__DOT__cnt_clkin);
+                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk60);
+            ;
             fprintf(stderr, "FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
                     dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
-                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__readyframes__DOT__cnt_clkin);
+                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk60);
 
             write_bmp(bmp_name, w, h, pixels);
 
@@ -812,9 +820,9 @@ class CDi {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv_m1v);
             }
 #ifdef TRACE
-            // if (!do_trace)
-            //     fprintf(stderr, "Trace on!\n");
-            // do_trace = true;
+            if (!do_trace)
+                fprintf(stderr, "Trace on!\n");
+            do_trace = true;
 #endif
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {

@@ -7,38 +7,13 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
 
-struct io_fifo_control
-{
-	uint32_t write_byte_index;
-	uint32_t read_bit_index;
-	uint32_t hw_read_count;
-	uint32_t hw_huffman_read_dct_coeff;
-};
-
-struct frame_display_fifo
-{
-	uint32_t y_adr;
-	uint32_t u_adr;
-	uint32_t v_adr;
-	uint32_t width;
-	uint32_t height;
-	uint32_t frameperiod; // ticks of 30 MHz
-};
-
-struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;
-struct frame_display_fifo *const frame_display_fifo = (struct frame_display_fifo *)0x10003000;
-
-#define OUTPORT 0x10000000
-#define OUTPORT_END 0x1000000c
-#define OUTPORT_FRAME 0x10000010
-#define OUTPORT_HANDLE_SHARED 0x10000014
-
-#define OUT_DEBUG *(volatile uint32_t *)0x10000030
+#include "hwreg.h"
 
 #include "shared.h"
 #include "memtest.h"
@@ -137,6 +112,7 @@ void main(void)
 		*((volatile uint8_t *)OUTPORT_END) = 3;
 
 	int cnt = 0;
+	bool first_intra_frame_occured = false;
 
 	for (;;)
 	{
@@ -165,9 +141,25 @@ void main(void)
 			frame_display_fifo->y_adr = (uint32_t)frame->y.data;
 			frame_display_fifo->u_adr = (uint32_t)frame->cb.data;
 			frame_display_fifo->v_adr = (uint32_t)frame->cr.data;
+
+			if (frame->temporal_ref == 0)
+				first_intra_frame_occured = false;
+
+			if (!first_intra_frame_occured && frame->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA)
+			{
+				first_intra_frame_occured = true;
+				frame_display_fifo->first_intra_frame_of_gop = 1;
+			}
+			else
+			{
+				frame_display_fifo->first_intra_frame_of_gop = 0;
+			}
+
 			frame_display_fifo->width = frame->width;
 			frame_display_fifo->height = frame->height;
 			frame_display_fifo->frameperiod = mpeg->framerate;
+			frame_display_fifo->fractional_pixel_width = mpeg->pixel_aspect_ratio;
+
 			__asm volatile("" : : : "memory");
 
 			cnt++;

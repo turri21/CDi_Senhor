@@ -17,7 +17,6 @@ firmware.mem: firmware.bin
 	wc firmware.mem
 	cp firmware.mem ../../rtl/mpeg/fmv/firmware.mem
 
-
 firmware2.mem: firmware2.bin
 	objcopy -I binary -O binary --reverse-bytes=4 firmware2.bin firmware2_swap.bin
 	xxd -p -c4 firmware2_swap.bin firmware2.mem
@@ -51,10 +50,10 @@ firmware2.lst: firmware2.elf
 start.o: start.S
 	$(TOOLCHAIN_PREFIX)gcc -c $(CFLAGS) -o $@ $<
 
-main.o: main.c pl_mpeg.h shared.h memtest.h
+main.o: main.c *.h
 	$(TOOLCHAIN_PREFIX)gcc -c $(CFLAGS) -o main.o main.c
 
-main2.o: main2.c pl_mpeg.h shared.h memtest.h
+main2.o: main2.c *.h
 	$(TOOLCHAIN_PREFIX)gcc -c $(CFLAGS) -o main2.o main2.c
 
 

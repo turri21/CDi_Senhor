@@ -22,7 +22,12 @@ module mpeg_video (
 
     input [8:0] display_offset_y,
     input [8:0] display_offset_x,
-    output event_playback_underflow
+    output event_sequence_end,
+    output event_buffer_underflow,
+    output bit event_picture_starts_display,
+    output event_last_picture_starts_display,
+    output bit event_first_intra_frame_starts_display,
+    output [3:0] pictures_in_fifo
 );
 
     ddr_if worker_2_ddr ();
@@ -501,11 +506,20 @@ module mpeg_video (
     bit [31:0] frame_y_adr  /*verilator public_flat_rd*/;
     wire expose_frame_struct_adr_clk60  = (dmem_cmd_payload_address_1 == 32'h10000010 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
     wire expose_frame_y_adr_clk60  = (dmem_cmd_payload_address_1 == 32'h10000018 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
+    wire event_buffer_underflow_clk60  = (dmem_cmd_payload_address_1 == 32'h10003024 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
+
     bit [31:0] soft_state1  /*verilator public_flat_rd*/ = 0;
     bit [31:0] soft_state2  /*verilator public_flat_rd*/ = 0;
     bit [31:0] soft_state3  /*verilator public_flat_rd*/ = 0;
     wire expose_frame_struct_adr  /*verilator public_flat_rd*/;
     wire expose_frame_y_adr  /*verilator public_flat_rd*/;
+
+    flag_cross_domain cross_event_sequence_end (
+        .clk_a(clk60),
+        .clk_b(clk30),
+        .flag_in_clk_a(event_sequence_end_clk60),
+        .flag_out_clk_b(event_sequence_end)
+    );
 
     flag_cross_domain cross_expose_frame_struct_adr (
         .clk_a(clk60),
@@ -519,6 +533,13 @@ module mpeg_video (
         .clk_b(clk30),
         .flag_in_clk_a(expose_frame_y_adr_clk60),
         .flag_out_clk_b(expose_frame_y_adr)
+    );
+
+    flag_cross_domain cross_event_buffer_underflow (
+        .clk_a(clk60),
+        .clk_b(clk30),
+        .flag_in_clk_a(event_buffer_underflow_clk60),
+        .flag_out_clk_b(event_buffer_underflow)
     );
 
     always_ff @(posedge clk60) begin
@@ -745,6 +766,8 @@ module mpeg_video (
 
         shared_buffer_level <= shared_buffer_level + (shared_buffer_level_inc ? 1:0) - (shared_buffer_level_dec1 ? 1 : 0) - (shared_buffer_level_dec2 ? 1:0);
 
+        event_sequence_end_clk60 <= 0;
+
         if (dmem_cmd_payload_address_1 == 32'h1000000c && dmem_cmd_payload_write_1 && dmem_cmd_valid_1)begin
             $display("Core 1 stopped at %x with code %x", imem_cmd_payload_address_1,
                      dmem_cmd_payload_data_1);
@@ -779,8 +802,17 @@ module mpeg_video (
                         decoder_width <= dmem_cmd_payload_data_1[8:0];
                     if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
                         decoder_height <= dmem_cmd_payload_data_1[8:0];
+
                     if (dmem_cmd_payload_address_1[15:0] == 16'h3014)
                         frame_period_clk60 <= dmem_cmd_payload_data_1[23:0];
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
+                        fractional_pixel_width_clk60 <= dmem_cmd_payload_data_1[8:0];
+
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h301c) event_sequence_end_clk60 <= 1;
+
+                    if (dmem_cmd_payload_address_1[15:0] == 16'h3020)
+                        just_decoded.first_intra_frame_of_gop <= dmem_cmd_payload_data_1[0];
+
                 end
                 4'd0: begin
                 end
@@ -1097,34 +1129,52 @@ module mpeg_video (
     wire for_display_valid;
     bit latch_frame_for_display;
     wire latch_frame_for_display_clk60;
+    bit event_sequence_end_clk60;
 
     // 30 MHz clock rate and 25 Hz frame rate -> 1200000
+    bit [8:0] fractional_pixel_width_clk60;
     bit [23:0] frame_period_clk60 = 1200000;
     bit [23:0] frame_period = 1200000;
     bit [23:0] playback_frame_cnt;
 
-    bit playback_underflow_latch;
-    bit playback_underflow_latch_q;
-    assign event_playback_underflow = playback_underflow_latch && !playback_underflow_latch_q;
+    bit latch_frame_until_vblank = 0;
+    bit first_intra_frame_of_gop_in_prep;
     // In theory this machine could run with clk60.
     // But I'm not so sure about the final frequency and timing is vital
+
+    bit vblank_q1;
+    bit vblank_q2;
+
     always_ff @(posedge clk30) begin
+        vblank_q1 <= vblank;
+        vblank_q2 <= vblank_q1;
+
         frame_period <= frame_period_clk60;
-        playback_underflow_latch_q <= playback_underflow_latch;
+
+        event_picture_starts_display <= 0;
+        event_first_intra_frame_starts_display <= 0;
+        event_last_picture_starts_display <= 0;
 
         latch_frame_for_display <= 0;
 
+        if (latch_frame_until_vblank && !vblank && vblank_q1 && vblank_q2) begin
+            latch_frame_until_vblank <= 0;
+            event_picture_starts_display <= 1;
+            event_first_intra_frame_starts_display <= first_intra_frame_of_gop_in_prep;
+            event_last_picture_starts_display <= !for_display_valid;
+        end
+
         if (!playback_active) begin
             playback_frame_cnt <= 0;
-            playback_underflow_latch <= 0;
         end else begin
             playback_frame_cnt <= playback_frame_cnt + 1;
 
-            // Only for simulation. Ensure that frames are always available - no underflow
-            if (playback_frame_cnt == 0 && !for_display_valid) playback_underflow_latch <= 1;
-
             if (playback_frame_cnt == frame_period - 1) playback_frame_cnt <= 0;
-            if (playback_frame_cnt == 0 && for_display_valid) latch_frame_for_display <= 1;
+            if (playback_frame_cnt == 0 && for_display_valid) begin
+                latch_frame_for_display <= 1;
+                latch_frame_until_vblank <= 1;
+                first_intra_frame_of_gop_in_prep <= for_display.first_intra_frame_of_gop;
+            end
         end
     end
 
@@ -1135,17 +1185,35 @@ module mpeg_video (
         .flag_out_clk_b(latch_frame_for_display_clk60)
     );
 
+    wire [3:0] pictures_in_fifo_clk60  /*verilator public_flat_rd*/;
+    wire [3:0] pictures_in_fifo_clk60_gray_d;
+    bit  [3:0] pictures_in_fifo_clk60_gray_q;
+    bit  [3:0] pictures_in_fifo_clk30_gray;
+    b2g_converter #(
+        .WIDTH(4)
+    ) pictures_in_fifo_b2g (
+        .binary(pictures_in_fifo_clk60),
+        .gray  (pictures_in_fifo_clk60_gray_d)
+    );
+    always_ff @(posedge clk60) pictures_in_fifo_clk60_gray_q <= pictures_in_fifo_clk60_gray_d;
+    always_ff @(posedge clk30) pictures_in_fifo_clk30_gray <= pictures_in_fifo_clk60_gray_q;
+    g2b_converter #(
+        .WIDTH(4)
+    ) pictures_in_fifo_g2b (
+        .binary(pictures_in_fifo),
+        .gray  (pictures_in_fifo_clk30_gray)
+    );
+
 
     yuv_frame_adr_fifo readyframes (
-        .clk_in(clk60),
-        .reset_in(reset_dsp_enabled_clk60),
+        .clk(clk60),
+        .reset(reset_dsp_enabled_clk60),
         .wdata(just_decoded),
         .we(just_decoded_commit),
-        .reset_out(reset_dsp_enabled_clk60),
-        .clk_out(clk60),
         .strobe(latch_frame_for_display_clk60),
         .valid(for_display_valid),
-        .q(for_display)
+        .q(for_display),
+        .cnt(pictures_in_fifo_clk60)
     );
 
     frameplayer frameplayer (

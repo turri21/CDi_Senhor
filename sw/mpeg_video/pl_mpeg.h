@@ -205,6 +205,8 @@ typedef struct {
 	plm_plane_t y;
 	plm_plane_t cr;
 	plm_plane_t cb;
+	int picture_type;
+	int temporal_ref;
 } plm_frame_t;
 
 
@@ -1055,8 +1057,8 @@ int plm_buffer_read(plm_buffer_t *self, int count);
 void plm_buffer_align(plm_buffer_t *self);
 void plm_buffer_skip(plm_buffer_t *self, size_t count);
 int plm_buffer_skip_bytes(plm_buffer_t *self, uint8_t v);
-int plm_buffer_next_start_code(plm_dma_buffer_t *self);
-int plm_buffer_find_start_code(plm_dma_buffer_t *self, int code);
+int plm_dma_buffer_next_start_code(plm_dma_buffer_t *self);
+int plm_dma_buffer_find_start_code(plm_dma_buffer_t *self, int code);
 int plm_buffer_no_start_code(plm_buffer_t *self);
 int16_t plm_buffer_read_vlc(plm_buffer_t *self, const plm_vlc_t *table);
 uint16_t plm_buffer_read_vlc_uint(plm_buffer_t *self, const plm_vlc_uint_t *table);
@@ -1284,10 +1286,15 @@ int plm_buffer_has_ended(plm_buffer_t *self) {
 	return self->has_ended;
 }
 
-static inline void plm_dma_buffer_wait_for_data(plm_dma_buffer_t *self, size_t count) {
+static inline void plm_dma_buffer_wait_for_data(plm_dma_buffer_t *self, size_t count)
+{
 	__asm volatile("" : : : "memory");
-	while (((fifo_ctrl->write_byte_index << 3) - fifo_ctrl->read_bit_index) < count) {
-        __asm volatile("" : : : "memory");
+	uint32_t timeout = 800000;
+	while (((fifo_ctrl->write_byte_index << 3) - fifo_ctrl->read_bit_index) < count)
+	{
+		if (timeout-- == 0)
+			frame_display_fifo->event_buffer_underflow = 1;
+		__asm volatile("" : : : "memory");
 	}
 }
 
@@ -1372,42 +1379,17 @@ void plm_buffer_align(plm_buffer_t *self) {
 	self->bit_index = ((self->bit_index + 7) >> 3) << 3; // Align to next byte
 }
 
-void plm_buffer_skip(plm_buffer_t *self, size_t count) {
-	if (plm_buffer_has(self, count)) {
-		self->bit_index += count;
-	}
-}
-
 void plm_dma_buffer_skip(plm_dma_buffer_t *self, size_t count) {
 	plm_dma_buffer_wait_for_data(self,count);
 	fifo_ctrl->read_bit_index += count;
 }
 
-int plm_dma_buffer_skip_bytes(plm_dma_buffer_t *self, uint8_t v) {
-	plm_dma_buffer_align(self);
-	int skipped = 0;
-	while (plm_dma_buffer_has(self, 8) && self->bytes[fifo_ctrl->read_bit_index >> 3] == v) {
-		fifo_ctrl->read_bit_index += 8;
-		skipped++;
-	}
-	return skipped;
-}
-
-int plm_buffer_skip_bytes(plm_buffer_t *self, uint8_t v) {
-	plm_buffer_align(self);
-	int skipped = 0;
-	while (plm_buffer_has(self, 8) && self->bytes[self->bit_index >> 3] == v) {
-		self->bit_index += 8;
-		skipped++;
-	}
-	return skipped;
-}
-
+static const int PLM_START_SEQ_END = 0xB7;
 
 int plm_dma_buffer_next_start_code(plm_dma_buffer_t *self) {
 	plm_dma_buffer_align(self);
 
-	while (plm_dma_buffer_has(self, (5 << 3))) {
+	while (plm_dma_buffer_has(self, (4 << 3))) {
 		size_t byte_index = (fifo_ctrl->read_bit_index) >> 3;
 		if (
 			self->bytes[byte_index] == 0x00 &&
@@ -1415,7 +1397,16 @@ int plm_dma_buffer_next_start_code(plm_dma_buffer_t *self) {
 			self->bytes[byte_index + 2] == 0x01
 		) {
 			fifo_ctrl->read_bit_index = (byte_index + 4) << 3;
-			return self->bytes[byte_index + 3];
+
+			int startcode = self->bytes[byte_index + 3];
+
+			if (startcode == PLM_START_SEQ_END)
+			{
+				frame_display_fifo->event_sequence_end=1;
+				__asm volatile("" : : : "memory");
+			}
+
+			return startcode;
 		}
 		fifo_ctrl->read_bit_index += 8;
 	}
@@ -1431,60 +1422,6 @@ int plm_dma_buffer_find_start_code(plm_dma_buffer_t *self, int code) {
 		}
 	}
 	return -1;
-}
-
-
-int plm_buffer_next_start_code(plm_dma_buffer_t *self) {
-	plm_dma_buffer_align(self);
-
-	while (plm_dma_buffer_has(self, (5 << 3))) {
-		size_t byte_index = (fifo_ctrl->read_bit_index) >> 3;
-		if (
-			self->bytes[byte_index] == 0x00 &&
-			self->bytes[byte_index + 1] == 0x00 &&
-			self->bytes[byte_index + 2] == 0x01
-		) {
-			fifo_ctrl->read_bit_index = (byte_index + 4) << 3;
-			return self->bytes[byte_index + 3];
-		}
-		fifo_ctrl->read_bit_index += 8;
-	}
-	return -1;
-}
-
-int plm_buffer_find_start_code(plm_dma_buffer_t *self, int code) {
-	int current = 0;
-	while (TRUE) {
-		current = plm_buffer_next_start_code(self);
-		if (current == code || current == -1) {
-			return current;
-		}
-	}
-	return -1;
-}
-
-#if 0
-int plm_buffer_has_start_code(plm_buffer_t *self, int code) {
-	size_t previous_bit_index = self->bit_index;
-	int previous_discard_read_bytes = self->discard_read_bytes;
-	
-	self->discard_read_bytes = FALSE;
-	int current = plm_buffer_find_start_code(self, code);
-
-	self->bit_index = previous_bit_index;
-	self->discard_read_bytes = previous_discard_read_bytes;
-	return current;
-}
-#endif
-
-int plm_buffer_peek_non_zero(plm_buffer_t *self, int bit_count) {
-	if (!plm_buffer_has(self, bit_count)) {
-		return FALSE;
-	}
-
-	int val = plm_buffer_read(self, bit_count);
-	self->bit_index -= bit_count;
-	return val != 0;
 }
 
 int plm_dma_buffer_peek_non_zero(plm_dma_buffer_t *self, int bit_count) {
@@ -1508,7 +1445,6 @@ int16_t plm_dma_buffer_read_vlc(plm_dma_buffer_t *self, const plm_vlc_t *table) 
 uint16_t plm_dma_buffer_read_vlc_uint(plm_dma_buffer_t *self, const plm_vlc_uint_t *table) {
 	return (uint16_t)plm_dma_buffer_read_vlc(self, (const plm_vlc_t *)table);
 }
-
 
 
 // ----------------------------------------------------------------------------
@@ -1565,8 +1501,26 @@ static const int PLM_START_USER_DATA = 0xB2;
 #define PLM_START_IS_SLICE(c) \
 	(c >= PLM_START_SLICE_FIRST && c <= PLM_START_SLICE_LAST)
 
-#define TICKS_30MHZ(x) (x ? 30000000.0/x : 10000)
+#define FRACTIONAL_ASPECT_RATIO(x) (256.0 * x)
 
+static const float PLM_VIDEO_PIXEL_ASPECT_RATIO[] = {
+	FRACTIONAL_ASPECT_RATIO(1.0000), /* square pixels */
+	FRACTIONAL_ASPECT_RATIO(0.6735), /* 3:4? */
+	FRACTIONAL_ASPECT_RATIO(0.7031), /* MPEG-1 / MPEG-2 video encoding divergence? */
+	FRACTIONAL_ASPECT_RATIO(0.7615), 
+	FRACTIONAL_ASPECT_RATIO(0.8055),
+	FRACTIONAL_ASPECT_RATIO(0.8437),
+	FRACTIONAL_ASPECT_RATIO(0.8935),
+	FRACTIONAL_ASPECT_RATIO(0.9157),
+	FRACTIONAL_ASPECT_RATIO(0.9815),
+	FRACTIONAL_ASPECT_RATIO(1.0255),
+	FRACTIONAL_ASPECT_RATIO(1.0695),
+	FRACTIONAL_ASPECT_RATIO(1.0950),
+	FRACTIONAL_ASPECT_RATIO(1.1575),
+	FRACTIONAL_ASPECT_RATIO(1.2051),
+};
+
+#define TICKS_30MHZ(x) (x ? 30000000.0/x : 10000)
 static const uint32_t PLM_VIDEO_PICTURE_RATE[] = {
 	TICKS_30MHZ(0.000),
 	TICKS_30MHZ(23.976),
@@ -1991,6 +1945,7 @@ struct plm_video_t {
 
 	int start_code;
 	int picture_type;
+	int temporal_ref;
 
 	plm_video_motion_t motion_forward;
 	plm_video_motion_t motion_backward;
@@ -2062,7 +2017,7 @@ plm_video_t * plm_video_create_with_buffer(plm_dma_buffer_t *buffer, int destroy
 	self->destroy_buffer_when_done = destroy_when_done;
 
 	// Attempt to decode the sequence header
-	self->start_code = plm_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
+	self->start_code = plm_dma_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
 	if (self->start_code != -1) {
 		plm_video_decode_sequence_header(self);
 	}
@@ -2119,7 +2074,7 @@ plm_frame_t *plm_video_decode(plm_video_t *self) {
 	do {
 		OUT_DEBUG = 2;
 		if (self->start_code != PLM_START_PICTURE) {
-			self->start_code = plm_buffer_find_start_code(self->buffer, PLM_START_PICTURE);
+			self->start_code = plm_dma_buffer_find_start_code(self->buffer, PLM_START_PICTURE);
 			
 			if (self->start_code == -1) {
 				// If we reached the end of the file and the previously decoded
@@ -2173,7 +2128,7 @@ int plm_video_has_header(plm_video_t *self) {
 	}
 
 	if (self->start_code != PLM_START_SEQUENCE) {
-		self->start_code = plm_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
+		self->start_code = plm_dma_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
 	}
 	if (self->start_code == -1) {
 		return FALSE;
@@ -2202,7 +2157,6 @@ int plm_video_decode_sequence_header(plm_video_t *self) {
 	// Get pixel aspect ratio
 	int pixel_aspect_ratio_code;
 	pixel_aspect_ratio_code = plm_dma_buffer_read(self->buffer, 4);
-	#if 0
 	pixel_aspect_ratio_code -= 1;
 	if (pixel_aspect_ratio_code < 0) {
 		pixel_aspect_ratio_code = 0;
@@ -2214,7 +2168,6 @@ int plm_video_decode_sequence_header(plm_video_t *self) {
 	}
 	self->pixel_aspect_ratio =
 		PLM_VIDEO_PIXEL_ASPECT_RATIO[pixel_aspect_ratio_code];
-	#endif
 
 	// Get frame rate
 	self->framerate = PLM_VIDEO_PICTURE_RATE[plm_dma_buffer_read(self->buffer, 4)];
@@ -2259,7 +2212,7 @@ int plm_video_decode_sequence_header(plm_video_t *self) {
 	size_t luma_plane_size = self->luma_width * self->luma_height;
 	size_t chroma_plane_size = self->chroma_width * self->chroma_height;
 	size_t frame_data_size = (luma_plane_size + 2 * chroma_plane_size);
-	*((volatile uint32_t *)OUTPORT) = frame_data_size;
+	
 	self->frames_data = (uint8_t*)0;
 	self->fbindex = 0;
 	plm_video_init_frame(self, &self->frame_current, self->frames_data + frame_data_size * 0);
@@ -2295,7 +2248,7 @@ void plm_video_init_frame(plm_video_t *self, plm_frame_t *frame, uint8_t *base) 
 void plm_video_decode_picture(plm_video_t *self) {
 	OUT_DEBUG = 3;
 
-	plm_dma_buffer_skip(self->buffer, 10); // skip temporalReference
+	self->temporal_ref = plm_dma_buffer_read(self->buffer, 10);
 	self->picture_type = plm_dma_buffer_read(self->buffer, 3);
 	plm_dma_buffer_skip(self->buffer, 16); // skip vbv_delay
 
@@ -2344,7 +2297,7 @@ void plm_video_decode_picture(plm_video_t *self) {
 
 	// Find first slice start code; skip extension and user data
 	do {
-		self->start_code = plm_buffer_next_start_code(self->buffer);
+		self->start_code = plm_dma_buffer_next_start_code(self->buffer);
 	} while (
 		self->start_code == PLM_START_EXTENSION || 
 		self->start_code == PLM_START_USER_DATA
@@ -2352,6 +2305,10 @@ void plm_video_decode_picture(plm_video_t *self) {
 
 	// Decode all slices
 	self->frame_current = self->framebuffers[self->fbindex];
+
+	self->frame_current.picture_type = self->picture_type;
+	self->frame_current.temporal_ref = self->temporal_ref;
+
 	self->fbindex++;
 	if (self->fbindex==20)
 		self->fbindex=0;
@@ -2363,7 +2320,7 @@ void plm_video_decode_picture(plm_video_t *self) {
 		if (self->macroblock_address >= self->mb_size - 2) {
 			break;
 		}
-		self->start_code = plm_buffer_next_start_code(self->buffer);
+		self->start_code = plm_dma_buffer_next_start_code(self->buffer);
 	}
 
 	// If this is a reference picture rotate the prediction pointers
@@ -2764,7 +2721,9 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 #if 0
 		uint16_t coeff = plm_dma_buffer_read_vlc_uint(self->buffer, PLM_VIDEO_DCT_COEFF);
 #else
-		while (!plm_dma_buffer_has(self->buffer, 50));
+		// We assume a requirement for 16 bits.
+		// This is huffman encoded, so the length will vary. But 16 is the maximum
+		while (!plm_dma_buffer_has(self->buffer, 16));
 		fifo_ctrl->hw_huffman_read_dct_coeff=1;
 		__asm volatile("" : : : "memory");
 		uint16_t coeff = fifo_ctrl->hw_huffman_read_dct_coeff;
