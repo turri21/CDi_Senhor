@@ -301,16 +301,16 @@ module frameplayer (
 
 
     always_comb begin
-        bit signed [9:0] y, u, v;
+        bit signed [9:0] Y, Cb, Cr;
 
-        y = {2'b00, current_color.y};
-        u = {2'b00, current_color.u};
-        v = {2'b00, current_color.v};
+        Y = {2'b00, current_color.y};
+        Cb = {2'b00, current_color.u};
+        Cr = {2'b00, current_color.v};
 
-        // According to chapter 7.1 DELTA YUV DECODER
-        r = (y * 256 + 351 * (v - 128)) / 256;
-        g = (y * 256 - 86 * (u - 128) - 179 * (v - 128)) / 256;
-        b = (y * 256 + 444 * (u - 128)) / 256;
+        // According to ITU-R BT.601
+        r = ((Y - 16) * 298 + 409 * (Cr - 128)) / 256;
+        g = ((Y - 16) * 298 - 100 * (Cb - 128) - 208 * (Cr - 128)) / 256;
+        b = ((Y - 16) * 298 + 516 * (Cb - 128)) / 256;
 
         vidout.r = clamp8(r);
         vidout.g = clamp8(g);
