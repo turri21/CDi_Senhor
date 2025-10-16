@@ -40,9 +40,9 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  13,988 / 41,910 ( 33 % )
-    Total registers              16579
-    Total block memory bits      785,920 / 5,662,720 ( 14 % )
+    Logic utilization (in ALMs)  14,000 / 41,910 ( 33 % )
+    Total registers              16510
+    Total block memory bits      1,179,136 / 5,662,720 ( 21 % )
     Total DSP Blocks             66 / 112 ( 59 % )
 
 ### TODOs

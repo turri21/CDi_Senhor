@@ -17,10 +17,16 @@ module hps_cd_sector_cache (
     input sector_tick,
     output bit sector_delivered
 );
-    // With 13 bit, we get 8192 words
-    // A sector is currently 1188 words. (0x930 byte of CD sector data + 12 words of subchannel)
+    // With 13 bit adresses, we get 8192 words (of 16 bit)
+    // A sector is currently 1188 words. (0x930 byte of CD sector data + 12 words subchannel)
     // So, the cache holds 6 sectors
-    localparam ADDR_WIDTH = 13;
+    // After some tests with replugging USB devices, it turns out that
+    // the FIFO level drops too much.
+    // We go for 15 bit, to get 32768 words to hold 27 sectors.
+    // With repeated replugging of USB devices, I can measure a minimum level of 0x3c54 words.
+    // This is a little bit less than half of the whole FIFO and also the reason,
+    // 16384 words are not enough sometimes. But 32768 should be safe...
+    localparam ADDR_WIDTH = 15;
     localparam CACHE_SIZE = 2 ** ADDR_WIDTH;
 
     wire [15:0] cache_readout;
