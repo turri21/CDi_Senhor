@@ -81,15 +81,17 @@ module mpeg_video (
     // 8kB of MPEG stream memory to fill from outside
     wire [31:0] mpeg_in_fifo_out;
 
-    bit  [12:0] mpeg_input_stream_fifo_raddr;
+    // Why did I do this? O.o
+    bit  [12:0] mpeg_input_stream_fifo_raddr_read_fix;
+
     always_comb begin
-        mpeg_input_stream_fifo_raddr = dmem_cmd_payload_address_1[14:2];
+        mpeg_input_stream_fifo_raddr_read_fix = dmem_cmd_payload_address_1[14:2];
 
         if (hw_read_count != 0) begin
-            mpeg_input_stream_fifo_raddr = mpeg_stream_byte_index[14:2];
+            mpeg_input_stream_fifo_raddr_read_fix = mpeg_stream_fifo_read_adr[14:2];
 
             if (hw_read_mem_ready && (!hw_read_aligned_access || mpeg_stream_bit_index[4:0]==5'b11111) )
-                mpeg_input_stream_fifo_raddr = mpeg_input_stream_fifo_raddr + 1;
+                mpeg_input_stream_fifo_raddr_read_fix = mpeg_input_stream_fifo_raddr_read_fix + 1;
         end
     end
 
@@ -101,22 +103,19 @@ module mpeg_video (
         .we(data_strobe),
         // Out (32 bit CPU interface)
         .clkr(clk_mpeg),
-        .raddr(mpeg_input_stream_fifo_raddr),
+        .raddr(mpeg_input_stream_fifo_raddr_read_fix),
         .q(mpeg_in_fifo_out)
     );
 
     bit [4:0] hw_read_count = 0;
     bit [31:0] hw_read_result = 32;
 
-    // Word Address
-    bit [27:0] mpeg_stream_fifo_write_adr;
+    // Byte Address
+    bit [28:0] mpeg_stream_fifo_write_adr;
     bit [31:0] mpeg_stream_bit_index;
-    wire [28:0] mpeg_stream_byte_index = mpeg_stream_bit_index[31:3];
+    wire [28:0] mpeg_stream_fifo_read_adr = mpeg_stream_bit_index[31:3];
 
-    // Word address
-    wire [27:0] mpeg_stream_fifo_read_adr = mpeg_stream_byte_index[27:0];
-
-    wire [27:0] fifo_level /*verilator public_flat_rd*/ = mpeg_stream_fifo_write_adr - mpeg_stream_fifo_read_adr;
+    wire [28:0] fifo_level /*verilator public_flat_rd*/ = mpeg_stream_fifo_write_adr - mpeg_stream_fifo_read_adr;
 
     wire fifo_underflow = mpeg_stream_fifo_write_adr_clk_mpeg < mpeg_stream_fifo_read_adr;
     (* keep *) (* noprune *) bit [31:0] decoder_failing_address;
@@ -134,7 +133,8 @@ module mpeg_video (
         end
     end
 
-    wire fifo_full_clk_mpeg = mpeg_stream_fifo_write_adr_clk_mpeg > (mpeg_stream_fifo_read_adr + 28'd30500);
+    wire [28:0] fifo_level_clk_mpeg = mpeg_stream_fifo_write_adr_clk_mpeg - mpeg_stream_fifo_read_adr;
+    wire fifo_full_clk_mpeg = fifo_level_clk_mpeg > 29'd30500;
 
     bit hw_read_mem_ready = 0;
     wire [4:0] hw_read_bit_shift = mpeg_stream_bit_index[4:0];
@@ -145,10 +145,10 @@ module mpeg_video (
     wire [31:0] hw_read_mask = ones_mask(hw_read_count_aligned);
 
     bit [3:0] sync_write_adr_cnt;
-    bit [27:0] mpeg_stream_fifo_write_adr_syncval;
+    bit [28:0] mpeg_stream_fifo_write_adr_syncval;
     bit mpeg_stream_fifo_write_adr_syncflag;
     bit mpeg_stream_fifo_write_adr_syncflag_clk_mpeg;
-    bit [27:0] mpeg_stream_fifo_write_adr_clk_mpeg;
+    bit [28:0] mpeg_stream_fifo_write_adr_clk_mpeg;
 
     // TODO This is a weird approach to sync the write address over
     // It has 16 clocks of latency but doesn't need any gray code
@@ -710,9 +710,7 @@ module mpeg_video (
                     // I/O Area
                     if (!dmem_cmd_payload_write_1_q) begin
                         if (dmem_cmd_payload_address_1_q == 32'h10002000)
-                            dmem_rsp_payload_data_1 = {
-                                4'b0000, mpeg_stream_fifo_write_adr_clk_mpeg
-                            };
+                            dmem_rsp_payload_data_1 = {3'b000, mpeg_stream_fifo_write_adr_clk_mpeg};
                         if (dmem_cmd_payload_address_1_q == 32'h10002004)
                             dmem_rsp_payload_data_1 = mpeg_stream_bit_index;
                         if (dmem_cmd_payload_address_1_q == 32'h10002008)

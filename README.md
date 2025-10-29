@@ -33,9 +33,9 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  22,442 / 41,910 ( 54 % )
-    Total registers              25417
-    Total block memory bits      2,070,872 / 5,662,720 ( 37 % )
+    Logic utilization (in ALMs)  22,232 / 41,910 ( 53 % )
+    Total registers              24594
+    Total block memory bits      2,072,224 / 5,662,720 ( 37 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
 Expected synthesis times with Quartus 17.0.2
@@ -44,12 +44,14 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* Top Gun Scan Mode / Fast Forward is unstable. Potential freeze
+* Leaving the cake Puzzle in 7th Guest freezes (everytime?)
+* Weird shifted graphics with "David and Goliath"
+* Problems with "les guignols de l'info"?
 * VCD resolution for white book
 * Glitches during Top Gun (Might be Pause command related)
 * VCDs are stopping at some point?
 * Sound bugs on the police procedures disk?
-* Hang of 7th Guest
-* Hang of Space Ace Intro
 * Find a better solution for reducing CPU speed
 * Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode
     * A workaround is CPU overclocking. Problem not visible on real machine.
@@ -59,8 +61,6 @@ Expected synthesis times with Quartus 17.0.2
 * Fix regression: Audio hiccups during Philips Logo in Burn:Cycle
     * A workaround is CPU overclocking
 * Investigate input responsiveness (skipped events?)
-* Investigate screeching sound effect in the menu of "Golf Tips"
-    * Vincent Halver has found a solution for MAME. Need to check that.
 * Fix hang on audio track stop or change in media player
 * Cheat support?
 * Investigate "Gray border glitch" at the top of "Myst" gameplay (seems to be only one plane)
