@@ -137,6 +137,10 @@ void main(void)
 			//*((volatile uint32_t *)OUTPORT) = (uint32_t)frame->cr.data;
 			//*((volatile uint32_t *)OUTPORT) = (uint32_t)frame->cb.data;
 			__asm volatile("" : : : "memory");
+
+			while (frame_display_fifo->pictures_in_fifo > 8)
+				__asm volatile("" : : : "memory");
+
 			*((volatile plm_frame_t **)OUTPORT_FRAME) = frame;
 			frame_display_fifo->y_adr = (uint32_t)frame->y.data;
 			frame_display_fifo->u_adr = (uint32_t)frame->cb.data;

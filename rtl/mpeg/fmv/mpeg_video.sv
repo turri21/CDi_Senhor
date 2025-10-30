@@ -190,7 +190,7 @@ module mpeg_video (
     end
 
     always_ff @(posedge clk60) begin
-        if (fifo_full) begin
+        if (fifo_full_clk60) begin
             $display("FIFO FULL");
             //$finish();
         end
@@ -717,6 +717,9 @@ module mpeg_video (
                             dmem_rsp_payload_data_1 = hw_read_result;
                         if (dmem_cmd_payload_address_1_q == 32'h1000200c)
                             dmem_rsp_payload_data_1 = {16'b0, dct_coeff_result};
+                        if (dmem_cmd_payload_address_1_q == 32'h10003028)
+                            dmem_rsp_payload_data_1 = {28'b0, pictures_in_fifo_clk60};
+
                     end
                 end
                 4'd0: begin
