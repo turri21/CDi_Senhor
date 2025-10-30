@@ -157,6 +157,7 @@ module vmpeg (
     wire signed [32:0] fmv_system_clock_reference_start_time;
     wire fmv_system_clock_reference_start_time_valid;
     wire fmv_event_program_end;
+    wire fma_event_program_end;
 
     bit [3:0] fmv_stream_number;
     bit [3:0] fma_stream_number;
@@ -178,7 +179,7 @@ module vmpeg (
         .decoding_timestamp(),
         .decoding_timestamp_updated(),
         .system_clock_reference_start_time_valid(fma_system_clock_reference_start_time_valid),
-        .event_program_end()
+        .event_program_end(fma_event_program_end)
     );
 
     mpeg_demuxer #(
@@ -431,6 +432,11 @@ module vmpeg (
                 // Underflow
                 fma_status_register[3] <= 1;
                 fma_interrupt_status_register[3] <= 1;
+            end
+
+            if (fma_event_program_end) begin
+                fma_interrupt_status_register[0] <= 1;
+                fma_status_register[0] <= 1;
             end
 
             if (fma_dclk_shadow_cnt == kFmaClockDivider - 1) begin
