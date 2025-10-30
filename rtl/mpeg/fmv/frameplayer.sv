@@ -119,6 +119,14 @@ module frameplayer (
         .signal_out_clk_b(vblank_clkddr)
     );
 
+    wire current_frame_valid_clkvideo;
+    signal_cross_domain cross_current_frame_valid (
+        .clk_a(clkddr),
+        .clk_b(clkvideo),
+        .signal_in_clk_a(current_frame_valid),
+        .signal_out_clk_b(current_frame_valid_clkvideo)
+    );
+
     bit [7:0] chroma_read_addr;
 
     ddr_chroma_line_buffer line_buffer_u (
@@ -144,6 +152,7 @@ module frameplayer (
 
     bit [10:0] pixelcnt;
     bit [8:0] linecnt;
+    bit [8:0] linecnt_clkddr;
     bit hsync_q;
     bit line_alternate;
     bit u_requested;
@@ -171,7 +180,7 @@ module frameplayer (
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
             horizontal_offset_wait <= offset_x;
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && current_frame_valid) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && current_frame_valid_clkvideo) begin
 
             if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
             else begin
@@ -208,6 +217,8 @@ module frameplayer (
     );
 
     always_ff @(posedge clkddr) begin
+        linecnt_clkddr <= linecnt;
+
         if (!ddrif.busy) begin
             ddrif.read <= 0;
         end
@@ -231,7 +242,7 @@ module frameplayer (
             u_requested <= 0;
             v_requested <= 0;
         end else if (current_frame_valid) begin
-            if (new_line_started_clkddr && linecnt < frame_height) begin
+            if (new_line_started_clkddr && linecnt_clkddr < frame_height) begin
                 line_alternate <= !line_alternate;
 
                 if (line_alternate) begin
@@ -316,7 +327,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !current_frame_valid) begin
+        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !current_frame_valid_clkvideo) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

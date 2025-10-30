@@ -111,7 +111,7 @@ module vmpeg (
 
     mpeg_video video (
         .clk30(clk),
-        .clk60(clk_mpeg),
+        .clk_mpeg(clk_mpeg),
         .reset,
         .dsp_enable(fmv_dsp_enable),
         .playback_active(fmv_playback_active),

@@ -198,3 +198,30 @@ bcompare cdimono1/vmpega_split_swap.rom 0/romdump1.bin
 
 cat log | grep 'FMV INT\|XFER' > log2
 cat log | grep 'FMV INT\|XFER\|DVC Read e04062\|PIC2\|GOP' > log2
+
+
+
+1 Machine Config
+2 Hardware Settings
+3 Hardware Config
+4 Machine Setup
+
+1 Disable VMPEG DVC   No,Yes
+2 Disable VMPEG       No,Yes
+3 Disable DVC         No,Yes
+4 Extension Slot      1MB, 1MB+VMPEG
+5 Extension Slot      Empty, DVC
+6 Extension Slot      Empty, VMPEG
+7 Extension Slot      Empty, DVC DVC DVC
+
+1 Ports               P1 Front + UART Back, P1 Back + P2 Front
+2 Ports               1P + UART, 2P
+
+1 Fast CD Seek        No, Yes[U]
+2 Disable CD Seek     No, Yes[U]
+
+1 CPU Turbo           No, Yes[U]
+2 Turbo CPU           No, Yes[U]
+
+1 Overclock input device   No, Yes
+  (it is rather long. It could be shorter?)

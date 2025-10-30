@@ -793,11 +793,11 @@ class CDi {
             sprintf(bmp_name, "%d/%03d.bmp", instanceid, fmv_frame_cnt);
             printf("FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
-                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk60);
+                   dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk_mpeg);
             ;
             fprintf(stderr, "FMV Writing %s at Fifo Level %d at Frame Level %d\n", bmp_name,
                     dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__fifo_level,
-                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk60);
+                    dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__video__DOT__pictures_in_fifo_clk_mpeg);
 
             write_bmp(bmp_name, w, h, pixels);
 
