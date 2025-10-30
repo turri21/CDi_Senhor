@@ -284,8 +284,15 @@ class CDi {
     FILE *f_audio_right{nullptr};
     FILE *f_fma{nullptr};
     FILE *f_fma_mp2{nullptr};
+
     FILE *f_fmv{nullptr};
     FILE *f_fmv_m1v{nullptr};
+
+    int fmv_index{0};
+    /// @brief Used to decide whether a new index must be created
+    /// Only create a new index when enough data was collected for the last
+    int fmv_collected_data_cnt{0};
+
     FILE *f_uart{nullptr};
 
     uint8_t output_image[size] = {0};
@@ -665,10 +672,6 @@ class CDi {
         // Trace CPU state
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__decodeopc &&
             dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__clkena_in) {
-
-            uint32_t pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
-            if (pc >= 0xe40000 && pc < 0xe7ffff)
-                printstate();
         }
 #endif
 
@@ -813,7 +816,13 @@ class CDi {
 #endif
         }
 
+        if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__restart_fmv_dsp_enable) {
+            open_fmv_trace();
+        }
+
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fmv_data_valid) {
+            fmv_collected_data_cnt++;
+
             fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv);
 
             if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fmv_packet_body) {
@@ -864,6 +873,14 @@ class CDi {
     }
 
     virtual ~CDi() {
+        assert(f_audio_right);
+        assert(f_audio_left);
+        assert(f_fma);
+        assert(f_fma_mp2);
+        assert(f_fmv);
+        assert(f_fmv_m1v);
+        assert(f_uart);
+
         fclose(f_audio_right);
         fclose(f_audio_left);
         fclose(f_fma);
@@ -871,7 +888,47 @@ class CDi {
         fclose(f_fmv);
         fclose(f_fmv_m1v);
         fclose(f_uart);
+
+        f_audio_right = nullptr;
+        f_audio_left = nullptr;
+        f_fma = nullptr;
+        f_fma_mp2 = nullptr;
+        f_fmv = nullptr;
+        f_fmv_m1v = nullptr;
+        f_uart = nullptr;
     }
+
+    /// @brief Opens/Reopen the FMV trace for writing FMV MPEG data
+    /// Allows storing multiple MPEG streams per simulation
+    void open_fmv_trace() {
+        // Only restart trace when a considerable amount of data was stored in the last
+        if (fmv_collected_data_cnt < 100 && f_fmv) {
+            printf("Continue with current FMV trace...\n");
+            return;
+        }
+
+        char filename[100];
+
+        if (f_fmv)
+            fclose(f_fmv);
+        if (f_fmv_m1v)
+            fclose(f_fmv_m1v);
+
+        sprintf(filename, "%d/fmv_%d.bin", instanceid, fmv_index);
+        fprintf(stderr, "Writing to %s\n", filename);
+        printf("Writing to %s\n", filename);
+        f_fmv = fopen(filename, "wb");
+        assert(f_fmv);
+
+        sprintf(filename, "%d/fmv_m1v_%d.bin", instanceid, fmv_index);
+        fprintf(stderr, "Writing to %s\n", filename);
+        printf("Writing to %s\n", filename);
+        f_fmv_m1v = fopen(filename, "wb");
+        assert(f_fmv_m1v);
+
+        fmv_index++;
+    }
+
     CDi(int i) {
         instanceid = i;
 
@@ -896,15 +953,7 @@ class CDi {
         f_fma_mp2 = fopen(filename, "wb");
         assert(f_fma_mp2);
 
-        sprintf(filename, "%d/fmv.bin", instanceid);
-        fprintf(stderr, "Writing to %s\n", filename);
-        f_fmv = fopen(filename, "wb");
-        assert(f_fmv);
-
-        sprintf(filename, "%d/fmv_m1v.bin", instanceid);
-        fprintf(stderr, "Writing to %s\n", filename);
-        f_fmv_m1v = fopen(filename, "wb");
-        assert(f_fmv_m1v);
+        open_fmv_trace();
 
         sprintf(filename, "%d/uartlog", instanceid);
         fprintf(stderr, "Writing to %s\n", filename);
