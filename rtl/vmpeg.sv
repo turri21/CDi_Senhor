@@ -35,8 +35,10 @@ module vmpeg (
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
     input sample_tick44,
+    input clk45tick,
 
     output bit mpeg_ram_enabled,  // Prohibits detection of MPEG RAM by the OS RAM crawler
+    output bit debug_audio_fifo_overflow,
     output bit debug_video_fifo_overflow
 );
     wire access = cs && (uds || lds);
@@ -72,6 +74,8 @@ module vmpeg (
     bit  dsp_reset_input_fifo;
     bit  fma_dsp_enable = 0;
     bit  fmv_dsp_enable = 0;
+    wire fma_fifo_full;
+    wire fmv_fifo_full;
 
     mpeg_audio audio (
         .clk(clk),
@@ -80,7 +84,7 @@ module vmpeg (
         .reset_input_fifo(dsp_reset_input_fifo),
         .data_byte(mpeg_data),
         .data_strobe(fma_data_valid && fma_packet_body),
-        .fifo_full(),
+        .fifo_full(fma_fifo_full),
         .audio_left(audio_left),
         .audio_right(audio_right),
         .sample_tick44(sample_tick44),
@@ -90,7 +94,6 @@ module vmpeg (
         .event_underflow(event_underflow)
     );
 
-    wire video_fifo_full;
     wire fmv_event_picture_starts_display;
     wire fmv_event_last_picture_starts_display;
     wire fmv_event_first_intra_frame_starts_display;
@@ -117,7 +120,7 @@ module vmpeg (
         .playback_active(fmv_playback_active),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
-        .fifo_full(video_fifo_full),
+        .fifo_full(fmv_fifo_full),
         .ddrif,
         .hsync,
         .vsync,
@@ -135,8 +138,13 @@ module vmpeg (
     );
 
     always_ff @(posedge clk) begin
-        if (reset) debug_video_fifo_overflow <= 0;
-        else if (video_fifo_full) debug_video_fifo_overflow <= 1;
+        if (reset) begin
+            debug_video_fifo_overflow <= 0;
+            debug_audio_fifo_overflow <= 0;
+        end else begin
+            if (fma_fifo_full) debug_audio_fifo_overflow <= 1;
+            if (fmv_fifo_full) debug_video_fifo_overflow <= 1;
+        end
     end
 
     mpeg_video_start_code_decoder startcode (
@@ -191,7 +199,7 @@ module vmpeg (
         .data_valid(fmv_data_valid),
         .mpeg_packet_body(fmv_packet_body),
         .stream_filter(fmv_stream_number),
-        .dclk(fma_dclk),
+        .dclk(fmv_dclk),
         .system_clock_reference_start_time(fmv_system_clock_reference_start_time),
         .decoding_timestamp(fmv_decoding_timestamp),
         .decoding_timestamp_updated(fmv_decoding_timestamp_updated),
@@ -251,9 +259,11 @@ module vmpeg (
     bit [15:0] fma_interrupt_enable_register;
     // FMA IVEC @ 00E0300C
     bit [15:0] fma_interrupt_vector_register = 0;
-    // FMA DCLKH @ 00E03010, DCLKH @ 00E03012
+    // FMA DCLKH @ 00E03010, DCLKL @ 00E03012
     // Increments with 45 kHz
+    // Must never be written to by CPU. Causes system reset on real 210/05
     bit [31:0] fma_dclk;
+    bit [31:0] fmv_dclk;
     bit [15:0] fma_dclkl_latch;
 
     // FMV SYSCMD @ 00E040C0
@@ -266,6 +276,8 @@ module vmpeg (
     interrupt_flags_s fmv_interrupt_enable_register;
     // FMV IVEC @ 00E040DC
     bit [15:0] fmv_interrupt_vector_register = 0;
+    // GEN_FRAME_RATE @ 00E040AC
+    bit [15:0] fmv_frame_rate = 0;
     // FMV TCNT @ 00E04064 (also named SYS_TIM)
     // according to fmvdrv sources:
     // 29700 -1 for 5.28 seconds
@@ -340,13 +352,17 @@ module vmpeg (
             15'h2039: dout = video_ctrl_x_active;  // 0E04072
             15'h203a: dout = video_ctrl_y_display;  // 0E04074
             15'h203b: dout = video_ctrl_x_display;  // 0E04076
-            15'h2046: dout = video_data_input_command_register;  // 0E0408C
-            15'h2050: dout = fmv_decoding_timestamp[22:7];  // 00E040A0 Decoding Timestamp
+            15'h2044: dout = 0;  // E04088 Decoder Command? GEN_DEC_CMD?
+            15'h2046: dout = video_data_input_command_register;  // 0E0408C GEN_VDI_CMD
+            15'h204C: dout = fmv_dclk[21:6];  // 0E04098 GEN_SYSCR
+            15'h204E: dout = 0;  // e0409c GEN_SYNC_DIFF?
+            15'h2050: dout = {1'b0, fmv_decoding_timestamp[21:7]};  // 00E040A0 Decoding Timestamp
             15'h2052: dout = {12'b0, fmv_pictures_in_fifo};  // 00E040A4 ?? Pictures in fifo?
-            15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS
-            15'h2055: dout = 16'h0708;  // e040aa ?? Display Rate ?
-            15'h2056: dout = 16'h01b8;  // e040ac ?? Frame Rate ?
+            15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS. Only read.
+            15'h2055: dout = 16'h0708;  // e040aa ?? Display Rate ? Never written. Only read.
+            15'h2056: dout = fmv_frame_rate;  // e040ac ?? GEN_FRAME_RATE Read and written.
             15'h206e: dout = fmv_interrupt_vector_register;  //
+            15'h2073: dout = 0;  // e040e6 MMU Base pointer? Checked once, value is ignored
 
             default: ;
         endcase
@@ -362,10 +378,6 @@ module vmpeg (
     bit dma_active;
     assign req = dma_active;
     assign rdy = dma_active;
-
-    // Divides 30 Mhz to 45 kHz
-    localparam bit [9:0] kFmaClockDivider = 667;
-    bit [9:0] fma_dclk_shadow_cnt = 0;
 
     // Increments at 90 kHz
     bit [15+5:0] timer_cnt = 0;
@@ -447,11 +459,12 @@ module vmpeg (
                 fma_status_register[0] <= 1;
             end
 
-            if (fma_dclk_shadow_cnt == kFmaClockDivider - 1) begin
-                fma_dclk_shadow_cnt <= 0;
-                fma_dclk <= fma_dclk + 1;
 
-                if (timer_cnt[15+3:0+3] == fmv_timer_compare_register) begin
+            if (clk45tick) begin
+                fma_dclk <= fma_dclk + 1;
+                fmv_dclk <= fmv_dclk + 1;
+
+                if (timer_cnt[15+3:0+3] >= fmv_timer_compare_register) begin
                     fmv_interrupt_status_register.tim <= 1;
                     fma_interrupt_status_register[8] <= 1;
                     timer_cnt <= 0;
@@ -466,9 +479,6 @@ module vmpeg (
                 if (fmv_system_clock_reference_start_time_valid && fma_dclk == fmv_system_clock_reference_start_time[32:1] && !fmv_playback_active) begin
                     // fmv_playback_active <= 1;
                 end
-
-            end else begin
-                fma_dclk_shadow_cnt <= fma_dclk_shadow_cnt + 1;
             end
 
             if (done_in && ack) begin
@@ -675,6 +685,14 @@ module vmpeg (
                         15'h2046: begin
                             $display("FMV Write GEN_VDI_CMD %x %x ?", address[15:1], din);
                             video_data_input_command_register <= din;
+                        end
+                        15'h204C: begin
+                            $display("FMV Write GEN_SYSCR %x %x ?", address[15:1], din);
+                            fmv_dclk[21:6] <= din;
+                        end
+                        15'h2056: begin
+                            $display("FMV Write GEN_FRAME_RATE %x %x ?", address[15:1], din);
+                            fmv_frame_rate <= din;
                         end
                         15'h2001: begin
                             $display("FMV Write Image Width2 %x %x", address[15:1], din);

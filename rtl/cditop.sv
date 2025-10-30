@@ -275,6 +275,7 @@ module cditop (
 
     wire sample_tick37;
     wire sample_tick44;
+    wire mpeg_45tick;
 
     cdic_clock_gen cdic_clk_gen (
         .clk(clk30),
@@ -282,7 +283,8 @@ module cditop (
         .reset,
         .sector_tick(cd_sector_tick),
         .sample_tick37,
-        .sample_tick44
+        .sample_tick44,
+        .mpeg_45tick
     );
 
     wire cdic_intreq;
@@ -336,6 +338,7 @@ module cditop (
     rgb888_s fmv_video_out;
     rgb888_s mcd212_video_out;
     wire debug_video_fifo_overflow;
+    wire debug_audio_fifo_overflow;
 
     vmpeg vmpeg_inst (
         .clk(clk30),
@@ -359,6 +362,7 @@ module cditop (
         .done_out(),
         .mpeg_ram_enabled(mpeg_ram_enabled),
         .debug_video_fifo_overflow(debug_video_fifo_overflow),
+        .debug_audio_fifo_overflow(debug_audio_fifo_overflow),
         .hsync(HSync),
         .vsync(VSync),
         .hblank(HBlank),
@@ -367,6 +371,7 @@ module cditop (
         .audio_left(mpeg_audio_left),
         .audio_right(mpeg_audio_right),
         .sample_tick44,
+        .clk45tick(mpeg_45tick),
         .ddrif
     );
 

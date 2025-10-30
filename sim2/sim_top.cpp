@@ -411,8 +411,9 @@ class CDi {
             // clk_mpeg is 30 MHz when no work is to be done
             dut.rootp->emu__DOT__clk_mpeg = (i & 1);
 
-            // clk_audio is 22.2264 MHz
-            phase_accumulator += 24277;
+            // clk_audio is 6.615 MHz
+            // 6.615 MHz * 2^15 / 30 MHz = 7225.344
+            phase_accumulator += 7225;
             dut.rootp->emu__DOT__clk_audio = (phase_accumulator & 0x8000) ? 1 : 0;
 
             dut.eval();
