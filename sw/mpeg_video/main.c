@@ -161,7 +161,23 @@ void main(void)
 
 			frame_display_fifo->width = frame->width;
 			frame_display_fifo->height = frame->height;
-			frame_display_fifo->frameperiod = mpeg->framerate;
+
+			if (frame_display_fifo->pictures_in_fifo < 5)
+			{
+				// It seems our FIFO is loosing pictures. Maybe the frame rate is slightly off?
+				// Increase frame period by 0.1Hz when running at 25 FPS
+				frame_display_fifo->frameperiod = mpeg->frameperiod + 4780;
+			}
+			else if (frame_display_fifo->pictures_in_fifo > 6)
+			{
+				// It seems our FIFO is slightly overflowing. Maybe the frame rate is slightly off?
+				// Decrease frame period by 0.1Hz when running at 25 FPS
+				frame_display_fifo->frameperiod = mpeg->frameperiod - 4780;
+			}	
+			else
+			{
+				frame_display_fifo->frameperiod = mpeg->frameperiod;
+			}
 			frame_display_fifo->fractional_pixel_width = mpeg->pixel_aspect_ratio;
 
 			__asm volatile("" : : : "memory");

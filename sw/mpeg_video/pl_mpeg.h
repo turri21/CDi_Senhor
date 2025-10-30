@@ -294,7 +294,7 @@ void plm_destroy(plm_t *self);
 
 
 // Get whether we have headers on all available streams and we can report the 
-// number of video/audio streams, video dimensions, framerate and audio 
+// number of video/audio streams, video dimensions, frameperiod and audio 
 // samplerate.
 // This returns FALSE if the file is not an MPEG-PS file or - when not using a
 // file as source - when not enough data is available yet.
@@ -335,9 +335,9 @@ int plm_get_height(plm_t *self);
 int32_t plm_get_pixel_aspect_ratio(plm_t *self);
 
 
-// Get the framerate of the video stream in frames per second.
+// Get the frameperiod of the video stream in frames per second.
 
-int32_t plm_get_framerate(plm_t *self);
+int32_t plm_get_frameperiod(plm_t *self);
 
 
 // Get or set whether audio decoding is enabled. Default TRUE.
@@ -682,14 +682,14 @@ void plm_video_destroy(plm_video_t *self);
 
 
 // Get whether a sequence header was found and we can accurately report on
-// dimensions and framerate.
+// dimensions and frameperiod.
 
 int plm_video_has_header(plm_video_t *self);
 
 
-// Get the framerate in frames per second.
+// Get the frameperiod in frames per second.
 
-int32_t plm_video_get_framerate(plm_video_t *self);
+int32_t plm_video_get_frameperiod(plm_video_t *self);
 int32_t plm_video_get_pixel_aspect_ratio(plm_video_t *self);
 
 
@@ -729,7 +729,7 @@ int plm_video_has_ended(plm_video_t *self);
 
 
 // Decode and return one frame of video and advance the internal time by 
-// 1/framerate seconds. The returned frame_t is valid until the next call of
+// 1/frameperiod seconds. The returned frame_t is valid until the next call of
 // plm_video_decode() or until the video decoder is destroyed.
 
 plm_frame_t *plm_video_decode(plm_video_t *self);
@@ -898,9 +898,9 @@ int plm_get_height(plm_t *self) {
 		: 0;
 }
 
-int32_t plm_get_framerate(plm_t *self) {
+int32_t plm_get_frameperiod(plm_t *self) {
 	return (plm_init_decoders(self) && self->video_decoder)
-		? plm_video_get_framerate(self->video_decoder)
+		? plm_video_get_frameperiod(self->video_decoder)
 		: 0;
 }
 
@@ -1927,7 +1927,7 @@ typedef struct {
 } plm_video_motion_t;
 
 struct plm_video_t {
-	int framerate;
+	int frameperiod;
 	int pixel_aspect_ratio;
 	int time;
 	int frames_decoded;
@@ -2024,9 +2024,9 @@ plm_video_t * plm_video_create_with_buffer(plm_dma_buffer_t *buffer, int destroy
 	return self;
 }
 
-int32_t plm_video_get_framerate(plm_video_t *self) {
+int32_t plm_video_get_frameperiod(plm_video_t *self) {
 	return plm_video_has_header(self)
-		? self->framerate
+		? self->frameperiod
 		: 0;
 }
 
@@ -2054,11 +2054,6 @@ void plm_video_set_no_delay(plm_video_t *self, int no_delay) {
 
 int64_t plm_video_get_time(plm_video_t *self) {
 	return self->time;
-}
-
-void plm_video_set_time(plm_video_t *self, int64_t time) {
-	self->frames_decoded = self->framerate * time;
-	self->time = time;
 }
 
 int plm_video_has_ended(plm_video_t *self) {
@@ -2117,7 +2112,6 @@ plm_frame_t *plm_video_decode(plm_video_t *self) {
 
 	frame->time = self->time;
 	self->frames_decoded++;
-	//self->time = (double)self->frames_decoded / self->framerate;
 	
 	return frame;
 }
@@ -2170,7 +2164,7 @@ int plm_video_decode_sequence_header(plm_video_t *self) {
 		PLM_VIDEO_PIXEL_ASPECT_RATIO[pixel_aspect_ratio_code];
 
 	// Get frame rate
-	self->framerate = PLM_VIDEO_PICTURE_RATE[plm_dma_buffer_read(self->buffer, 4)];
+	self->frameperiod = PLM_VIDEO_PICTURE_RATE[plm_dma_buffer_read(self->buffer, 4)];
 
 	// Skip bit_rate, marker, buffer_size and constrained bit
 	plm_dma_buffer_skip(self->buffer, 18 + 1 + 10 + 1);
