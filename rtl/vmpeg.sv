@@ -371,11 +371,18 @@ module vmpeg (
     bit [15+5:0] timer_cnt = 0;
 
     bit vsync_flipflop;
+    bit restart_fmv_dsp_enable  /*verilator public_flat_rd*/;
+    bit restart_fmv_dsp_enable_q;
 
     always @(posedge clk) begin
         bus_ack <= 0;
         vsync_q <= vsync;
         dsp_reset_input_fifo <= 0;
+
+        // create a single clock delay of this signal
+        // should be better since this signal must be carried over to clk_mpeg
+        restart_fmv_dsp_enable <= 0;
+        restart_fmv_dsp_enable_q <= restart_fmv_dsp_enable;
 
         if (reset) begin
             dma_active <= 0;
@@ -396,6 +403,7 @@ module vmpeg (
             timer_cnt <= 0;
         end else begin
 
+            if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
             if (fmv_decoding_timestamp_updated) video_data_input_command_register[14] <= 1;
 
             if (vsync && !vsync_q) fmv_interrupt_status_register.vsync <= 1;
@@ -569,17 +577,28 @@ module vmpeg (
 	                        according to fmvd.txt
                               0008 Play
                               0010 Pause
+                              0020 Continue
+                              0080 Stop
 	                          0100 Clear FIFO
+                              0400 Search for GOP
 	                          1000 Decoder on
 	                          2000 Decoder off
 	                          8000 Start DMA
+                            
+                            Certain patterns observed on 210/05 with VMPEG:
+                              mv_freeze()
+                                0x8000 -> 0x0010 and stay like that. no further events via mv_trigger() callback
+                                Also no further DMA transfers
+                              mv_continue(path,0) after mv_freeze() to continue fast
+                               0x0010 -> 0x0100 -> 0x0000 -> 0x8000
+                              mv_continue(path,1) after mv_freeze() to search for GOP
+                               0x0010 -> 0x0100 -> 0x0400 -> 0x8000
+                              mv_continue(path,2) after mv_freeze() to start at SEQ
+                               0x0010 -> 0x0100 -> 0x0600 -> 0x8000
+                              mv_cdplay() from cold boot
+                               Reset value 0x0000 -> 0x2000 -> 0x0100 -> 0x1000 -> 0x8000 -> 0x0008 -> 0x8000
                             */
                             fmv_command_register <= din;
-
-                            if (din[15]) begin  // 8000 DMA
-                                dma_active  <= 1;
-                                dma_for_fma <= 0;
-                            end
 
                             if (din[3]) begin  // 0008 Play
                                 fmv_playback_active <= 1;
@@ -587,11 +606,24 @@ module vmpeg (
 
                             if (din[4]) begin  // 0010 Pause
                                 fmv_playback_active <= 0;
+                                fmv_interrupt_status_register.pai <= 1;
+                            end
+                            if (din[5]) begin  // 0020 Continue
+                                fmv_playback_active <= 1;
                             end
 
                             if (din[8]) begin  // 0100 Clear FIFO? What to do?
                                 fmv_dsp_enable <= 0;
                                 fmv_playback_active <= 0;
+                                restart_fmv_dsp_enable <= 1;
+                            end
+
+                            if (din[10]) begin  // 0400 Search for GOP
+
+                            end
+
+                            if (din[12]) begin  // 1000 Decoder on
+                                fmv_dsp_enable <= 1;
                             end
 
                             if (din[13]) begin  // 2000 Decoder off
@@ -599,8 +631,9 @@ module vmpeg (
                                 fmv_playback_active <= 0;
                             end
 
-                            if (din[12]) begin  // 1000 Decoder on
-                                fmv_dsp_enable <= 1;
+                            if (din[15]) begin  // 8000 DMA
+                                dma_active  <= 1;
+                                dma_for_fma <= 0;
                             end
 
                         end
