@@ -15,7 +15,9 @@ module hps_cd_sector_cache (
     output bit [15:0] cd_data,
     output bit cd_data_valid,
     input sector_tick,
-    output bit sector_delivered
+    output bit sector_delivered,
+
+    input config_disable_seek_time
 );
     // With 13 bit, we get 8192 words
     // A sector is currently 1188 words. (0x930 byte of CD sector data + 12 words of subchannel)
@@ -50,13 +52,10 @@ module hps_cd_sector_cache (
 
     // Number of sectors to wait until requesting the first
     // after the reading was instructed to start.
-`ifdef VERILATOR
-    localparam bit [5:0] kSeekTime = 1;
-`else
     // Seeking on a real 210/05 takes about 200ms
     // But 19 (250ms) seems to be more stable
     localparam bit [5:0] kSeekTime = 19;
-`endif
+
     // Simulates reading time. Remaining sectors to wait.
     bit [5:0] seeking_time_cnt = 0;
 
@@ -124,7 +123,7 @@ module hps_cd_sector_cache (
             if (seek_lba_valid) begin
                 empty_fifo_latch <= 1;
                 seeking <= 1;
-                seeking_time_cnt <= kSeekTime;
+                seeking_time_cnt <= config_disable_seek_time ? 1 : kSeekTime;
                 cd_hps_lba <= seek_lba;
                 reading_active <= 1;
             end else if (seeking && sector_tick) begin

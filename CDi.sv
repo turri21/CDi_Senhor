@@ -233,9 +233,15 @@ module emu (
         "P2O[7:6],Force Video Plane,Original,A,B;",
         "P2O[8],No reset on NvRAM change,No,Yes;",
         "P2O[12],SERVO Audio CD,No,Yes;",
-        "P2O[11],CPU Turbo,No,Yes;",
 
-        "O[5],Overclock input device,No,Yes;",
+        "P3,Hardware Config;",
+        "P3-;",
+        "P3O[13],Disable VMPEG DVC,No,Yes;",
+        //"P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
+        "P3O[16],Fast CD Seek,No,Yes[U];",
+        "P3O[11],CPU Turbo,No,Yes[U];",
+        "P3O[5],Overclock input device,No,Yes;",
+
         "O[14],Autoplay,Yes,No;",
 
         "-;",
@@ -694,21 +700,33 @@ module emu (
     wire enable_reset_on_nvram_img_mount = 0;
     wire [1:0] debug_limited_to_full = 0;
     wire audio_cd_in_tray = 0;
-    wire disable_cpu_starve = 1;
+    wire config_disable_cpu_starve = 1;
     wire config_auto_play  /*verilator public_flat_rw*/ = 1;
+    bit config_disable_vmpeg = 0;
+    wire config_first_player_back_port = 0;
+    wire config_disable_seek_time = 1;
 `else
     // Status seems to be all zero after reset
     // Should be considered for defining the default
     wire debug_uart_fake_space = status[3];
-    wire [1:0] debug_force_video_plane = status[7:6];
     wire tvmode_ntsc = status[4];
     wire overclock_pointing_device = status[5];
+    wire [1:0] debug_force_video_plane = status[7:6];
     wire enable_reset_on_nvram_img_mount = !status[8];
     wire [1:0] debug_limited_to_full = status[10:9];
+    wire config_disable_cpu_starve = status[11];
     wire audio_cd_in_tray = status[12];
-    wire disable_cpu_starve = status[11];
+    bit config_disable_vmpeg = 0;
     wire config_auto_play = !status[14];
+    wire config_first_player_back_port = status[15];
+    wire config_disable_seek_time = status[16];
+
+    always_ff @(posedge clk_sys) begin
+        // only change during resets
+        if (cditop_reset) config_disable_vmpeg <= status[13];
+    end
 `endif
+
     wire HBlank;
     wire HSync;
     wire VBlank;
@@ -756,7 +774,9 @@ module emu (
         .seek_lba(cd_seek_lba),
         .seek_lba_valid(cd_seek_lba_valid),
         .sector_tick(cd_sector_tick),
-        .sector_delivered(cd_sector_delivered)
+        .sector_delivered(cd_sector_delivered),
+
+        .config_disable_seek_time
     );
 
     wire fail_not_enough_words;
@@ -850,8 +870,9 @@ module emu (
 
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data),
-        .disable_cpu_starve,
+        .config_disable_cpu_starve,
         .config_auto_play,
+        .config_disable_vmpeg(config_disable_vmpeg),
 
         .hps_rtc(hps_rtc)
     );

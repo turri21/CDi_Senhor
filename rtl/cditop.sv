@@ -70,9 +70,9 @@ module cditop (
 
     output fail_not_enough_words,
     output fail_too_much_data,
-    input  disable_cpu_starve,
-    input  config_auto_play,
-
+    input config_disable_cpu_starve,
+    input config_auto_play,
+    input config_disable_vmpeg,
     input [64:0] hps_rtc
 );
 
@@ -106,7 +106,7 @@ module cditop (
     wire attex_cs_mcd212 = ((addr_byte <= 24'h27ffff) || (addr_byte >= 24'h400000)) && as && !addr[23];
     wire dvc_ram_cs = ((addr_byte[23:20] == 4'hd) || (addr_byte[23:19] == 5'b11101)) && as;
     wire dvc_rom_cs = (addr_byte[23:18] == 6'b111001) && as;
-    wire dvc_mpeg_cs = (addr_byte[23:18] == 6'b111000) && as;
+    wire dvc_mpeg_cs = (addr_byte[23:18] == 6'b111000) && as && !config_disable_vmpeg;
     wire attex_cs_cdic = addr_byte[23:16] == 8'h30 && as;
     wire attex_cs_slave = addr_byte[23:16] == 8'h31 && as;
     wire attex_cs_mk48 = addr_byte[23:16] == 8'h32 && as;
@@ -243,7 +243,7 @@ module cditop (
         .debug_force_video_plane,
         .debug_limited_to_full,
         // Don't starve the CPU during DMA transfers
-        .disable_cpu_starve(disable_cpu_starve || cdic_dma_ack || cdic_dma_req)
+        .disable_cpu_starve(config_disable_cpu_starve || cdic_dma_ack || cdic_dma_req)
     );
 
 
