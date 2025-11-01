@@ -60,7 +60,6 @@ module hps_cd_sector_cache (
     bit [5:0] seeking_time_cnt = 0;
 
     bit reading_active = 0;
-    bit seeking = 0;
 
     // Used for calibration. Over the duration of development,
     // the size of a CD sector pulled from HPS has changed.
@@ -104,7 +103,6 @@ module hps_cd_sector_cache (
             seeking_time_cnt <= 0;
             cd_hps_req <= 0;
             reading_active <= 0;
-            seeking <= 0;
             readout_cnt <= 0;
             providing_data <= 0;
             empty_fifo_latch <= 0;
@@ -122,15 +120,11 @@ module hps_cd_sector_cache (
 
             if (seek_lba_valid) begin
                 empty_fifo_latch <= 1;
-                seeking <= 1;
                 seeking_time_cnt <= config_disable_seek_time ? 1 : kSeekTime;
                 cd_hps_lba <= seek_lba;
                 reading_active <= 1;
-            end else if (seeking && sector_tick) begin
-                if (seeking_time_cnt != 0) seeking_time_cnt <= seeking_time_cnt - 1;
-                else begin
-                    seeking <= 0;
-                end
+            end else if (sector_tick && seeking_time_cnt != 0) begin
+                seeking_time_cnt <= seeking_time_cnt - 1;
             end
 
             if (sector_tick && !cd_hps_ack && !cd_hps_req) begin
@@ -147,7 +141,7 @@ module hps_cd_sector_cache (
 
             if (sector_tick) begin
                 readout_cnt <= 0;
-                if (at_least_one_sector_in_cache) providing_data <= 1;
+                if (at_least_one_sector_in_cache && seeking_time_cnt == 0) providing_data <= 1;
             end
 
             // cd_hps_data_valid_q must be 0 to ensure the cache was read
