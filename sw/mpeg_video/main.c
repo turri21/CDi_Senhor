@@ -35,6 +35,10 @@ void stop_verilator();
 #define PLM_NO_STDIO
 #include "pl_mpeg.h"
 
+// Settings from sequence header
+// To be able to continue playback, those must be kept between resets
+__attribute__((section(".noinit"))) struct seq_hdr_conf seq_hdr_conf;
+
 void print_chr(char ch)
 {
 	*((volatile uint8_t *)OUTPORT) = ch;
@@ -76,33 +80,73 @@ void dct_coeff_read(plm_dma_buffer_t *buffer)
 #endif
 }
 
+static void push_frame(plm_frame_t *frame)
+{
+	static int first_intra_frame_of_gop_occured = false;
+	static int intra_frame_occured_during_stream = false;
+
+	if (frame->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA)
+		intra_frame_occured_during_stream = true;
+
+	// To avoid scrambled graphics, the first frame to provide
+	// for display, shall be an I frame
+	if (!intra_frame_occured_during_stream)
+		return;
+
+	__asm volatile("" : : : "memory");
+
+	while (frame_display_fifo->pictures_in_fifo > 8)
+		__asm volatile("" : : : "memory");
+
+	*((volatile plm_frame_t **)OUTPORT_FRAME) = frame;
+	frame_display_fifo->y_adr = (uint32_t)frame->y.data;
+	frame_display_fifo->u_adr = (uint32_t)frame->cb.data;
+	frame_display_fifo->v_adr = (uint32_t)frame->cr.data;
+
+	// The VMPEG driver needs to know when the first I frame occured during a GOP
+	// We use the temporal ref for this, which starts at 0 with every GOP
+	if (frame->temporal_ref == 0)
+		first_intra_frame_of_gop_occured = false;
+
+	if (!first_intra_frame_of_gop_occured && frame->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA)
+	{
+		first_intra_frame_of_gop_occured = true;
+		frame_display_fifo->first_intra_frame_of_gop = 1;
+	}
+	else
+	{
+		frame_display_fifo->first_intra_frame_of_gop = 0;
+	}
+
+	frame_display_fifo->width = frame->width;
+	frame_display_fifo->height = frame->height;
+
+	if (frame_display_fifo->pictures_in_fifo < 5)
+	{
+		// It seems our FIFO is loosing pictures. Maybe the frame rate is slightly off?
+		// Increase frame period by 0.1Hz when running at 25 FPS
+		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod + 4780;
+	}
+	else if (frame_display_fifo->pictures_in_fifo > 6)
+	{
+		// It seems our FIFO is slightly overflowing. Maybe the frame rate is slightly off?
+		// Decrease frame period by 0.1Hz when running at 25 FPS
+		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod - 4780;
+	}
+	else
+	{
+		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod;
+	}
+	frame_display_fifo->fractional_pixel_width = seq_hdr_conf.pixel_aspect_ratio;
+
+	__asm volatile("" : : : "memory");
+}
+
 void main(void)
 {
-	*((volatile uint32_t *)OUTPORT) = sizeof(struct image_synthesis_descriptor);
-#if 0
-	static uint32_t testword;
-	memory_interface_test(&testword);
-	memory_interface_test((void*)0x41000030);
-	memory_interface_test((void*)0x40000030);
-	
-	for(;;);
-#endif
-	// test_vector_unit();
-	// stop_verilator();
-	//  for(;;);
-	// OUT_DEBUG = (int)image_synthesis_buffer;
-
 	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory((uint8_t *)0x20000000, 700 * 1024 * 1024, 0);
 	if (!buffer)
 		*((volatile uint8_t *)OUTPORT_END) = 2;
-
-#if 0
-	for (int i = 0; i < 10000; i++)
-		dct_coeff_read(buffer);
-	*((volatile uint8_t *)OUTPORT_END) = 0;
-	for (;;)
-		;
-#endif
 
 	while (!plm_dma_buffer_has(buffer, 1000))
 		;
@@ -110,9 +154,6 @@ void main(void)
 	plm_video_t *mpeg = plm_video_create_with_buffer(buffer, 0);
 	if (!mpeg)
 		*((volatile uint8_t *)OUTPORT_END) = 3;
-
-	int cnt = 0;
-	bool first_intra_frame_occured = false;
 
 	for (;;)
 	{
@@ -131,58 +172,7 @@ void main(void)
 			// Give some feedback to the user that we are running
 			*((volatile uint32_t *)OUTPORT) = frame->time;
 
-			//*((volatile uint32_t *)OUTPORT) = frame->width;
-			//*((volatile uint32_t *)OUTPORT) = frame->height;
-			//*((volatile uint32_t *)OUTPORT) = (uint32_t)frame->y.data;
-			//*((volatile uint32_t *)OUTPORT) = (uint32_t)frame->cr.data;
-			//*((volatile uint32_t *)OUTPORT) = (uint32_t)frame->cb.data;
-			__asm volatile("" : : : "memory");
-
-			while (frame_display_fifo->pictures_in_fifo > 8)
-				__asm volatile("" : : : "memory");
-
-			*((volatile plm_frame_t **)OUTPORT_FRAME) = frame;
-			frame_display_fifo->y_adr = (uint32_t)frame->y.data;
-			frame_display_fifo->u_adr = (uint32_t)frame->cb.data;
-			frame_display_fifo->v_adr = (uint32_t)frame->cr.data;
-
-			if (frame->temporal_ref == 0)
-				first_intra_frame_occured = false;
-
-			if (!first_intra_frame_occured && frame->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA)
-			{
-				first_intra_frame_occured = true;
-				frame_display_fifo->first_intra_frame_of_gop = 1;
-			}
-			else
-			{
-				frame_display_fifo->first_intra_frame_of_gop = 0;
-			}
-
-			frame_display_fifo->width = frame->width;
-			frame_display_fifo->height = frame->height;
-
-			if (frame_display_fifo->pictures_in_fifo < 5)
-			{
-				// It seems our FIFO is loosing pictures. Maybe the frame rate is slightly off?
-				// Increase frame period by 0.1Hz when running at 25 FPS
-				frame_display_fifo->frameperiod = mpeg->frameperiod + 4780;
-			}
-			else if (frame_display_fifo->pictures_in_fifo > 6)
-			{
-				// It seems our FIFO is slightly overflowing. Maybe the frame rate is slightly off?
-				// Decrease frame period by 0.1Hz when running at 25 FPS
-				frame_display_fifo->frameperiod = mpeg->frameperiod - 4780;
-			}	
-			else
-			{
-				frame_display_fifo->frameperiod = mpeg->frameperiod;
-			}
-			frame_display_fifo->fractional_pixel_width = mpeg->pixel_aspect_ratio;
-
-			__asm volatile("" : : : "memory");
-
-			cnt++;
+			push_frame(frame);
 		}
 		else
 		{

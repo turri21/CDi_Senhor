@@ -32,12 +32,12 @@ firmware2.bin: firmware2.elf
 
 firmware.elf: $(FIRMWARE_OBJS) sections_decoder.lds
 	$(TOOLCHAIN_PREFIX)gcc $(CFLAGS) -o $@ \
-		-Wl,--gc-sections,--build-id=none,-Bstatic,-T,sections_decoder.lds,-Map,firmware.map,--strip-debug \
+		-Wl,--gc-sections,--build-id=none,-Bstatic,-T,sections_decoder.lds,-Map,firmware1.map,--strip-debug \
 		$(FIRMWARE_OBJS) $(TEST_OBJS) -lgcc
 
 firmware2.elf: $(FIRMWARE2_OBJS) sections_worker.lds
 	$(TOOLCHAIN_PREFIX)gcc $(CFLAGS) -o $@ \
-		-Wl,--gc-sections,--build-id=none,-Bstatic,-T,sections_worker.lds,-Map,firmware.map,--strip-debug \
+		-Wl,--gc-sections,--build-id=none,-Bstatic,-T,sections_worker.lds,-Map,firmware2.map,--strip-debug \
 		$(FIRMWARE2_OBJS) $(TEST_OBJS) -lgcc
 
 

@@ -147,6 +147,12 @@ SECTIONS
   PROVIDE( _end = . );
   PROVIDE( end = . );
 
+  .noinit (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit .noinit.*)
+  } >ram AT>ram :ram
+  
   .stack  : ALIGN(16)
   {
     PROVIDE( _heap_end = . );

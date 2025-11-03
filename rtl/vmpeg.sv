@@ -611,13 +611,17 @@ module vmpeg (
                                 0x8000 -> 0x0010 and stay like that. no further events via mv_trigger() callback
                                 Also no further DMA transfers
                               mv_continue(path,0) after mv_freeze() to continue fast
-                               0x0010 -> 0x0100 -> 0x0000 -> 0x8000
+                                0x0010 -> 0x0100 -> 0x0000 -> 0x8000
                               mv_continue(path,1) after mv_freeze() to search for GOP
-                               0x0010 -> 0x0100 -> 0x0400 -> 0x8000
+                                0x0010 -> 0x0100 -> 0x0400 -> 0x8000
                               mv_continue(path,2) after mv_freeze() to start at SEQ
-                               0x0010 -> 0x0100 -> 0x0600 -> 0x8000
+                                0x0010 -> 0x0100 -> 0x0600 -> 0x8000
                               mv_cdplay() from cold boot
-                               Reset value 0x0000 -> 0x2000 -> 0x0100 -> 0x1000 -> 0x8000 -> 0x0008 -> 0x8000
+                                Reset value 0x0000 -> 0x2000 -> 0x0100 -> 0x1000 -> 0x8000 -> 0x0008 -> 0x8000
+                              Fast Forward during "Coneheads"
+                                0x8000 -> 0x0010 -> 0x0100 -> 0x1000 Pauses normal play
+                                0x1000 -> 0x8000 -> 0x0008 -> 0x8000 -> 0x0080 -> 0x0100 -> 0x1000 and repeat
+                                Beginning is like a normal playback but uses 0080 Stop
                             */
                             fmv_command_register <= din;
 
@@ -629,8 +633,13 @@ module vmpeg (
                                 fmv_playback_active <= 0;
                                 fmv_interrupt_status_register.pai <= 1;
                             end
+
                             if (din[5]) begin  // 0020 Continue
                                 fmv_playback_active <= 1;
+                            end
+
+                            if (din[7]) begin  // 0080 Stop
+                                fmv_playback_active <= 0;
                             end
 
                             if (din[8]) begin  // 0100 Clear FIFO? What to do?

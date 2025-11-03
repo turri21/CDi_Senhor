@@ -8,6 +8,7 @@ struct io_fifo_control
 	uint32_t read_bit_index;			// @0x10002004
 	uint32_t hw_read_count;				// @0x10002008
 	uint32_t hw_huffman_read_dct_coeff; // @0x1000200C
+	uint32_t has_sequence_header;		// @0x10002010
 };
 
 struct frame_display_fifo

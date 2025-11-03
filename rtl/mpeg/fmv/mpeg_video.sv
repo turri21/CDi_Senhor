@@ -136,6 +136,7 @@ module mpeg_video (
     wire [28:0] fifo_level_clk_mpeg = mpeg_stream_fifo_write_adr_clk_mpeg - mpeg_stream_fifo_read_adr;
     wire fifo_full_clk_mpeg = fifo_level_clk_mpeg > 29'd30500;
 
+    bit has_sequence_header = 0;
     bit hw_read_mem_ready = 0;
     wire [4:0] hw_read_bit_shift = mpeg_stream_bit_index[4:0];
 
@@ -258,7 +259,8 @@ module mpeg_video (
         .data_in2(0),
         .addr1(dmem_cmd_payload_address_1[13:2]),
         .data_in1(dmem_cmd_payload_data_1),
-        .we1(dmem_cmd_payload_address_1[31:28]==0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && dmem_cmd_payload_write_1),
+        .we1(dmem_cmd_payload_address_1[31:28]==0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && 
+                dmem_cmd_payload_write_1 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_1>=32'h00002710),
         .be1(dmem_cmd_payload_mask_1),
         .data_out1(memory_out_d1)
     );
@@ -274,7 +276,8 @@ module mpeg_video (
         .data_in2(0),
         .addr1(dmem_cmd_payload_address_2[12:2]),
         .data_in1(dmem_cmd_payload_data_2),
-        .we1(dmem_cmd_payload_address_2[31:28]==0 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && dmem_cmd_payload_write_2),
+        .we1(dmem_cmd_payload_address_2[31:28] == 0 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && 
+                dmem_cmd_payload_write_2 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_2 >= 32'h00000b88),
         .be1(dmem_cmd_payload_mask_2),
         .data_out1(memory_out_d2)
     );
@@ -290,7 +293,8 @@ module mpeg_video (
         .data_in2(0),
         .addr1(dmem_cmd_payload_address_3[12:2]),
         .data_in1(dmem_cmd_payload_data_3),
-        .we1(dmem_cmd_payload_address_3[31:28]==0 && dmem_cmd_valid_3 && dmem_cmd_ready_3 && dmem_cmd_payload_write_3),
+        .we1(dmem_cmd_payload_address_3[31:28] == 0 && dmem_cmd_valid_3 && dmem_cmd_ready_3 &&
+                dmem_cmd_payload_write_3 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_3 >= 32'h00000b88),
         .be1(dmem_cmd_payload_mask_3),
         .data_out1(memory_out_d3)
     );
@@ -717,6 +721,9 @@ module mpeg_video (
                             dmem_rsp_payload_data_1 = hw_read_result;
                         if (dmem_cmd_payload_address_1_q == 32'h1000200c)
                             dmem_rsp_payload_data_1 = {16'b0, dct_coeff_result};
+                        if (dmem_cmd_payload_address_1_q == 32'h10002010)
+                            dmem_rsp_payload_data_1 = {31'b0, has_sequence_header};
+
                         if (dmem_cmd_payload_address_1_q == 32'h10003028)
                             dmem_rsp_payload_data_1 = {28'b0, pictures_in_fifo_clk_mpeg};
 
@@ -798,31 +805,38 @@ module mpeg_video (
                 4'd4: begin  // Shared SRAM region
                 end
                 4'd1: begin
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3000)
-                        just_decoded.y_adr <= dmem_cmd_payload_data_1[28:0];
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3004)
-                        just_decoded.u_adr <= dmem_cmd_payload_data_1[28:0];
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3008)
-                        just_decoded.v_adr <= dmem_cmd_payload_data_1[28:0];
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h300c)
-                        decoder_width <= dmem_cmd_payload_data_1[8:0];
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
-                        decoder_height <= dmem_cmd_payload_data_1[8:0];
 
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3014) begin
-                        frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
-                        frame_period_clk_mpeg_set_clk_mpeg <= 1;
+                    if (dmem_cmd_payload_write_1) begin
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3000)
+                            just_decoded.y_adr <= dmem_cmd_payload_data_1[28:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3004)
+                            just_decoded.u_adr <= dmem_cmd_payload_data_1[28:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3008)
+                            just_decoded.v_adr <= dmem_cmd_payload_data_1[28:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h300c)
+                            decoder_width <= dmem_cmd_payload_data_1[8:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
+                            decoder_height <= dmem_cmd_payload_data_1[8:0];
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h2010) begin
+                            has_sequence_header <= dmem_cmd_payload_data_1[0];
+                            $display("has_sequence_header %d", dmem_cmd_payload_data_1[0]);
+                        end
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3014) begin
+                            frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
+                            frame_period_clk_mpeg_set_clk_mpeg <= 1;
+                        end
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
+                            fractional_pixel_width_clk_mpeg <= dmem_cmd_payload_data_1[8:0];
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
+                            event_sequence_end_clk_mpeg <= 1;
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3020)
+                            just_decoded.first_intra_frame_of_gop <= dmem_cmd_payload_data_1[0];
                     end
-
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
-                        fractional_pixel_width_clk_mpeg <= dmem_cmd_payload_data_1[8:0];
-
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
-                        event_sequence_end_clk_mpeg <= 1;
-
-                    if (dmem_cmd_payload_address_1[15:0] == 16'h3020)
-                        just_decoded.first_intra_frame_of_gop <= dmem_cmd_payload_data_1[0];
-
                 end
                 4'd0: begin
                 end
@@ -1260,7 +1274,7 @@ module mpeg_video (
         .offset_x(display_offset_x),
         .latch_frame_clkvideo(latch_frame_for_display),
         .latch_frame_clkddr(latch_frame_for_display_clk_mpeg),
-        .invalidate_latched_frame(reset_dsp_enabled_clk_mpeg)
+        .invalidate_latched_frame(0)
     );
 endmodule
 

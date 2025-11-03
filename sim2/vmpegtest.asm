@@ -11,11 +11,7 @@ main:
 
 	move.w #$2000,$E040C0 ; FMV SYSCMD - Decoder off
 	nop
-	nop
-	nop
 	move.w #$0100,$E040C0 ; FMV SYSCMD - Clear FIFO
-	nop
-	nop
 	nop
 	move.w #$1000,$E040C0 ; FMV SYSCMD - Decoder on
 
@@ -44,27 +40,44 @@ main:
 	; #$00425900 2 Unlimited – Beyond Limits (Channel 0001)
 	; #$42252600 Burger King - Multilanguage?
 	; #$00152100 VideoCD Example (Channel ffff)
+	; #$01164500 Coneheads (USA)
+	; #$01414300 Coneheads (USA) Continue
+
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$ffffffff,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$01341100,$303C02 ; Timer Register
+	move.l #$01164500,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
+
+	jsr WaitForSectorAndUse
+	jsr WaitForSectorAndUse
+
+	; We assume that the sequence header was decoded by now
+	; Now stop the playback and continue at a different position
+	move.w #$0000,$303FFE ; Stop reading from disc
+	move.l #$07353200,$303C02 ; Timer Register
+	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
+
+	move.w #$0100,$E040C0 ; FMV SYSCMD - Clear FIFO
+
+	move.b #'Z',$80002019
+
+	; Usually one would use the DTS and SCR to start playback
+	; But I feel lazy and use the number of pics instead
+waitforpics:
+	jsr WaitForSectorAndUse
+	cmp.w #5,$00E040A4 ; Compare 3 against pictures in FIFO
+	bmi waitforpics
+
+	move.b #'B',$80002019
+
+	move.w #$0008,$E040C0 ; FMV SYSCMD - Play
+
 endless:
-
 	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-	jsr WaitForSectorAndUse
-
 	bra endless
+
 
 WaitForSectorAndUse:
 	jsr waitforcdicirq
