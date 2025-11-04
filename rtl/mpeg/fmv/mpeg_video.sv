@@ -270,7 +270,7 @@ module mpeg_video (
         .addr1(dmem_cmd_payload_address_1[13:2]),
         .data_in1(dmem_cmd_payload_data_1),
         .we1(dmem_cmd_payload_address_1[31:28]==0 && dmem_cmd_valid_1 && dmem_cmd_ready_1 && 
-                dmem_cmd_payload_write_1 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_1>=32'h00002710),
+                dmem_cmd_payload_write_1 && !reset_dsp_enabled_clk_mpeg),
         .be1(dmem_cmd_payload_mask_1),
         .data_out1(memory_out_d1)
     );
@@ -279,15 +279,15 @@ module mpeg_video (
     wire [31:0] memory_out_d2;
     worker_firmware_memory core2mem (
         .clk(clk_mpeg),
-        .addr2(imem_cmd_payload_address_2[12:2]),
+        .addr2(imem_cmd_payload_address_2[11:2]),
         .data_out2(memory_out_i2),
         .be2(0),
         .we2(0),
         .data_in2(0),
-        .addr1(dmem_cmd_payload_address_2[12:2]),
+        .addr1(dmem_cmd_payload_address_2[11:2]),
         .data_in1(dmem_cmd_payload_data_2),
         .we1(dmem_cmd_payload_address_2[31:28] == 0 && dmem_cmd_valid_2 && dmem_cmd_ready_2 && 
-                dmem_cmd_payload_write_2 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_2 >= 32'h00000b88),
+                dmem_cmd_payload_write_2 && !reset_dsp_enabled_clk_mpeg),
         .be1(dmem_cmd_payload_mask_2),
         .data_out1(memory_out_d2)
     );
@@ -296,15 +296,15 @@ module mpeg_video (
     wire [31:0] memory_out_d3;
     worker_firmware_memory core3mem (
         .clk(clk_mpeg),
-        .addr2(imem_cmd_payload_address_3[12:2]),
+        .addr2(imem_cmd_payload_address_3[11:2]),
         .data_out2(memory_out_i3),
         .be2(0),
         .we2(0),
         .data_in2(0),
-        .addr1(dmem_cmd_payload_address_3[12:2]),
+        .addr1(dmem_cmd_payload_address_3[11:2]),
         .data_in1(dmem_cmd_payload_data_3),
         .we1(dmem_cmd_payload_address_3[31:28] == 0 && dmem_cmd_valid_3 && dmem_cmd_ready_3 &&
-                dmem_cmd_payload_write_3 && !reset_dsp_enabled_clk_mpeg && dmem_cmd_payload_address_3 >= 32'h00000b88),
+                dmem_cmd_payload_write_3 && !reset_dsp_enabled_clk_mpeg),
         .be1(dmem_cmd_payload_mask_3),
         .data_out1(memory_out_d3)
     );
@@ -791,12 +791,18 @@ module mpeg_video (
 
         event_sequence_end_clk_mpeg <= 0;
 
-        if (dmem_cmd_payload_address_1 == 32'h1000000c && dmem_cmd_payload_write_1 && dmem_cmd_valid_1)begin
+        if (dmem_cmd_payload_address_1 >= 32'h00002c10 && dmem_cmd_payload_address_1 <= 32'h0002cc0  && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1) begin
+            $display("Core 1 SEQ HDR write %x at %x during code address %x",
+                     dmem_cmd_payload_data_1, dmem_cmd_payload_address_1,
+                     imem_cmd_payload_address_1);
+        end
+
+        if (dmem_cmd_payload_address_1 == 32'h1000000c && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1)begin
             $display("Core 1 stopped at %x with code %x", imem_cmd_payload_address_1,
                      dmem_cmd_payload_data_1);
             $finish();
         end
-        if (dmem_cmd_payload_address_1 == 32'h10000030 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1)
+        if (dmem_cmd_payload_address_1 == 32'h10000030 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1)
             soft_state1 <= dmem_cmd_payload_data_1;
 
         if (expose_frame_struct_adr_clk_mpeg) begin

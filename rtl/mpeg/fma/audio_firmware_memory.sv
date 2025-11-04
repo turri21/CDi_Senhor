@@ -24,7 +24,7 @@ module audio_firmware_memory #(
     output [DATA_WIDTH_R-1:0] data_out1,
     output [DATA_WIDTH_R-1:0] data_out2
 );
-    localparam RAM_DEPTH = 23505 >> 2;
+    localparam RAM_DEPTH = 16584 >> 2;
 
     // model the RAM with two dimensional packed array
     logic [BYTES-1:0][BYTE_WIDTH-1:0] ram[0:RAM_DEPTH-1];

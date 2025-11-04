@@ -36,8 +36,8 @@ struct image_synthesis_descriptor
     uint8_t cmdcnt;
 };
 
-struct image_synthesis_descriptor *image_synthesis_buffer = (struct image_synthesis_descriptor *)0x40000000;
-struct image_synthesis_descriptor *image_synthesis_buffer2 = (struct image_synthesis_descriptor *)0x41000000;
+struct image_synthesis_descriptor * const image_synthesis_buffer = (struct image_synthesis_descriptor *)0x40000000;
+struct image_synthesis_descriptor * const image_synthesis_buffer2 = (struct image_synthesis_descriptor *)0x41000000;
 int image_synthesis_buffer_index = 0;
 int image_synthesis_buffer_index2 = 0;
 static uint8_t cmdcnt = 0;
