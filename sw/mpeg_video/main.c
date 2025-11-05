@@ -119,7 +119,6 @@ static void push_frame(plm_frame_t *frame)
 	}
 
 	frame_display_fifo->width = frame->width;
-	frame_display_fifo->height = frame->height;
 
 	if (frame_display_fifo->pictures_in_fifo < 5)
 	{
@@ -139,6 +138,9 @@ static void push_frame(plm_frame_t *frame)
 	}
 	frame_display_fifo->fractional_pixel_width = seq_hdr_conf.pixel_aspect_ratio;
 
+	// The order is crucial since a write to height will commit the frame!
+	__asm volatile("" : : : "memory");
+	frame_display_fifo->height = frame->height;
 	__asm volatile("" : : : "memory");
 }
 
