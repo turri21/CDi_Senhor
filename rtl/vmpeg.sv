@@ -104,10 +104,12 @@ module vmpeg (
     wire fmv_event_picture = fmv_event_picture_starts_display;
     wire [15:0] fmv_tmpref;
     // TIMECD @ 00E04058
-    // [21:16] 6 Bit Frames? Not BCD
-    // [27:22] 6 Bit Seconds? Not BCD
-    // [5:0] 6 Bit Minutes? Not BCD
-    // Where are the hours?
+    // example 0x07800280 -> 10:00:30.0
+    // mv_info() would have MD_TimeCd=0x0a001e00
+    // [21:16] 6 Bit Frames. Not BCD
+    // [27:22] 6 Bit Seconds. Not BCD
+    // [5:0] 6 Bit Minutes. Not BCD
+    // [10:6] 5 Bits Hours. Not BCD
     wire [31:0] fmv_timecode;
     bit fmv_playback_active;
     wire fmv_event_sequence_end;

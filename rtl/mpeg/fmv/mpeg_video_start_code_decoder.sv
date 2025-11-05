@@ -81,28 +81,33 @@ module mpeg_video_start_code_decoder (
                     //$display ("PIC0 %x",mpeg_data);
                     temporal_sequence_number[9:2] <= mpeg_data;
                 end
-                {GOP3, 8'h??}: begin
+                {GOP3, 8'h??}: begin // P???????
                     finder_state <= IDLE;
                     $display ("GOP3 %x",mpeg_data);
                     event_group_of_pictures <= 1;
                     next_sequence_number <= 0;
-                    timecode[16] <= mpeg_data[7];
+                    timecode[16] <= mpeg_data[7]; // last bit of pictures
                     $display ("Timecode %d:%d:%d",timecode[5:0],timecode[27:22], timecode[21:16]);
                 end
-                {GOP2, 8'h??}: begin
+                {GOP2, 8'h??}: begin // SSSPPPPP
                     finder_state <= GOP3;
                     $display ("GOP2 %x",mpeg_data);
-                    timecode[24:22] <= mpeg_data[7:5];
-                    timecode[21:17] <= mpeg_data[4:0];
+                    timecode[24:22] <= mpeg_data[7:5]; // lower 3 bits of seconds
+                    timecode[21:17] <= mpeg_data[4:0]; // upper 5 bits of pictures
                     gop_cnt <= gop_cnt + 1;
                 end
-                {GOP1, 8'h??}: begin
+                {GOP1, 8'h??}: begin // MMMM?SSS
                     finder_state <= GOP2;
                     $display ("GOP1 %x",mpeg_data);
-                    // Seconds
-                    timecode[27:25] <= mpeg_data[2:0];
+                    timecode[3:0] <= mpeg_data[7:4]; // lower 4 bits of minutes
+                    timecode[27:25] <= mpeg_data[2:0]; // upper 3 bits of seconds
                     end
-                {GOP0, 8'h??}: begin finder_state <= GOP1; $display ("GOP0 %x",mpeg_data);end
+                {GOP0, 8'h??}: begin // ?HHHHHMM
+                    finder_state <= GOP1;
+                    $display ("GOP0 %x",mpeg_data);
+                    timecode[10:6] <= mpeg_data[6:2]; // 5 bit hours
+                    timecode[5:4] <= mpeg_data[1:0]; // upper 2 bits of minutes
+                    end
 
                 {SEQHDR, 8'h??}: begin
                     finder_state <= IDLE; 
