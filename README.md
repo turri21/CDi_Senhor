@@ -44,6 +44,7 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* Lost Eden is not booting
 * Coneheads shows black picture when trying to continue the movie
 * Addams Family Disc 2 crashes when opening menu
 * Top Gun Scan Mode / Fast Forward is unstable. Potential freeze

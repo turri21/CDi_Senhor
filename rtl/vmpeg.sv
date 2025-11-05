@@ -341,11 +341,13 @@ module vmpeg (
             15'h2001: dout = 16'h0180;  // 00E04002 ??
             15'h2002: dout = 16'h0118;  // 00E04004 ??
             15'h2003: dout = image_rt;  // 00E04006 ??
-            15'h2029: dout = 16'h0180;  // e04052 Pic Size High??
-            15'h202a: dout = 16'h0118;  // e04054 Pic Size Low??
+            15'h2004: dout = fmv_timecode[31:16];  // 00E04008 Temporal time code High. During scan
+            15'h2005: dout = fmv_timecode[15:0];  // 00E0400C Temporal time code Low. During scan
+            15'h2029: dout = 16'h0180;  // e04052 Pic Size High ??
+            15'h202a: dout = 16'h0118;  // e04054 Pic Size Low ??
             15'h202b: dout = image_rt;  // e04056 Pic Rt ??
-            15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High??
-            15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low??
+            15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High ??
+            15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low ??
             15'h202e: dout = fmv_tmpref;  // 00E0405C TMP REF?? SYS_VSR?
             15'h202f: dout = 16'h2000;  // 00E0405E ?? STS ? always 2000 on cdiemu
             15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
