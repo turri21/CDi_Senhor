@@ -44,7 +44,10 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
-* Lost Eden is not booting
+* Unify save file name (.chd and .cue and subfolder) https://github.com/MiSTer-devel/CDi_MiSTer/issues/11
+* Multi disc titles that share one NvRAM
+* "Lost Eden" is not booting (it is even booting on MAME!)
+* "Christmas Country" is not booting
 * Coneheads shows black picture when trying to continue the movie
 * Addams Family Disc 2 crashes when opening menu
 * Top Gun Scan Mode / Fast Forward is unstable. Potential freeze
@@ -121,9 +124,6 @@ The production quality of the CD-i hardware and the software running on it is so
 For this reason, I've created a small list of some known quirks, someone might suspect of being caused
 by emulation errors but are also present on the real machine.
 
-* Is the "Digital Video Cartridge" supported?
-    * No! Please stop asking!
-    * Potential development on the DVC might only start after everything works without bugs on the base machine.
 * The map of "Zelda - Wand of Gamelon" has micro jitter during scrolling
     * This also happens on real 210/05 hardware
 * "Hotel Mario" seems to have the first samples of every ingame song repeated
