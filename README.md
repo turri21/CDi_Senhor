@@ -54,7 +54,7 @@ Expected synthesis times with Quartus 17.0.2
   * MPEG Decoder even broken after reset?
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
-* Problems with "les guignols de l'info"?
+* Problems with "Les Guignols de l’Info"?
 * VCD resolution for white book
 * Glitches during Top Gun (Might be Pause command related)
 * VCDs are stopping at some point?

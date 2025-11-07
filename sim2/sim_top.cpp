@@ -520,11 +520,40 @@ class CDi {
             printf("Media change!\n");
 
 #ifdef SCC68070
+
+        if (dut.rootp->emu__DOT__cditop__DOT__as && !dut.rootp->emu__DOT__cditop__DOT__write_strobe &&
+            dut.rootp->emu__DOT__cditop__DOT__bus_ack && dut.rootp->emu__DOT__cditop__DOT__addr_byte < 0x60) {
+            switch (dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2) {
+            case 0: // Ignore Reset SP
+            case 1: // Ignore Reset PC
+                break;
+            case 2:
+                printf("Exception - Bus error\n");
+                break;
+            case 3:
+                printf("Exception - Address error\n");
+                break;
+            case 4:
+                printf("Exception - Illegal instruction\n");
+                break;
+            case 5:
+                printf("Exception - Division by zero\n");
+                break;
+            case 8:
+                printf("Exception - Privilege violation \n");
+                break;
+            default:
+                printf("Exception - %d ??? \n", dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2);
+                break;
+            }
+        }
+
         // Abort on illegal Instructions
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__trap_illegal) {
             fprintf(stderr, "Illegal Instruction!\n");
             exit(1);
         }
+
 #endif
 
         dut.rootp->emu__DOT__nvram_media_change = (time30mhz == 2000);
@@ -950,7 +979,7 @@ class CDi {
         dut.rootp->emu__DOT__img_size = 4096;
         dut.rootp->emu__DOT__rc_eye = 1; // RC Eye signal is idle high
 
-        dut.rootp->emu__DOT__tvmode_ntsc = true;
+        dut.rootp->emu__DOT__tvmode_ntsc = false;
 
         dut.RESET = 1;
         dut.UART_RXD = 1;
@@ -975,7 +1004,7 @@ class CDi {
         start = std::chrono::system_clock::now();
 #ifdef TRACE
         // do_trace = false;
-        //fprintf(stderr, "Trace off!\n");
+        // fprintf(stderr, "Trace off!\n");
 #endif
 
 #ifdef SIMULATE_RC5
@@ -1062,7 +1091,7 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/Zelda Wand of Gamelon.bin", "rb");
         break;
     case 4:
-        f_cd_bin = fopen("images/fmvtest_only_audio.bin", "rb");
+        f_cd_bin = fopen("images/christ_country.bin", "rb");
         break;
     case 5:
         f_cd_bin = fopen("images/fmvtest.bin", "rb");
