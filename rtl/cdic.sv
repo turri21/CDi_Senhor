@@ -230,6 +230,8 @@ module cdic (
     bit write_timecode1 = 0;
     bit write_timecode2 = 0;
 
+    bit [1:0] spin_down_cnt = 0;
+
     always_comb begin
         reset_write_timecode1 = 0;
         reset_write_timecode2 = 0;
@@ -381,6 +383,7 @@ module cdic (
             fail_too_much_data <= 0;
             write_timecode1 <= 0;
             write_timecode2 <= 0;
+            spin_down_cnt <= 0;
         end else begin
             if (mem_cd_hps_we) begin
                 cd_data_target_adr <= cd_data_target_adr + 1;
@@ -390,6 +393,11 @@ module cdic (
                 $display("Sector written to RAM / has ended");
                 write_timecode1 <= !read_raw;
                 write_timecode2 <= !read_raw;
+            end
+
+            if (spin_down_cnt != 0 && cd_sector_tick) begin
+                spin_down_cnt <= spin_down_cnt - 1;
+                if (spin_down_cnt == 1) x_buffer_register[15] <= 1'b1;
             end
 
             if (cd_data_valid && cd_reading_active) begin
@@ -594,9 +602,12 @@ module cdic (
 
                 case (command_register)
                     16'h23: begin
-                        $display("CDIC Command: Reset Mode 1");
+                        $display("CDIC Command: Stop disc");
                         cd_seek_lba <= time_register_as_lba;
-                        read_mode2  <= 0;
+                        read_mode2 <= 0;
+                        spin_down_cnt <= 3;
+                        // It might be tempting to do x_buffer_register[15] <= 1'b1; immediatly here.
+                        // But it won't work. It needs to be delayed. spin_down_cnt will do the job
                     end
                     16'h24: begin
                         $display("CDIC Command: Reset Mode 2");

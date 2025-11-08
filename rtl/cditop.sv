@@ -81,7 +81,7 @@ module cditop (
     parallelel_spi slave_servo_spi ();
 
     wire write_strobe  /*verilator public_flat_rd*/;
-    wire as /*verilator public_flat_rd*/;
+    wire as  /*verilator public_flat_rd*/;
     wire lds;
     wire uds;
 
@@ -90,7 +90,7 @@ module cditop (
     bit [15:0] data_in;
     wire [15:0] cpu_data_out;
     wire [23:1] addr;
-    wire [23:0] addr_byte /*verilator public_flat_rd*/ = {addr[23:1], 1'b0};
+    wire [23:0] addr_byte  /*verilator public_flat_rd*/ = {addr[23:1], 1'b0};
 
     wire [15:0] cpu_data = write_strobe ? cpu_data_out : data_in;
 
