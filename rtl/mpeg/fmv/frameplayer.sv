@@ -24,7 +24,8 @@ module frameplayer (
 
     input latch_frame_clkvideo,
     input latch_frame_clkddr,
-    input invalidate_latched_frame
+    input invalidate_latched_frame,
+    input show_on_next_video_frame
 );
 
     assign ddrif.byteenable = 8'hff;
@@ -32,7 +33,7 @@ module frameplayer (
 
     planar_yuv_s latched_frame;
     bit latched_frame_valid;
-    bit current_frame_valid;
+    bit fetch_and_show_frame;
 
     always_ff @(posedge clkddr) begin
         if (reset_clkddr || invalidate_latched_frame) begin
@@ -119,12 +120,12 @@ module frameplayer (
         .signal_out_clk_b(vblank_clkddr)
     );
 
-    wire current_frame_valid_clkvideo;
-    signal_cross_domain cross_current_frame_valid (
+    wire fetch_and_show_frame_clkvideo;
+    signal_cross_domain cross_fetch_and_show_frame (
         .clk_a(clkddr),
         .clk_b(clkvideo),
-        .signal_in_clk_a(current_frame_valid),
-        .signal_out_clk_b(current_frame_valid_clkvideo)
+        .signal_in_clk_a(fetch_and_show_frame),
+        .signal_out_clk_b(fetch_and_show_frame_clkvideo)
     );
 
     bit [7:0] chroma_read_addr;
@@ -180,7 +181,7 @@ module frameplayer (
             luma_fifo_strobe <= 0;
             chroma_read_addr <= 0;
             horizontal_offset_wait <= offset_x;
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && current_frame_valid_clkvideo) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && fetch_and_show_frame_clkvideo) begin
 
             if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
             else begin
@@ -216,6 +217,14 @@ module frameplayer (
         .signal_out_clk_b(vertical_offset_wait_not_null_clkddr)
     );
 
+    wire show_on_next_video_frame_clkddr;
+    signal_cross_domain cross_vshow_on_next_video_frame (
+        .clk_a(clkvideo),
+        .clk_b(clkddr),
+        .signal_in_clk_a(show_on_next_video_frame),
+        .signal_out_clk_b(show_on_next_video_frame_clkddr)
+    );
+
     always_ff @(posedge clkddr) begin
         linecnt_clkddr <= linecnt;
 
@@ -234,14 +243,14 @@ module frameplayer (
             address_y <= latched_frame.y_adr;
             address_u <= latched_frame.u_adr;
             address_v <= latched_frame.v_adr;
-            current_frame_valid <= latched_frame_valid;
+            fetch_and_show_frame <= latched_frame_valid && show_on_next_video_frame_clkddr;
             target_y <= 0;
             target_u <= 0;
             target_v <= 0;
             line_alternate <= 0;
             u_requested <= 0;
             v_requested <= 0;
-        end else if (current_frame_valid) begin
+        end else if (fetch_and_show_frame) begin
             if (new_line_started_clkddr && linecnt_clkddr < frame_height) begin
                 line_alternate <= !line_alternate;
 
@@ -327,7 +336,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !current_frame_valid_clkvideo) begin
+        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !fetch_and_show_frame_clkvideo) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

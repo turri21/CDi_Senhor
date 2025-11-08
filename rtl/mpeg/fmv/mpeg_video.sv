@@ -23,6 +23,7 @@ module mpeg_video (
 
     input [8:0] display_offset_y,
     input [8:0] display_offset_x,
+    input show_on_next_video_frame,
     output event_sequence_end,
     output event_buffer_underflow,
     output bit event_picture_starts_display,
@@ -1294,7 +1295,8 @@ module mpeg_video (
         .offset_x(display_offset_x),
         .latch_frame_clkvideo(latch_frame_for_display),
         .latch_frame_clkddr(latch_frame_for_display_clk_mpeg),
-        .invalidate_latched_frame(0)
+        .invalidate_latched_frame(reset_persistent_storage_clk_mpeg),
+        .show_on_next_video_frame(show_on_next_video_frame)
     );
 endmodule
 

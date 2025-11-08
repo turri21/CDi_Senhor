@@ -44,6 +44,8 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* Broken audio with "Lost Eden"
+* Slow motion with VCDs is behaving incorrect
 * Unify save file name (.chd and .cue and subfolder) https://github.com/MiSTer-devel/CDi_MiSTer/issues/11
 * Multi disc titles that share one NvRAM
 * "Lost Eden" is not booting (it is even booting on MAME!)
@@ -56,8 +58,6 @@ Expected synthesis times with Quartus 17.0.2
 * Weird shifted graphics with "David and Goliath"
 * Problems with "Les Guignols de l’Info"?
 * VCD resolution for white book
-* Glitches during Top Gun (Might be Pause command related)
-* VCDs are stopping at some point?
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
 * Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode

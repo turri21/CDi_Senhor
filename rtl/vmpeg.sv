@@ -134,6 +134,7 @@ module vmpeg (
         .vidout,
         .display_offset_x(video_ctrl_x_display[8:0]),
         .display_offset_y(video_ctrl_y_display[8:0]),
+        .show_on_next_video_frame(fmv_show_on_next_video_frame),
         .event_sequence_end(fmv_event_sequence_end),
         .event_buffer_underflow(fmv_event_buffer_underflow),
         .event_picture_starts_display(fmv_event_picture_starts_display),
@@ -272,7 +273,11 @@ module vmpeg (
     bit [15:0] fma_dclkl_latch;
 
     // FMV SYSCMD @ 00E040C0
-    (* keep *) (* noprune *) bit [15:0] fmv_command_register = 0;
+    (* keep *) (* noprune *) bit [15:0] fmv_system_command_register = 0;
+    // FMV VIDCMD @ 00E040C2
+    (* keep *) (* noprune *) bit [15:0] fmv_video_command_register = 0;
+    bit fmv_show_on_next_video_frame;
+
     // FMV ISR @ 00E04062
     interrupt_flags_s fmv_interrupt_status_register;
     // FMV IER @ 00E04060
@@ -412,7 +417,7 @@ module vmpeg (
             fma_interrupt_vector_register <= 0;
             fma_status_register <= 0;
             fma_stream_number <= 0;
-            fmv_command_register <= 0;
+            fmv_system_command_register <= 0;
             fmv_dclk <= 0;
             fmv_dsp_enable <= 0;
             fmv_frame_rate <= 0;
@@ -434,6 +439,7 @@ module vmpeg (
             video_ctrl_y_display <= 0;
             video_ctrl_y_offset <= 0;
             video_data_input_command_register <= 0;
+            fmv_show_on_next_video_frame <= 0;
         end else begin
 
             if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
@@ -630,7 +636,7 @@ module vmpeg (
                                 0x1000 -> 0x8000 -> 0x0008 -> 0x8000 -> 0x0080 -> 0x0100 -> 0x1000 and repeat
                                 Beginning is like a normal playback but uses 0080 Stop
                             */
-                            fmv_command_register <= din;
+                            fmv_system_command_register <= din;
 
                             if (din[3]) begin  // 0008 Play
                                 fmv_playback_active <= 1;
@@ -678,6 +684,22 @@ module vmpeg (
                         end
                         15'h2061: begin
                             $display("FMV Write VIDCMD Register %x %x", address[15:1], din);
+                            /*
+	                        according to fmvd.txt
+                              0100 Hide
+                              0200 Show
+                            */
+                            fmv_video_command_register <= din;
+
+                            // Hide 0100
+                            if (din[8]) fmv_show_on_next_video_frame <= 0;
+
+                            // Show Window 0200
+                            if (din[9]) fmv_show_on_next_video_frame <= 1;
+                            // Show Window on next picture change 0400
+                            if (din[10]) fmv_show_on_next_video_frame <= 1;
+
+                            // TODO this might not be right
                         end
                         15'h206F: begin  // 0E040DE
                             $display("FMV Write XFER Register %x %x", address[15:1], din);
