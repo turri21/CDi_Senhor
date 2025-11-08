@@ -74,6 +74,8 @@ module vmpeg (
     bit  dsp_reset_input_fifo;
     bit  fma_dsp_enable = 0;
     bit  fmv_dsp_enable = 0;
+    bit  fmv_reset_persistent_storage = 0;
+
     wire fma_fifo_full;
     wire fmv_fifo_full;
 
@@ -117,6 +119,7 @@ module vmpeg (
         .clk_mpeg(clk_mpeg),
         .reset,
         .dsp_enable(fmv_dsp_enable),
+        .reset_persistent_storage(fmv_reset_persistent_storage),
         .playback_active(fmv_playback_active),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
@@ -654,11 +657,13 @@ module vmpeg (
 
                             if (din[12]) begin  // 1000 Decoder on
                                 fmv_dsp_enable <= 1;
+                                fmv_reset_persistent_storage <= 0;
                             end
 
                             if (din[13]) begin  // 2000 Decoder off
                                 fmv_dsp_enable <= 0;
                                 fmv_playback_active <= 0;
+                                fmv_reset_persistent_storage <= 1;
                             end
 
                             if (din[15]) begin  // 8000 DMA

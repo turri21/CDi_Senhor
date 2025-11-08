@@ -6,6 +6,7 @@ module mpeg_video (
     input clk_mpeg,
     input reset,
     input dsp_enable,
+    input reset_persistent_storage,
     input playback_active,
 
     input  [7:0] data_byte,
@@ -61,6 +62,15 @@ module mpeg_video (
         .clk_b(clk_mpeg),
         .signal_in_clk_a(dsp_enable),
         .signal_out_clk_b(dsp_enable_clk_mpeg)
+    );
+
+    wire reset_persistent_storage_clk_mpeg;
+
+    signal_cross_domain cross_reset_persistent_storage (
+        .clk_a(clk30),
+        .clk_b(clk_mpeg),
+        .signal_in_clk_a(reset_persistent_storage),
+        .signal_out_clk_b(reset_persistent_storage_clk_mpeg)
     );
 
     wire reset_dsp_enabled = reset || !dsp_enable;
@@ -848,6 +858,10 @@ module mpeg_video (
         if (imem_cmd_valid_1) begin
             imem_rsp_valid_1 <= 1;
             imem_rsp_payload_id_1 <= imem_cmd_payload_id_1;
+        end
+
+        if (reset_persistent_storage_clk_mpeg) begin
+            has_sequence_header <= 0;
         end
     end
 
