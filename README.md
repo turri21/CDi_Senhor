@@ -33,9 +33,9 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  22,429 / 41,910 ( 54 % )
-    Total registers              25296
-    Total block memory bits      2,072,224 / 5,662,720 ( 37 % )
+    Logic utilization (in ALMs)  22,474 / 41,910 ( 54 % )
+    Total registers              25559
+    Total block memory bits      1,937,824 / 5,662,720 ( 34 % )
     Total DSP Blocks             92 / 112 ( 82 % )
 
 Expected synthesis times with Quartus 17.0.2
@@ -48,12 +48,6 @@ Expected synthesis times with Quartus 17.0.2
 * Slow motion with VCDs is behaving incorrect
 * Unify save file name (.chd and .cue and subfolder) https://github.com/MiSTer-devel/CDi_MiSTer/issues/11
 * Multi disc titles that share one NvRAM
-* "Lost Eden" is not booting (it is even booting on MAME!)
-* "Christmas Country" is not booting
-* Coneheads shows black picture when trying to continue the movie
-* Addams Family Disc 2 crashes when opening menu
-* Top Gun Scan Mode / Fast Forward is unstable. Potential freeze
-  * MPEG Decoder even broken after reset?
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
 * Problems with "Les Guignols de l’Info"?

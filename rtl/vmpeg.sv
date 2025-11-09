@@ -343,13 +343,13 @@ module vmpeg (
             15'h180E: dout = fma_interrupt_enable_register;  // 0x0E0301C
             15'h1812: dout = 16'h0004;  // HF2 Flag of DSP56001?
 
-            15'h2001: dout = 16'h0180;  // 00E04002 ??
-            15'h2002: dout = 16'h0118;  // 00E04004 ??
+            15'h2001: dout = image_width2;  // 00E04002 ??
+            15'h2002: dout = image_height2;  // 00E04004 ??
             15'h2003: dout = image_rt;  // 00E04006 ??
             15'h2004: dout = fmv_timecode[31:16];  // 00E04008 Temporal time code High. During scan
             15'h2005: dout = fmv_timecode[15:0];  // 00E0400C Temporal time code Low. During scan
-            15'h2029: dout = 16'h0180;  // e04052 Pic Size High ??
-            15'h202a: dout = 16'h0118;  // e04054 Pic Size Low ??
+            15'h2029: dout = image_width2;  // e04052 Pic Size High ??
+            15'h202a: dout = image_height2;  // e04054 Pic Size Low ??
             15'h202b: dout = image_rt;  // e04056 Pic Rt ??
             15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High ??
             15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low ??
@@ -447,7 +447,10 @@ module vmpeg (
 
             if (vsync && !vsync_q) fmv_interrupt_status_register.vsync <= 1;
 
-            if (fmv_event_sequence_header) fmv_interrupt_status_register.seq <= 1;
+            if (fmv_event_sequence_header) begin
+                fmv_interrupt_status_register.seq <= 1;
+                $display("Cause FMV Seq Event");
+            end
             if (fmv_event_group_of_pictures) fmv_interrupt_status_register.gop <= 1;
             if (fmv_event_picture) fmv_interrupt_status_register.pic <= 1;
             if (fmv_event_last_picture_starts_display) fmv_interrupt_status_register.eod <= 1;
@@ -668,12 +671,14 @@ module vmpeg (
                             if (din[12]) begin  // 1000 Decoder on
                                 fmv_dsp_enable <= 1;
                                 fmv_reset_persistent_storage <= 0;
+                                $display("FMV Decoder On");
                             end
 
                             if (din[13]) begin  // 2000 Decoder off
                                 fmv_dsp_enable <= 0;
                                 fmv_playback_active <= 0;
                                 fmv_reset_persistent_storage <= 1;
+                                $display("FMV Decoder Off");
                             end
 
                             if (din[15]) begin  // 8000 DMA

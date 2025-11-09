@@ -109,6 +109,7 @@ template <typename T, typename U> constexpr T BIT(T x, U n) noexcept {
 }
 
 bool press_button_signal{false};
+bool print_instructions{false};
 
 void signal_handler(int signum, siginfo_t *info, void *context) {
     fprintf(stderr, "Received signal %d\n", signum);
@@ -128,6 +129,9 @@ void signal_handler(int signum, siginfo_t *info, void *context) {
 #ifdef TRACE
         do_trace = !do_trace;
         fprintf(stderr, "Trace %s\n", do_trace ? "on" : "off");
+#else
+        print_instructions = !print_instructions;
+        fprintf(stderr, "Instruction Trace %s\n", print_instructions ? "on" : "off");
 #endif
         break;
     }
@@ -301,7 +305,6 @@ class CDi {
     tracetype_t m_trace;
 #endif
 
-    uint32_t print_instructions = 0;
     uint32_t prevpc = 0;
     uint32_t leave_sys_callpc = 0;
 
@@ -687,6 +690,10 @@ class CDi {
                     fprintf(stderr, "System halted and debugger calted!\n");
                     exit(1);
                 }
+            }
+
+            if (print_instructions) {
+                printstate();
             }
 
             if (m_pc == leave_sys_callpc) {
