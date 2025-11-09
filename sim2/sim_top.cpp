@@ -684,34 +684,8 @@ class CDi {
 #ifndef SIMULATE_RC5
             if (dut.rootp->emu__DOT__tvmode_ntsc) {
                 // NTSC
-
-                if (frame_index > 259) {
-                    if ((frame_index % 25) == 20)
-                        press_button_signal = true;
-                }
-
             } else {
                 // PAL
-
-                if (instanceid == 9) {
-                    // Space Ace
-                    if (frame_index == 144) { // Skip Philips Logo
-                        press_button_signal = true;
-                    }
-                    if (frame_index == 410) { // Skip Logo
-                        press_button_signal = true;
-                    }
-
-                } else if (instanceid == 8) {
-                    // Dragon's Lair
-                    if (frame_index == 137) { // Skip Philips Logo
-                        press_button_signal = true;
-                    }
-
-                    if (frame_index == 430) { // Skip Logo
-                        press_button_signal = true;
-                    }
-                }
             }
 
 #endif
@@ -976,7 +950,7 @@ class CDi {
         dut.rootp->emu__DOT__img_size = 4096;
         dut.rootp->emu__DOT__rc_eye = 1; // RC Eye signal is idle high
 
-        dut.rootp->emu__DOT__tvmode_ntsc = false;
+        dut.rootp->emu__DOT__tvmode_ntsc = true;
 
         dut.RESET = 1;
         dut.UART_RXD = 1;
@@ -1000,8 +974,8 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        do_trace = false;
-        fprintf(stderr, "Trace off!\n");
+        // do_trace = false;
+        //fprintf(stderr, "Trace off!\n");
 #endif
 
 #ifdef SIMULATE_RC5
@@ -1075,19 +1049,17 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/Apprentice_USA_single.bin", "rb");
-        prepare_apprentice_usa_toc();
+        f_cd_bin = fopen("images/addams.bin", "rb");
         break;
     case 1:
-        f_cd_bin = fopen("images/LuckyLuke.bin", "rb");
-        prepare_lucky_luke_europe_toc();
+        f_cd_bin = fopen("images/coneheads.bin", "rb");
         break;
     case 2:
         f_cd_bin = fopen("images/LuckyLuke.bin", "rb");
         prepare_lucky_luke_europe_toc();
         break;
     case 3:
-        f_cd_bin = fopen("images/Nobelia (USA).bin", "rb");
+        f_cd_bin = fopen("images/Zelda Wand of Gamelon.bin", "rb");
         break;
     case 4:
         f_cd_bin = fopen("images/fmvtest_only_audio.bin", "rb");

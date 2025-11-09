@@ -382,7 +382,6 @@ module vmpeg (
     // Increments at 90 kHz
     bit [15+5:0] timer_cnt = 0;
 
-    bit vsync_flipflop;
     bit restart_fmv_dsp_enable  /*verilator public_flat_rd*/;
     bit restart_fmv_dsp_enable_q;
 
@@ -405,22 +404,35 @@ module vmpeg (
             fma_interrupt_status_register <= 0;
             fma_interrupt_vector_register <= 0;
             fma_status_register <= 0;
+            fma_stream_number <= 0;
+            fmv_command_register <= 0;
+            fmv_dclk <= 0;
             fmv_dsp_enable <= 0;
+            fmv_frame_rate <= 0;
             fmv_interrupt_enable_register <= 0;
             fmv_interrupt_status_register <= 0;
+            fmv_interrupt_vector_register <= 0;
             fmv_playback_active <= 0;
-            video_data_input_command_register <= 0;
+            fmv_stream_number <= 0;
+            image_height2 <= 0;
+            image_rt <= 0;
+            image_width2 <= 0;
             mpeg_ram_enabled <= 0;
             mpeg_ram_enabled_cnt <= 0;
             timer_cnt <= 0;
+            video_ctrl_x_active <= 0;
+            video_ctrl_x_display <= 0;
+            video_ctrl_x_offset <= 0;
+            video_ctrl_y_active <= 0;
+            video_ctrl_y_display <= 0;
+            video_ctrl_y_offset <= 0;
+            video_data_input_command_register <= 0;
         end else begin
 
             if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
             if (fmv_decoding_timestamp_updated) video_data_input_command_register[14] <= 1;
 
             if (vsync && !vsync_q) fmv_interrupt_status_register.vsync <= 1;
-
-            if (vsync && !vsync_q) vsync_flipflop <= !vsync_flipflop;
 
             if (fmv_event_sequence_header) fmv_interrupt_status_register.seq <= 1;
             if (fmv_event_group_of_pictures) fmv_interrupt_status_register.gop <= 1;
@@ -513,7 +525,6 @@ module vmpeg (
                 end
 
                 if (write_strobe && bus_ack) begin
-                    //if (address[13:1] ==
                     mpeg_ram_enabled_cnt <= mpeg_ram_enabled_cnt + 1;
                     if (mpeg_ram_enabled_cnt == 6'b111111) begin
                         mpeg_ram_enabled <= 1;

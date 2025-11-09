@@ -386,12 +386,18 @@ module cditop (
     // This reset delay of 8 frames ensures
     // that the slave has enough time to react
     // It will result into 160 polls until the answer is available
+
+`ifdef VERILATOR
+    // For simulation, we are fine because of a hack in uc_68hc05.sv
+    assign reset68k = reset;
+`else
     resetdelay cpuresetdelay (
         .clk(clk30),
         .reset,
         .vsync(VSync),
         .delayedreset(reset68k)
     );
+`endif
 
     /*verilator tracing_off*/
     scc68070 scc68070_0 (

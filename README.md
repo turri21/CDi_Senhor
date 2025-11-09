@@ -44,7 +44,10 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* Coneheads shows black picture when trying to continue the movie
+* Addams Family Disc 2 crashes when opening menu
 * Top Gun Scan Mode / Fast Forward is unstable. Potential freeze
+  * MPEG Decoder even broken after reset?
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
 * Problems with "les guignols de l'info"?

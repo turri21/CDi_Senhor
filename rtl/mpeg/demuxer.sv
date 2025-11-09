@@ -47,7 +47,6 @@ module mpeg_demuxer (
     bit packet_length_decreasing;
     bit [15:0] packet_length;
     bit signed [32:0] system_clock_reference;
-    bit [9:0] pack_cnt = 0;
     bit signed [32:0] presentation_timestamp;
     bit signed [32:0] decoding_timestamp_temp;
     bit dts_present;
@@ -57,7 +56,16 @@ module mpeg_demuxer (
         decoding_timestamp_updated <= 0;
 
         if (reset) begin
+            decoding_timestamp <= 0;
+            decoding_timestamp_temp <= 0;
             demux_state <= IDLE;
+            dts_present <= 0;
+            mpeg_packet_body <= 0;
+            packet_length <= 0;
+            packet_length_decreasing <= 0;
+            presentation_timestamp <= 0;
+            system_clock_reference <= 0;
+            system_clock_reference_start_time <= 0;
             system_clock_reference_start_time_valid <= 0;
         end else if (data_valid) begin
 
@@ -82,7 +90,6 @@ module mpeg_demuxer (
                 {PACK4, 8'h??}: begin                    
                     demux_state <= PACK5;
                     system_clock_reference[6:0] <= mpeg_data[7:1];
-                    pack_cnt <= pack_cnt +1;
                 end
                 {PACK3, 8'h??}: begin
                     demux_state <= PACK4;
