@@ -11,11 +11,12 @@ module hps_cd_sector_cache (
 
     // Interface to CDIC
     input [31:0] seek_lba,
-    input seek_lba_valid,  // seek and start reading
+    input seek_lba_valid,  // flag, seek and start reading
     output bit [15:0] cd_data,
     output bit cd_data_valid,
     input sector_tick,
     output bit sector_delivered,
+    input stop_sector_delivery,  // flag, stop reading
 
     input config_disable_seek_time
 );
@@ -154,6 +155,8 @@ module hps_cd_sector_cache (
                 providing_data   <= 0;
                 sector_delivered <= 1;
             end
+
+            if (stop_sector_delivery) reading_active <= 0;
         end
     end
 

@@ -231,16 +231,18 @@ module emu (
         "P2O[2],Disable Audio Att.,No,Yes;",
         "P2O[3],UART Fake Space,No,Yes;",
         "P2O[7:6],Force Video Plane,Original,A,B;",
-        "P2O[8],No reset on NvRAM change,No,Yes;",
         "P2O[12],SERVO Audio CD,No,Yes;",
 
         "P3,Hardware Config;",
         "P3-;",
         "P3O[13],Disable VMPEG DVC,No,Yes;",
-        //"P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
-        "P3O[16],Fast CD Seek,No,Yes[U];",
-        "P3O[11],CPU Turbo,No,Yes[U];",
         "P3O[5],Overclock input device,No,Yes;",
+        "P3-;",
+        //"P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
+        "P3-,(U) = unsafe, experimental;",
+        "P3O[16],Fast CD Seek,No,Yes(U);",
+        "P3O[11],CPU Turbo,No,Yes(U);",
+        "P3O[8],NvRAM live update,No,Yes(U);",
 
         "O[14],Autoplay,Yes,No;",
 
@@ -756,6 +758,7 @@ module emu (
     wire cd_seek_lba_valid;
     wire [15:0] cd_data;
     wire cd_data_valid;
+    wire cd_stop_sector_delivery;
 
     hps_cd_sector_cache hps_cd_sector_cache (
         .clk(clk_sys),
@@ -772,6 +775,7 @@ module emu (
         .cd_data_valid(cd_data_valid),
         .cd_data(cd_data),
         .seek_lba(cd_seek_lba),
+        .stop_sector_delivery(cd_stop_sector_delivery),
         .seek_lba_valid(cd_seek_lba_valid),
         .sector_tick(cd_sector_tick),
         .sector_delivered(cd_sector_delivered),
@@ -858,6 +862,7 @@ module emu (
 
         .cd_seek_lba(cd_seek_lba),
         .cd_seek_lba_valid(cd_seek_lba_valid),
+        .cd_stop_sector_delivery(cd_stop_sector_delivery),
         .cd_data_valid(cd_data_valid),
         .cd_data(cd_data),
         .cd_sector_tick(cd_sector_tick),

@@ -61,6 +61,7 @@ module cditop (
     input cd_data_valid,
     output cd_sector_tick,
     input cd_sector_delivered,
+    output cd_stop_sector_delivery,
 
     input cd_img_mount,
     input cd_img_mounted,
@@ -316,6 +317,7 @@ module cditop (
         .cd_data,
         .cd_sector_tick,
         .cd_sector_delivered,
+        .cd_stop_sector_delivery,
         .audio_left(cdic_audio_left),
         .audio_right(cdic_audio_right),
         .sample_tick37,

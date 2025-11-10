@@ -37,6 +37,7 @@ module cdic (
     input cd_data_valid,
     input cd_sector_tick,
     input cd_sector_delivered,
+    output cd_stop_sector_delivery,
 
     // Audio out
     output signed [15:0] audio_left,
@@ -346,6 +347,7 @@ module cdic (
         cd_data_valid_q2 <= cd_data_valid_q;
         cd_data_valid_q <= cd_data_valid;
         cd_seek_lba_valid <= 0;
+        cd_stop_sector_delivery <= 0;
 
         audio_start_playback <= 0;
         audio_stop_playback <= 0;
@@ -580,8 +582,10 @@ module cdic (
 
                     // Reset Mode 1&2 cause reading to stop after reading
                     // a sector
-                    if (command_register == 16'h23 || command_register == 16'h24)
+                    if (command_register == 16'h23 || command_register == 16'h24) begin
                         cd_reading_active <= 0;
+                        cd_stop_sector_delivery <= 1;
+                    end
 
                     if (header_submode.audio && audio_channel_match && header_mode2) begin
                         data_buffer_register[0] <= audio_target_buffer;
