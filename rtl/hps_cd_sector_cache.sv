@@ -11,11 +11,14 @@ module hps_cd_sector_cache (
 
     // Interface to CDIC
     input [31:0] seek_lba,
-    input seek_lba_valid,  // seek and start reading
+    input seek_lba_valid,  // flag, seek and start reading
     output bit [15:0] cd_data,
     output bit cd_data_valid,
     input sector_tick,
-    output bit sector_delivered
+    output bit sector_delivered,
+    input stop_sector_delivery,  // flag, stop reading
+
+    input config_disable_seek_time
 );
     // With 13 bit adresses, we get 8192 words (of 16 bit)
     // A sector is currently 1188 words. (0x930 byte of CD sector data + 12 words subchannel)
@@ -56,18 +59,14 @@ module hps_cd_sector_cache (
 
     // Number of sectors to wait until requesting the first
     // after the reading was instructed to start.
-`ifdef VERILATOR
-    localparam bit [5:0] kSeekTime = 1;
-`else
     // Seeking on a real 210/05 takes about 200ms
     // But 19 (250ms) seems to be more stable
     localparam bit [5:0] kSeekTime = 19;
-`endif
+
     // Simulates reading time. Remaining sectors to wait.
     bit [5:0] seeking_time_cnt = 0;
 
     bit reading_active = 0;
-    bit seeking = 0;
 
     // Used for calibration. Over the duration of development,
     // the size of a CD sector pulled from HPS has changed.
@@ -111,7 +110,6 @@ module hps_cd_sector_cache (
             seeking_time_cnt <= 0;
             cd_hps_req <= 0;
             reading_active <= 0;
-            seeking <= 0;
             readout_cnt <= 0;
             providing_data <= 0;
             empty_fifo_latch <= 0;
@@ -129,15 +127,11 @@ module hps_cd_sector_cache (
 
             if (seek_lba_valid) begin
                 empty_fifo_latch <= 1;
-                seeking <= 1;
-                seeking_time_cnt <= kSeekTime;
+                seeking_time_cnt <= config_disable_seek_time ? 1 : kSeekTime;
                 cd_hps_lba <= seek_lba;
                 reading_active <= 1;
-            end else if (seeking && sector_tick) begin
-                if (seeking_time_cnt != 0) seeking_time_cnt <= seeking_time_cnt - 1;
-                else begin
-                    seeking <= 0;
-                end
+            end else if (sector_tick && seeking_time_cnt != 0) begin
+                seeking_time_cnt <= seeking_time_cnt - 1;
             end
 
             if (sector_tick && !cd_hps_ack && !cd_hps_req) begin
@@ -154,7 +148,7 @@ module hps_cd_sector_cache (
 
             if (sector_tick) begin
                 readout_cnt <= 0;
-                if (at_least_one_sector_in_cache) providing_data <= 1;
+                if (at_least_one_sector_in_cache && seeking_time_cnt == 0) providing_data <= 1;
             end
 
             // cd_hps_data_valid_q must be 0 to ensure the cache was read
@@ -167,6 +161,8 @@ module hps_cd_sector_cache (
                 providing_data   <= 0;
                 sector_delivered <= 1;
             end
+
+            if (stop_sector_delivery) reading_active <= 0;
         end
     end
 

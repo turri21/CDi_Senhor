@@ -4,4 +4,4 @@
 cd "$(dirname "$0")/../rtl"
 
 verible-verilog-format --inplace --indentation_spaces 4 \
-    ../rtl/*.v  ../rtl/*.sv  ../*.v ../*.sv
+    ../rtl/*.v  ../rtl/*.sv ../rtl/*/*.sv ../rtl/*/*/*.sv  ../*.v ../*.sv

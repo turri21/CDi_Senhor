@@ -118,16 +118,18 @@ module emu (
 
     //High latency DDR3 RAM interface
     //Use for non-critical time purposes
-    output        DDRAM_CLK,
-    input         DDRAM_BUSY,
-    output [ 7:0] DDRAM_BURSTCNT,
-    output [28:0] DDRAM_ADDR,
-    input  [63:0] DDRAM_DOUT,
-    input         DDRAM_DOUT_READY,
-    output        DDRAM_RD,
-    output [63:0] DDRAM_DIN,
-    output [ 7:0] DDRAM_BE,
-    output        DDRAM_WE,
+    output DDRAM_CLK,  // any clock, no restrictions. Typically main core clock
+`ifndef VERILATOR
+    input DDRAM_BUSY,  // every read and write request is only accepted in a cycle where busy is low
+    output [7:0] DDRAM_BURSTCNT,  // amount of words to be written/read. Maximum is 128
+    output [28:0] DDRAM_ADDR,         // starting address for read/write. In case of burst, the addresses will internally count up
+    input [63:0] DDRAM_DOUT,  // data coming from (burst) read
+    input         DDRAM_DOUT_READY,   // high for 1 clock cycle for every 64 bit dataword requested via (burst) read request
+    output DDRAM_RD,  // request read at DDRAM_ADDR and DDRAM_BURSTCNT length
+    output [63:0] DDRAM_DIN,  // data word to be written
+    output  [7:0] DDRAM_BE,           // byte enable for each of the 8 bytes in DDRAM_DIN, only used for writing. (1=write, 0=ignore)
+    output DDRAM_WE,  // request write at DDRAM_ADDR with DDRAM_DIN data and DDRAM_BE mask
+`endif
 
     //SDRAM interface with lower latency
     output        SDRAM_CLK,
@@ -193,8 +195,6 @@ module emu (
     assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 `endif
 
-    assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
-
     assign VGA_SL = 0;
     assign VGA_SCALER = 0;
     assign VGA_DISABLE = 0;
@@ -231,11 +231,19 @@ module emu (
         "P2O[2],Disable Audio Att.,No,Yes;",
         "P2O[3],UART Fake Space,No,Yes;",
         "P2O[7:6],Force Video Plane,Original,A,B;",
-        "P2O[8],No reset on NvRAM change,No,Yes;",
         "P2O[12],SERVO Audio CD,No,Yes;",
-        "P2O[11],CPU Turbo,No,Yes;",
 
-        "O[5],Overclock input device,No,Yes;",
+        "P3,Hardware Config;",
+        "P3-;",
+        "P3O[13],Disable VMPEG DVC,No,Yes;",
+        "P3O[5],Overclock input device,No,Yes;",
+        "P3-;",
+        //"P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
+        "P3-,(U) = unsafe, experimental;",
+        "P3O[16],Fast CD Seek,No,Yes(U);",
+        "P3O[11],CPU Turbo,No,Yes(U);",
+        "P3O[8],NvRAM live update,No,Yes(U);",
+
         "O[14],Autoplay,Yes,No;",
 
         "-;",
@@ -271,6 +279,7 @@ module emu (
 
     wire         clk_sys  /*verilator public_flat_rw*/;
     wire         clk_audio  /*verilator public_flat_rw*/;
+    wire         clk_mpeg  /*verilator public_flat_rw*/;
 
 
     wire [ 31:0] cd_hps_lba;
@@ -377,7 +386,8 @@ module emu (
         .refclk(CLK_50M),
         .rst(0),
         .outclk_0(clk_sys),  // 30 MHz
-        .outclk_1(clk_audio)  // 22.2264 MHz
+        .outclk_1(clk_audio),  // 22.2264 MHz
+        .outclk_2(clk_mpeg)  // 90 MHz
     );
 `endif
 
@@ -574,13 +584,60 @@ module emu (
     );
 
 `ifdef VERILATOR
+    // DDR3 simulation
+    bit [63:0] ddram[5000000/8]  /*verilator public_flat_rd*/;
+
+    int ddr_latencycnt;
+    bit [7:0] ddr_words_to_prove;
+    bit [28:0] ddr_addr;
+
+    bit DDRAM_BUSY;  // every read and write request is only accepted in a cycle where busy is low
+    wire [7:0] DDRAM_BURSTCNT;  // amount of words to be written/read. Maximum is 128
+    wire [28:0] DDRAM_ADDR;         // starting address for read/write. In case of burst; the addresses will internally count up
+    bit [63:0] DDRAM_DOUT;  // data coming from (burst) read
+    bit         DDRAM_DOUT_READY;   // high for 1 clock cycle for every 64 bit dataword requested via (burst) read request
+    wire DDRAM_RD;  // request read at DDRAM_ADDR and DDRAM_BURSTCNT length
+    wire [63:0] DDRAM_DIN;  // data word to be written
+    wire  [7:0] DDRAM_BE;           // byte enable for each of the 8 bytes in DDRAM_DIN; only used for writing. (1=write; 0=ignore)
+    wire DDRAM_WE;  // request write at DDRAM_ADDR with DDRAM_DIN data and DDRAM_BE mask
+
+    always_ff @(posedge DDRAM_CLK) begin
+        DDRAM_DOUT_READY <= 0;
+
+        if (DDRAM_WE && !DDRAM_BUSY) begin
+            ddram[DDRAM_ADDR[19:0]] <= DDRAM_DIN;
+            //$display("Write at %x %x",DDRAM_ADDR, DDRAM_DIN);
+        end
+
+        if (DDRAM_RD && !DDRAM_BUSY) begin
+            ddr_latencycnt <= 13;
+            ddr_words_to_prove <= DDRAM_BURSTCNT;
+            ddr_addr <= DDRAM_ADDR;
+            DDRAM_BUSY <= 1;
+        end
+
+        if (DDRAM_BUSY) begin
+            if (ddr_latencycnt > 0) ddr_latencycnt <= ddr_latencycnt - 1;
+            else begin
+                DDRAM_DOUT <= ddram[ddr_addr[19:0]];
+                ddr_addr <= ddr_addr + 1;
+                DDRAM_DOUT_READY <= 1;
+                ddr_words_to_prove <= ddr_words_to_prove - 1;
+                if (ddr_words_to_prove == 1) DDRAM_BUSY <= 0;
+            end
+
+        end
+    end
+
+    // SDRAM simulation
+
     bit [15:0] rom[262144]  /*verilator public_flat_rw*/;
     bit [15:0] vmpega_rom[65536]  /*verilator public_flat_rw*/;
     bit [15:0] ram[2097152]  /*verilator public_flat_rw*/;
     bit [22:0] sdram_real_addr;
     initial begin
         $readmemh("cdi200.mem", rom);
-        //$readmemh("vmpega.mem", vmpega_rom);
+        $readmemh("vmpega.mem", vmpega_rom);
         //$readmemh("ramdump.mem", ram);
     end
 
@@ -645,21 +702,33 @@ module emu (
     wire enable_reset_on_nvram_img_mount = 0;
     wire [1:0] debug_limited_to_full = 0;
     wire audio_cd_in_tray = 0;
-    wire disable_cpu_starve = 1;
+    wire config_disable_cpu_starve = 1;
     wire config_auto_play  /*verilator public_flat_rw*/ = 1;
+    bit config_disable_vmpeg = 0;
+    wire config_first_player_back_port = 0;
+    wire config_disable_seek_time = 1;
 `else
     // Status seems to be all zero after reset
     // Should be considered for defining the default
     wire debug_uart_fake_space = status[3];
-    wire [1:0] debug_force_video_plane = status[7:6];
     wire tvmode_ntsc = status[4];
     wire overclock_pointing_device = status[5];
+    wire [1:0] debug_force_video_plane = status[7:6];
     wire enable_reset_on_nvram_img_mount = !status[8];
     wire [1:0] debug_limited_to_full = status[10:9];
+    wire config_disable_cpu_starve = status[11];
     wire audio_cd_in_tray = status[12];
-    wire disable_cpu_starve = status[11];
+    bit config_disable_vmpeg = 0;
     wire config_auto_play = !status[14];
+    wire config_first_player_back_port = status[15];
+    wire config_disable_seek_time = status[16];
+
+    always_ff @(posedge clk_sys) begin
+        // only change during resets
+        if (cditop_reset) config_disable_vmpeg <= status[13];
+    end
 `endif
+
     wire HBlank;
     wire HSync;
     wire VBlank;
@@ -689,6 +758,7 @@ module emu (
     wire cd_seek_lba_valid;
     wire [15:0] cd_data;
     wire cd_data_valid;
+    wire cd_stop_sector_delivery;
 
     hps_cd_sector_cache hps_cd_sector_cache (
         .clk(clk_sys),
@@ -705,9 +775,12 @@ module emu (
         .cd_data_valid(cd_data_valid),
         .cd_data(cd_data),
         .seek_lba(cd_seek_lba),
+        .stop_sector_delivery(cd_stop_sector_delivery),
         .seek_lba_valid(cd_seek_lba_valid),
         .sector_tick(cd_sector_tick),
-        .sector_delivered(cd_sector_delivered)
+        .sector_delivered(cd_sector_delivered),
+
+        .config_disable_seek_time
     );
 
     wire fail_not_enough_words;
@@ -717,9 +790,26 @@ module emu (
     // TODO requires connection and testing with real photo diode
     wire rc_eye  /*verilator public_flat_rw*/;
 
+    ddr_if ddr_host ();
+
+    assign DDRAM_CLK = clk_mpeg;
+    assign DDRAM_ADDR = ddr_host.addr;
+    assign DDRAM_BE = ddr_host.byteenable;
+    assign DDRAM_WE = ddr_host.write;
+    assign DDRAM_RD = ddr_host.read;
+    assign DDRAM_DIN = ddr_host.wdata;
+    assign DDRAM_BURSTCNT = ddr_host.burstcnt;
+    assign ddr_host.rdata = DDRAM_DOUT;
+    assign ddr_host.rdata_ready = DDRAM_DOUT_READY;
+    assign ddr_host.busy = DDRAM_BUSY;
+
+    rgb888_s cdi_video_out;
+    assign {r, g, b} = {cdi_video_out.r, cdi_video_out.g, cdi_video_out.b};
+
     cditop cditop (
         .clk30(clk_sys),
         .clk_audio(clk_audio),
+        .clk_mpeg(clk_mpeg),
         .external_reset(cditop_reset),
 
         .tvmode_pal(!tvmode_ntsc),
@@ -737,9 +827,7 @@ module emu (
         .VSync (VSync),
         .vga_f1(VGA_F1),
 
-        .r(r),
-        .g(g),
-        .b(b),
+        .vidout(cdi_video_out),
 
         .sdram_addr(sdram_addr),
         .sdram_rd(sdram_rd),
@@ -753,6 +841,8 @@ module emu (
         .sdram_burstdata_valid,
         .scc68_uart_tx(UART_TXD),
         .scc68_uart_rx(UART_RXD),
+
+        .ddrif(ddr_host),
 
         .slave_worm_adr (slave_worm_adr),
         .slave_worm_data(slave_worm_data),
@@ -772,6 +862,7 @@ module emu (
 
         .cd_seek_lba(cd_seek_lba),
         .cd_seek_lba_valid(cd_seek_lba_valid),
+        .cd_stop_sector_delivery(cd_stop_sector_delivery),
         .cd_data_valid(cd_data_valid),
         .cd_data(cd_data),
         .cd_sector_tick(cd_sector_tick),
@@ -784,8 +875,9 @@ module emu (
 
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data),
-        .disable_cpu_starve,
+        .config_disable_cpu_starve,
         .config_auto_play,
+        .config_disable_vmpeg(config_disable_vmpeg),
 
         .hps_rtc(hps_rtc)
     );

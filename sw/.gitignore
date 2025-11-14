@@ -1,0 +1,11 @@
+*.lst
+*.elf
+*.bin
+*.map
+*.mem
+*.o
+
+/a.out
+/audio.wav
+/reference.wav
+*.bmp

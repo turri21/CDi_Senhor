@@ -1,0 +1,40 @@
+#pragma once
+
+#include <stdint.h>
+
+struct io_fifo_control
+{
+	uint32_t write_byte_index;			// @0x10002000
+	uint32_t read_bit_index;			// @0x10002004
+	uint32_t hw_read_count;				// @0x10002008
+	uint32_t hw_huffman_read_dct_coeff; // @0x1000200C
+	uint32_t has_sequence_header;		// @0x10002010
+};
+
+struct frame_display_fifo
+{
+	uint32_t y_adr;					   // @0x10003000
+	uint32_t u_adr;					   // @0x10003004
+	uint32_t v_adr;					   // @0x10003008
+	uint32_t width;					   // @0x1000300C
+	uint32_t height;				   // @0x10003010
+	uint32_t frameperiod;			   // @0x10003014, ticks of 30 MHz
+	uint32_t fractional_pixel_width;   // @0x10003018
+	uint32_t event_sequence_end;	   // @0x1000301C
+	uint32_t first_intra_frame_of_gop; // @0x10003020
+	uint32_t event_buffer_underflow;   // @0x10003024
+	uint32_t pictures_in_fifo;		   // @0x10003028
+};
+
+struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;
+struct frame_display_fifo *const frame_display_fifo = (struct frame_display_fifo *)0x10003000;
+
+#define OUTPORT 0x10000000
+#define OUTPORT_END 0x1000000c
+#define OUTPORT_FRAME 0x10000010
+#define OUTPORT_HANDLE_SHARED 0x10000014
+
+#define OUT_DEBUG *(volatile uint32_t *)0x10000030
+
+// Only for worker cores
+#define INVALIDATE_CACHE *(volatile uint32_t *)0x10001110

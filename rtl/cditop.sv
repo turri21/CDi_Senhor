@@ -1,7 +1,9 @@
+`include "videotypes.svh"
 
 module cditop (
     input clk30,
     input clk_audio,
+    input clk_mpeg,
     input external_reset,
 
     input tvmode_pal,
@@ -18,9 +20,7 @@ module cditop (
     output bit VSync,
     output vga_f1,
 
-    output [7:0] r,
-    output [7:0] g,
-    output [7:0] b,
+    output rgb888_s vidout,
 
     output [24:0] sdram_addr,
     output        sdram_rd,
@@ -32,6 +32,8 @@ module cditop (
     output        sdram_burst,
     output        sdram_refresh,
     input         sdram_burstdata_valid,
+
+    ddr_if.to_host ddrif,
 
     output scc68_uart_tx,
     input  scc68_uart_rx,
@@ -59,6 +61,7 @@ module cditop (
     input cd_data_valid,
     output cd_sector_tick,
     input cd_sector_delivered,
+    output cd_stop_sector_delivery,
 
     input cd_img_mount,
     input cd_img_mounted,
@@ -68,9 +71,9 @@ module cditop (
 
     output fail_not_enough_words,
     output fail_too_much_data,
-    input  disable_cpu_starve,
-    input  config_auto_play,
-
+    input config_disable_cpu_starve,
+    input config_auto_play,
+    input config_disable_vmpeg,
     input [64:0] hps_rtc
 );
 
@@ -78,8 +81,8 @@ module cditop (
 
     parallelel_spi slave_servo_spi ();
 
-    wire write_strobe;
-    wire as;
+    wire write_strobe  /*verilator public_flat_rd*/;
+    wire as  /*verilator public_flat_rd*/;
     wire lds;
     wire uds;
 
@@ -88,19 +91,23 @@ module cditop (
     bit [15:0] data_in;
     wire [15:0] cpu_data_out;
     wire [23:1] addr;
-    wire [23:0] addr_byte = {addr[23:1], 1'b0};
+    wire [23:0] addr_byte  /*verilator public_flat_rd*/ = {addr[23:1], 1'b0};
 
     wire [15:0] cpu_data = write_strobe ? cpu_data_out : data_in;
 
     wire mcd212_bus_ack;
     bit cdic_bus_ack;
+    bit vmpeg_bus_ack;
     bit mk48_bus_ack;
     wire [15:0] mcd212_dout;
     wire [15:0] cdic_dout;
+    wire [15:0] vmpeg_dout;
     wire [7:0] mk48_dout;
 
     wire attex_cs_mcd212 = ((addr_byte <= 24'h27ffff) || (addr_byte >= 24'h400000)) && as && !addr[23];
     wire dvc_ram_cs = ((addr_byte[23:20] == 4'hd) || (addr_byte[23:19] == 5'b11101)) && as;
+    wire dvc_rom_cs = (addr_byte[23:18] == 6'b111001) && as;
+    wire dvc_mpeg_cs = (addr_byte[23:18] == 6'b111000) && as && !config_disable_vmpeg;
     wire attex_cs_cdic = addr_byte[23:16] == 8'h30 && as;
     wire attex_cs_slave = addr_byte[23:16] == 8'h31 && as;
     wire attex_cs_mk48 = addr_byte[23:16] == 8'h32 && as;
@@ -134,7 +141,8 @@ module cditop (
     wire bus_err_ram_area2 = (addr_byte >= 24'h500000 && addr_byte < 24'hd00000);
     wire bus_err_ram_area3 = (addr_byte >= 24'hf10000);
     wire bus_err_ram_area4 = (addr_byte >= 24'hf00000) && !playcdi_rom_activated;
-    wire bus_err = (bus_err_ram_area1 || bus_err_ram_area2 || bus_err_ram_area3 || bus_err_ram_area4) && as && (lds || uds);
+    wire bus_err_ram_area5 = (addr_byte[23:19] == 5'b11101) && !mpeg_ram_enabled; // MPEG RAM cannot be accessed at first
+    wire bus_err = (bus_err_ram_area1 || bus_err_ram_area2 || bus_err_ram_area3 || bus_err_ram_area4 || bus_err_ram_area5) && as && (lds || uds);
 
     always_ff @(posedge clk30) begin
 
@@ -196,6 +204,12 @@ module cditop (
 
     wire vdsc_int  /*verilator public_flat_rd*/;
 
+    // VSD is set if EV-bit is set and the backdrop is shown
+    // A real CDI 210/05 uses VSA because of analog
+    // video mixing. But we won't do that here and use the digital
+    // one instead
+    wire mcd212_vsd;
+
     mcd212 mcd212_inst (
         .clk(clk30),
         .reset,
@@ -208,9 +222,9 @@ module cditop (
         .cpu_write_strobe(write_strobe),
         .cs(attex_cs_mcd212),
         .dvc_ram_cs(dvc_ram_cs),
-        .r(r),
-        .g(g),
-        .b(b),
+        .dvc_rom_cs(dvc_rom_cs),
+        .vidout(mcd212_video_out),
+        .vsd(mcd212_vsd),
         .hsync(HSync),
         .vsync(VSync),
         .hblank(HBlank),
@@ -230,26 +244,39 @@ module cditop (
         .debug_force_video_plane,
         .debug_limited_to_full,
         // Don't starve the CPU during DMA transfers
-        .disable_cpu_starve(disable_cpu_starve || cdic_dma_ack || cdic_dma_req)
+        .disable_cpu_starve(config_disable_cpu_starve || cdic_dma_ack || cdic_dma_req)
     );
+
+
+    // DMA signals from CPU
+    wire vmpeg_dma_ack;
+    wire cdic_dma_ack;
+    wire dma_dtc;
+    wire dma_done_out;
+
+    // DMA signals to CPU
+    wire cdic_dma_req;
+    wire vmpeg_dma_req;
+    wire vmpeg_dma_rdy;
+    wire cdic_dma_rdy;
 
     wire in2in  /*verilator public_flat_rd*/;
     wire in4in;
     wire iack2;
     wire iack4;
     wire iack5;
-    wire cdic_dma_req;
-    wire cdic_dma_ack;
-    wire cdic_dma_rdy;
-    wire cdic_dma_dtc;
+
     wire cdic_dma_done_in;
-    wire cdic_dma_done_out;
 
     wire signed [15:0] cdic_audio_left;
     wire signed [15:0] cdic_audio_right;
 
+    wire signed [15:0] mpeg_audio_left;
+    wire signed [15:0] mpeg_audio_right;
+
     wire sample_tick37;
     wire sample_tick44;
+    wire mpeg_45tick;
 
     cdic_clock_gen cdic_clk_gen (
         .clk(clk30),
@@ -257,11 +284,13 @@ module cditop (
         .reset,
         .sector_tick(cd_sector_tick),
         .sample_tick37,
-        .sample_tick44
+        .sample_tick44,
+        .mpeg_45tick
     );
 
     wire cdic_intreq;
     wire cdic_intack;
+    /*verilator tracing_off*/
     cdic cdic_inst (
         .clk(clk30),
         .clk_audio(clk_audio),
@@ -274,13 +303,13 @@ module cditop (
         .write_strobe(write_strobe),
         .cs(attex_cs_cdic),
         .bus_ack(cdic_bus_ack),
-        .intreq(in4in),
-        .intack(iack4),
+        .intreq(cdic_intreq),
+        .intack(cdic_intack),
         .req(cdic_dma_req),
         .ack(cdic_dma_ack),
         .rdy(cdic_dma_rdy),
-        .dtc(cdic_dma_dtc),
-        .done_in(cdic_dma_done_out),
+        .dtc(dma_dtc),
+        .done_in(dma_done_out),
         .done_out(cdic_dma_done_in),
         .cd_seek_lba,
         .cd_seek_lba_valid,
@@ -288,6 +317,7 @@ module cditop (
         .cd_data,
         .cd_sector_tick,
         .cd_sector_delivered,
+        .cd_stop_sector_delivery,
         .audio_left(cdic_audio_left),
         .audio_right(cdic_audio_right),
         .sample_tick37,
@@ -295,11 +325,59 @@ module cditop (
         .fail_not_enough_words(fail_not_enough_words),
         .fail_too_much_data(fail_too_much_data)
     );
+    /*verilator tracing_on*/
 
     // TODO might not be correct
     // CDIC seems to want manual vector
     // For the SLAVE we must use autovectoring
     wire av = iack2;
+
+    wire mpeg_ram_enabled;
+
+    wire vmpeg_intreq;
+    wire vmpeg_intack;
+
+    rgb888_s fmv_video_out;
+    rgb888_s mcd212_video_out;
+    wire debug_video_fifo_overflow;
+    wire debug_audio_fifo_overflow;
+
+    vmpeg vmpeg_inst (
+        .clk(clk30),
+        .clk_mpeg,
+        .reset,
+        .address(addr),
+        .din(vmpeg_dma_ack ? mcd212_dout : cpu_data_out),
+        .dout(vmpeg_dout),
+        .uds(uds),
+        .lds(lds),
+        .write_strobe(write_strobe),
+        .cs(dvc_mpeg_cs),
+        .bus_ack(vmpeg_bus_ack),
+        .intreq(vmpeg_intreq),
+        .intack(vmpeg_intack),
+        .req(vmpeg_dma_req),
+        .ack(vmpeg_dma_ack),
+        .rdy(vmpeg_dma_rdy),
+        .dtc(dma_dtc),
+        .done_in(dma_done_out),
+        .done_out(),
+        .mpeg_ram_enabled(mpeg_ram_enabled),
+        .debug_video_fifo_overflow(debug_video_fifo_overflow),
+        .debug_audio_fifo_overflow(debug_audio_fifo_overflow),
+        .hsync(HSync),
+        .vsync(VSync),
+        .hblank(HBlank),
+        .vblank(VBlank),
+        .vidout(fmv_video_out),
+        .audio_left(mpeg_audio_left),
+        .audio_right(mpeg_audio_right),
+        .sample_tick44,
+        .clk45tick(mpeg_45tick),
+        .ddrif
+    );
+
+    assign vidout = mcd212_vsd ? fmv_video_out : mcd212_video_out;
 
 `ifndef DISABLE_MAIN_CPU
     wire reset68k;
@@ -310,14 +388,20 @@ module cditop (
     // This reset delay of 8 frames ensures
     // that the slave has enough time to react
     // It will result into 160 polls until the answer is available
+
+`ifdef VERILATOR
+    // For simulation, we are fine because of a hack in uc_68hc05.sv
+    assign reset68k = reset;
+`else
     resetdelay cpuresetdelay (
         .clk(clk30),
         .reset,
         .vsync(VSync),
         .delayedreset(reset68k)
     );
-    /*verilator tracing_off*/
+`endif
 
+    /*verilator tracing_off*/
     scc68070 scc68070_0 (
         .clk(clk30),
         .reset(reset68k),  // External sync reset on emulated system
@@ -343,15 +427,15 @@ module cditop (
         .uart_rx(scc68_uart_rx),
         .debug_uart_fake_space,
         .req1(cdic_dma_req),
-        .req2(0),
+        .req2(vmpeg_dma_req),
         .ack1(cdic_dma_ack),
-        .ack2(),
-        .rdy(cdic_dma_rdy),
-        .dtc(cdic_dma_dtc),
+        .ack2(vmpeg_dma_ack),
+        .rdy(cdic_dma_rdy || vmpeg_dma_rdy),
+        .dtc(dma_dtc),
         .done_in(cdic_dma_done_in),
-        .done_out(cdic_dma_done_out)
+        .done_out(dma_done_out)
     );
-    /*verilator tracing_on*/
+    /*verilator tracing_on */
 
 `endif
 
@@ -382,10 +466,13 @@ module cditop (
         end else if (attex_cs_cdic) begin
             data_in = cdic_dout;
             bus_ack = cdic_bus_ack;
+        end else if (dvc_mpeg_cs) begin
+            data_in = vmpeg_dout;
+            bus_ack = vmpeg_bus_ack;
         end else if (attex_cs_mk48) begin
             data_in = {mk48_dout, mk48_dout};
             bus_ack = mk48_bus_ack;
-        end else if (attex_cs_mcd212 || dvc_ram_cs) begin
+        end else if (attex_cs_mcd212 || dvc_ram_cs || dvc_rom_cs) begin
             data_in = mcd212_dout;
             bus_ack = mcd212_bus_ack;
         end else if (rom_playcdi_cs && playcdi_rom_activated) begin
@@ -393,8 +480,13 @@ module cditop (
             bus_ack = rom_playcdi_bus_ack;
         end
 
-        if (iack4) begin
+        if (cdic_intack) begin
             data_in = cdic_dout;
+            bus_ack = 1;
+        end
+
+        if (vmpeg_intack) begin
+            data_in = vmpeg_dout;
             bus_ack = 1;
         end
     end
@@ -469,9 +561,11 @@ module cditop (
         .csdac1n(csdac1n),
         .clkdac(clkdac),
 
-        .audio_left_in  (cdic_audio_left),
-        .audio_right_in (cdic_audio_right),
-        .audio_left_out (att_audio_left),
+        .audio_left_in(cdic_audio_left),
+        .audio_right_in(cdic_audio_right),
+        .mpeg_left_in(mpeg_audio_left),
+        .mpeg_right_in(mpeg_audio_right),
+        .audio_left_out(att_audio_left),
         .audio_right_out(att_audio_right)
     );
 
@@ -516,5 +610,31 @@ module cditop (
 
     end
 
+    // Inspired by a small 74ACT74 SR flip flop which does this in the real machine
+    enum bit [1:0] {
+        IDLE,
+        CDIC,
+        VMPEG
+    } irq_in4owner;
+
+    assign cdic_intack = iack4 && irq_in4owner == CDIC;
+    assign vmpeg_intack = iack4 && irq_in4owner == VMPEG;
+    assign in4in = ((irq_in4owner == CDIC) && cdic_intreq) ||  ((irq_in4owner == VMPEG) && vmpeg_intreq);
+
+    always_ff @(posedge clk30) begin
+        case (irq_in4owner)
+            CDIC: begin
+                if (!cdic_intreq) irq_in4owner <= IDLE;
+            end
+            VMPEG: begin
+                if (!vmpeg_intreq) irq_in4owner <= IDLE;
+            end
+            default: begin
+                if (cdic_intreq) irq_in4owner <= CDIC;
+                if (vmpeg_intreq) irq_in4owner <= VMPEG;
+            end
+        endcase
+
+    end
 endmodule
 

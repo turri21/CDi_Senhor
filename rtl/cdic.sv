@@ -11,6 +11,8 @@ module cdic (
     input clk,
     input clk_audio,
     input reset,
+
+    // CPU interface
     input [23:1] address,
     input [15:0] din,
     output bit [15:0] dout,
@@ -35,13 +37,15 @@ module cdic (
     input cd_data_valid,
     input cd_sector_tick,
     input cd_sector_delivered,
+    output cd_stop_sector_delivery,
 
-
+    // Audio out
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
     input sample_tick37,
     input sample_tick44,
 
+    // Debugging
     output bit fail_not_enough_words,
     output bit fail_too_much_data
 );
@@ -227,6 +231,8 @@ module cdic (
     bit write_timecode1 = 0;
     bit write_timecode2 = 0;
 
+    bit [1:0] spin_down_cnt = 0;
+
     always_comb begin
         reset_write_timecode1 = 0;
         reset_write_timecode2 = 0;
@@ -341,6 +347,7 @@ module cdic (
         cd_data_valid_q2 <= cd_data_valid_q;
         cd_data_valid_q <= cd_data_valid;
         cd_seek_lba_valid <= 0;
+        cd_stop_sector_delivery <= 0;
 
         audio_start_playback <= 0;
         audio_stop_playback <= 0;
@@ -378,6 +385,7 @@ module cdic (
             fail_too_much_data <= 0;
             write_timecode1 <= 0;
             write_timecode2 <= 0;
+            spin_down_cnt <= 0;
         end else begin
             if (mem_cd_hps_we) begin
                 cd_data_target_adr <= cd_data_target_adr + 1;
@@ -387,6 +395,11 @@ module cdic (
                 $display("Sector written to RAM / has ended");
                 write_timecode1 <= !read_raw;
                 write_timecode2 <= !read_raw;
+            end
+
+            if (spin_down_cnt != 0 && cd_sector_tick) begin
+                spin_down_cnt <= spin_down_cnt - 1;
+                if (spin_down_cnt == 1) x_buffer_register[15] <= 1'b1;
             end
 
             if (cd_data_valid && cd_reading_active) begin
@@ -514,7 +527,7 @@ module cdic (
                 audio_control_register[11] <= 0;
             end
 
-            if (done_in) dma_control_register[15] <= 0;
+            if (done_in && ack) dma_control_register[15] <= 0;
 
             if (cd_sector_tick) begin
                 sector_word_index <= 0;
@@ -569,8 +582,10 @@ module cdic (
 
                     // Reset Mode 1&2 cause reading to stop after reading
                     // a sector
-                    if (command_register == 16'h23 || command_register == 16'h24)
+                    if (command_register == 16'h23 || command_register == 16'h24) begin
                         cd_reading_active <= 0;
+                        cd_stop_sector_delivery <= 1;
+                    end
 
                     if (header_submode.audio && audio_channel_match && header_mode2) begin
                         data_buffer_register[0] <= audio_target_buffer;
@@ -591,9 +606,12 @@ module cdic (
 
                 case (command_register)
                     16'h23: begin
-                        $display("CDIC Command: Reset Mode 1");
+                        $display("CDIC Command: Stop disc");
                         cd_seek_lba <= time_register_as_lba;
-                        read_mode2  <= 0;
+                        read_mode2 <= 0;
+                        spin_down_cnt <= 3;
+                        // It might be tempting to do x_buffer_register[15] <= 1'b1; immediatly here.
+                        // But it won't work. It needs to be delayed. spin_down_cnt will do the job
                     end
                     16'h24: begin
                         $display("CDIC Command: Reset Mode 2");

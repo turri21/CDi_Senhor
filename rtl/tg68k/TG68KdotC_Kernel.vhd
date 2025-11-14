@@ -106,7 +106,7 @@ use work.TG68K_Pack.all;
 
 entity TG68KdotC_Kernel is
 	generic(
-		SR_Read : integer:= 2;				--0=>user,		1=>privileged,		2=>switchable with CPU(0)
+		SR_Read : integer:= 0;				--0=>user,		1=>privileged,		2=>switchable with CPU(0)
 		VBR_Stackframe : integer:= 2;		--0=>no,			1=>yes/extended,	2=>switchable with CPU(0)
 		extAddr_Mode : integer:= 2;		--0=>no,			1=>yes,				2=>switchable with CPU(1)
 		MUL_Mode : integer := 2;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no MUL,  
