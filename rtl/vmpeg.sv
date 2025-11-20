@@ -240,19 +240,24 @@ module vmpeg (
     // 8002 DMA Start
     bit [15:0] fma_command_register;
     // FMA STAT @ 00E03002
-    // 0000
-    // 0014
-    // 0004 Frame Header Updated
+    // 0200 before starting playback
+    // 0210 during Lost Eden music
+    // according to reverse engineering efforts of CD-i Fan
     // FMA ISO End Detected Status      STAT_EOI            BIT_MASK(0)
     // FMA Audio Stream Changed Status  STAT_CSU            BIT_MASK(1)
     // FMA Frame Header Updated Status  STAT_UPD            BIT_MASK(2)
     // FMA Underflow Status             STAT_UNF            BIT_MASK(3)
     // FMA Decoding Started Status      STAT_DEC            BIT_MASK(4)
-    bit [15:0] fma_status_register;
+    // The layout looks similar to the interrupt status register
+    // and also similar to the ASY-block according to chapter 8.2.4.3.3
+    // of the green book. There, the bits 1 and 2 are reserved
+    // since the highest byte is always 0x02, we just use 8 bits here
+    bit [7:0] fma_status_register;
     // FMA ISR @ 00E0301A
     // 0100 Timer?
     // 0104 Updated Header and Timer?
     // 0114 Decoding Started
+    // according to reverse engineering efforts of CD-i Fan
     // FMA ISO End Detected Interrupt   ISR_EOI            BIT_MASK(0)
     // FMA Changed Stream Interrupt     ISR_CSU            BIT_MASK(1)
     // FMA Updated Header Interrupt     ISR_UPD            BIT_MASK(2)
@@ -262,6 +267,10 @@ module vmpeg (
     // FMA Poll Interrupt               ISR_POLL           BIT_MASK(8)
     bit [15:0] fma_interrupt_status_register;
     // FMA IER @ 00E0301C
+    // typical value is 0x013d?
+    // This would exclude ISR_CSU
+    // After calls to ma_cntrl() to change the stream, it becomes 13f
+    // until the stream was confirmed
     bit [15:0] fma_interrupt_enable_register;
     // FMA IVEC @ 00E0300C
     bit [15:0] fma_interrupt_vector_register = 0;
@@ -334,14 +343,22 @@ module vmpeg (
         dout = 0;
 
         case (address[15:1])
-            15'h1800: dout = fma_command_register;  // 0x0E03000
-            15'h1801: dout = fma_status_register;  // 0x0E03002
-            15'h1806: dout = fma_interrupt_vector_register;  //
+            15'h1800: dout = fma_command_register;  // 0x0E03000 CMD
+            15'h1801: dout = {8'h02, fma_status_register};  // 0x0E03002 STATUS
+            15'h1802: dout = 16'h0007;  // 0x0E03004
+            15'h1803: dout = 16'h0900;  // 0x0E03006
+            15'h1804: dout = {12'b0, fma_stream_number};  // 0x0E03008 Wanted stream id
+            15'h1805: dout = {12'b0, fma_stream_number};  // 0x0E03008 Current Stream id
+            15'h1806: dout = fma_interrupt_vector_register;  // 0x0E0300C
+            15'h1807: dout = 16'h0042;  // 0x0E0300E some counter?
             15'h1808: dout = fma_dclk[31:16];  // 0x0E03010
             15'h1809: dout = fma_dclkl_latch;  // 0x0E03012
+            15'h180A: dout = 16'h00fd;  // 0x0E03014 MPEG Audio Header High
+            15'h180B: dout = 16'h50c0;  // 0x0E03016 MPEG Audio Header Low
+            15'h180C: dout = {15'b0, fma_dsp_enable};  // 0x0E03018 RUN?
             15'h180D: dout = fma_interrupt_status_register;  // 0x0E0301A
             15'h180E: dout = fma_interrupt_enable_register;  // 0x0E0301C
-            15'h1812: dout = 16'h0004;  // HF2 Flag of DSP56001?
+            15'h1812: dout = 16'h0004;  // 0x0E03024, HF2 Flag of DSP56001?
 
             15'h2001: dout = image_width2;  // 00E04002 ??
             15'h2002: dout = image_height2;  // 00E04004 ??
@@ -373,6 +390,9 @@ module vmpeg (
             15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS. Only read.
             15'h2055: dout = 16'h0708;  // e040aa ?? Display Rate ? Never written. Only read.
             15'h2056: dout = fmv_frame_rate;  // e040ac ?? GEN_FRAME_RATE Read and written.
+            15'h2060: dout = fmv_system_command_register;  // e040c0
+            15'h2061: dout = fmv_video_command_register;  // e040c2
+            15'h2062: dout = {12'b0, fmv_stream_number};  // e040c4
             15'h206e: dout = fmv_interrupt_vector_register;  //
             15'h2073: dout = 0;  // e040e6 MMU Base pointer? Checked once, value is ignored
 
@@ -396,6 +416,7 @@ module vmpeg (
 
     bit restart_fmv_dsp_enable  /*verilator public_flat_rd*/;
     bit restart_fmv_dsp_enable_q;
+    bit pending_fma_stream_change;
 
     always @(posedge clk) begin
         bus_ack <= 0;
@@ -440,6 +461,8 @@ module vmpeg (
             video_ctrl_y_offset <= 0;
             video_data_input_command_register <= 0;
             fmv_show_on_next_video_frame <= 0;
+            pending_fma_stream_change <= 0;
+
         end else begin
 
             if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
@@ -464,26 +487,39 @@ module vmpeg (
             if (event_decoding_started) begin
                 // Decoding started
                 fma_status_register[4] <= 1;
+
+                // Decoding started IRQ
                 fma_interrupt_status_register[4] <= 1;
             end
 
             if (event_frame_decoded) begin
-                // Resetting Decoding started
-                fma_status_register[4] <= 0;
-
                 // Frame Header Updated
                 fma_status_register[2] <= 1;
+
+                // Frame Header Updated IRQ
                 fma_interrupt_status_register[2] <= 1;
+
+                // Stream change IRQ
+                fma_interrupt_status_register[1] <= pending_fma_stream_change;
+                pending_fma_stream_change <= 0;
             end
 
             if (event_underflow) begin
                 // Underflow
                 fma_status_register[3] <= 1;
+
+                // Underflow IRQ
                 fma_interrupt_status_register[3] <= 1;
+
+                // No longer decoding
+                fma_status_register[4] <= 0;
             end
 
             if (fma_event_program_end) begin
+                // ISO End detected IRQ
                 fma_interrupt_status_register[0] <= 1;
+
+                // Operation finished
                 fma_status_register[0] <= 1;
             end
 
@@ -561,25 +597,44 @@ module vmpeg (
 
                             fma_command_register <= din;
                             if (din[15]) begin
-                                dma_active  <= 1;
+                                dma_active <= 1;
                                 dma_for_fma <= 1;
+
+                                // According to 8.2.4.3.3 in the green book,
+                                // the underflow status flag has to be reset
+                                // when a transfer is performed
+                                fma_status_register[3] <= 0;
                             end
 
-                            if (din == 2 && fma_command_register == 1) begin
+                            if (din[0]) begin
                                 // Stop command?
                                 fma_dsp_enable <= 0;
                                 dsp_reset_input_fifo <= 1;
+
+                                // Reset status register?
+                                fma_status_register <= 0;
                             end
+                        end
+                        15'h1802: begin
+                            // Unknown write of immediate 7 at vmpega rom 00e50312
+                            // DVC Write e03004 0007 1 1
+                            // directly after writing the FMA stream number.
                         end
                         15'h1804: begin
                             // According to mv_selstrm() this can be 0-15
                             $display("FMA Write Stream Number %x %x", address[15:1], din);
                             fma_stream_number <= din[3:0];
+
+                            // TODO Probably not accurate...
+                            pending_fma_stream_change <= 1;
                         end
 
                         15'h1806: begin
                             $display("FMA IVEC %x %x", address[15:1], din);
                             fma_interrupt_vector_register <= din;
+                        end
+                        15'h180C: begin
+                            $display("FMA RUN %x %x", address[15:1], din);
                         end
                         15'h180E: begin
                             fma_interrupt_enable_register <= din;

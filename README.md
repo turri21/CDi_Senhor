@@ -59,8 +59,12 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
-* "Mutant Rampage - Bodyslam" has audio cut out after music has ended?
-* "The Last Bounty Hunter", "Drug Wars" , "Mad Dog 2", "Who Shot Johnny Rock?" have regressions (works in rc2)?
+* Fix Christmas Crisis bonus ride
+    * Video is much wider than the CD-i resolution. Window function required
+* Fix position of MPEG video, relative to base case video
+* Add MPEG audio attenuation
+* "Mutant Rampage - Bodyslam" has a tendency to freeze?
+* "The Last Bounty Hunter", "Drug Wars", "Mad Dog 2", "Who Shot Johnny Rock?" have regressions (works in rc2)?
 * "Chaos Control" has video glitches?
 * "The Lost Ride" has video glitches?
 * "Crime Patrol" has video glitches?
@@ -70,18 +74,17 @@ Expected synthesis times with Quartus 17.0.2
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
 * "The Secret of Nimh" (VCD) doesn't play
     * Huffman decoding in state 14 takes too long
-* Broken audio with "Lost Eden"
+* Broken crossfade effect when moving without FMV in "Lost Eden"
 * Slow motion with VCDs is behaving incorrect
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
-* Problems with aborted audio playback with "Les Guignols de l’Info"?
 * VCD resolution for white book
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
 * Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode
     * A workaround is CPU overclocking. Problem not visible on real machine.
 * Give a signal to the user when CPU data stalling occured
-* Find a better solution for CD data stalling (take a screenshot or plug in a USB device)
+* Find a better solution for CD data stalling (take a screenshot)
     * PSX core seems to halt the whole machine to avoid this situation
 * Fix regression: Audio hiccups during Philips Logo in Burn:Cycle
     * A workaround is CPU overclocking
@@ -135,8 +138,8 @@ the program flow of the CD-i boot process.
 
 ## FAQ, Issues and Quirks
 
-The production quality of the CD-i hardware and the software running on it is sometimes questionable.
-For this reason, I've created a small list of some known quirks, someone might suspect of being caused
+The production quality of CD-i hardware and software is sometimes questionable.
+For this reason, I've created a list of some known quirks, one might suspect of being caused
 by emulation errors but are also present on the real machine.
 
 * Is the "Digital Video Cartridge" supported?
@@ -193,4 +196,8 @@ by emulation errors but are also present on the real machine.
   * "Oh No!" *Explodes* It is running as slow as on real hardware,
     but it seems that the CPU Turbo fixes this issue and makes it behave
     more like the Amiga version.
+* There is a small green artifact at the top left of the Philips Intro in "Lost Eden"
+  * I thought that this is a decoding error, but it is actually there on real hardware
+* "Lost Eden" hangs for 1-2 seconds when the music restarts
+  * This seems to be an oversight by the developers. It occurs on real hardware all well.
 
