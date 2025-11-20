@@ -146,7 +146,7 @@ static void push_frame(plm_frame_t *frame)
 
 void main(void)
 {
-	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory((uint8_t *)0x20000000, 700 * 1024 * 1024, 0);
+	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory((uint8_t *)0x20000000, 700 * 1024 * 1024);
 	if (!buffer)
 		*((volatile uint8_t *)OUTPORT_END) = 2;
 

@@ -300,7 +300,7 @@ plm_t *plm_create_with_file(FILE *fh, int close_when_done);
 // free_when_done to let plmpeg call free() on the pointer when plm_destroy() 
 // is called.
 
-plm_t *plm_create_with_memory(uint8_t *bytes, size_t length, int free_when_done);
+plm_t *plm_create_with_memory(uint8_t *bytes, size_t length);
 
 
 // Create a plmpeg instance with a plm_buffer as source. Pass TRUE to
@@ -529,7 +529,7 @@ plm_buffer_t *plm_buffer_create_with_callbacks(
 // free_when_done to let plmpeg call free() on the pointer when plm_destroy() 
 // is called.
 
-plm_dma_buffer_t *plm_buffer_create_with_memory(uint8_t *bytes, size_t length, int free_when_done);
+plm_dma_buffer_t *plm_buffer_create_with_memory(uint8_t *bytes, size_t length);
 
 
 // Create an empty buffer with an initial capacity. The buffer will grow
@@ -870,8 +870,8 @@ plm_t *plm_create_with_file(FILE *fh, int close_when_done) {
 
 #endif // PLM_NO_STDIO
 
-plm_t *plm_create_with_memory(uint8_t *bytes, size_t length, int free_when_done) {
-	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory(bytes, length, free_when_done);
+plm_t *plm_create_with_memory(uint8_t *bytes, size_t length) {
+	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory(bytes, length);
 	return plm_create_with_buffer(buffer, TRUE);
 }
 
@@ -1021,9 +1021,7 @@ enum plm_buffer_mode {
 struct plm_dma_buffer_t {
 	size_t capacity;
 	size_t total_size;
-	int discard_read_bytes;
 	int has_ended;
-	int free_when_done;
 #ifndef PLM_NO_STDIO
 	int close_when_done;
 	FILE *fh;
@@ -1132,7 +1130,7 @@ plm_buffer_t *plm_buffer_create_with_callbacks(
 }
 
 
-plm_dma_buffer_t *plm_buffer_create_with_memory(uint8_t *bytes, size_t length, int free_when_done) {
+plm_dma_buffer_t *plm_buffer_create_with_memory(uint8_t *bytes, size_t length) {
 	static int already_taken=0;
 	if (already_taken) stop_verilator();
 	already_taken=1;
@@ -1142,10 +1140,8 @@ plm_dma_buffer_t *plm_buffer_create_with_memory(uint8_t *bytes, size_t length, i
 	memset(self, 0, sizeof(plm_dma_buffer_t));
 	self->capacity = length;
 	self->total_size = length;
-	self->free_when_done = free_when_done;
 	self->bytes = bytes;
 	self->mode = PLM_BUFFER_MODE_FIXED_MEM;
-	self->discard_read_bytes = FALSE;
 	return self;
 }
 
@@ -2021,18 +2017,50 @@ plm_video_t * plm_video_create_with_buffer(plm_dma_buffer_t *buffer, int destroy
 	self->destroy_buffer_when_done = destroy_when_done;
 
 	__asm volatile("": : :"memory");
-	// Attempt to decode the sequence header
-	if (fifo_ctrl->has_sequence_header == FALSE)
+
+	if (fifo_ctrl->has_sequence_header)
 	{
-		self->start_code = plm_dma_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
-		if (self->start_code != -1) {
-			plm_video_decode_sequence_header(self);
+		/*
+		 * We already have decoded something, there are two possibilities now
+		 * 1) We are resuming the same stream
+		 * 2) We are starting a new stream
+		 * Since this function is only called with a certain minimum of buffered data,
+		 * we can try to find a sequence header.
+		 * If one exists, we need to forget the already cached one!
+		 */
+		size_t byte_index = (fifo_ctrl->read_bit_index) >> 3;
+		size_t byte_index_end = fifo_ctrl->write_byte_index - 4;
+		self->start_code = -1;
+		while (byte_index < byte_index_end)
+		{
+			if (
+				buffer->bytes[byte_index] == 0x00 &&
+				buffer->bytes[byte_index + 1] == 0x00 &&
+				buffer->bytes[byte_index + 2] == 0x01 &&
+				buffer->bytes[byte_index + 3] == PLM_START_SEQUENCE)
+			{
+				// Position read pointer for plm_video_decode_sequence_header()
+				fifo_ctrl->read_bit_index = (byte_index + 4) << 3;
+				self->start_code = PLM_START_SEQUENCE;
+				break;
+			}
+			byte_index++;
 		}
+	}
+	else
+	{
+		// We don't have any sequence header cached, search for one!
+		self->start_code = plm_dma_buffer_find_start_code(self->buffer, PLM_START_SEQUENCE);
+	}
+
+	if (self->start_code != -1)
+	{
+		plm_video_decode_sequence_header(self);
 	}
 
 	if (fifo_ctrl->has_sequence_header)
 		plm_video_allocate_framebuffers(self);
-	
+
 	return self;
 }
 
