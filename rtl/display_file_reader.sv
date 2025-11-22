@@ -3,9 +3,11 @@
 //`define DEBUG
 `define dp(statement) `ifdef DEBUG $display``statement `endif
 
-module display_file_decoder (
+module display_file_reader (
     input clk,
     input reset,
+    input st,
+    input hsync,
     output bit [21:0] address,
     output bit as,
     input [15:0] din,
@@ -110,7 +112,14 @@ module display_file_decoder (
     bit indizes_equal_during_write_d;
     bit indizes_equal_during_write_q;
 
-    assign out.write = count != 0 && !reset && !indizes_equal_during_write_q;
+    bit [8:0] pixelcounter;
+    wire line_ended = pixelcounter >= (st ? 360 : 384);
+    always_ff @(posedge clk) begin
+        if (hsync) pixelcounter <= 0;
+        else if (out.write && out.strobe) pixelcounter <= pixelcounter + 1;
+    end
+
+    assign out.write = count != 0 && !reset && !indizes_equal_during_write_q && !line_ended;
 
     always_comb begin
         read_index_d = read_index_q;

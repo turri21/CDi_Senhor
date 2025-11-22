@@ -725,11 +725,13 @@ module mcd212 (
     pixelstream file0_out (.clk);
 
     // Plane A Display File Decoder
-    display_file_decoder #(
+    display_file_reader #(
         .unit_index(0)
     ) file0 (
         .clk,
         .reset(new_frame || reset || !command_register_dcr1.ic1),
+        .st(control_register_crsr1w.st),
+        .hsync(hsync),
         .address(file0_adr),
         .as(file0_as),
         .din(file0_din),
@@ -744,11 +746,13 @@ module mcd212 (
 
     pixelstream file1_out (.clk);
 
-    display_file_decoder #(
+    display_file_reader #(
         .unit_index(1)
     ) file1 (
         .clk,
         .reset(new_frame || reset || !command_register_dcr2.ic2),
+        .st(control_register_crsr1w.st),
+        .hsync(hsync),
         .address(file1_adr),
         .as(file1_as),
         .din(file1_din),
@@ -896,7 +900,8 @@ module mcd212 (
     end
 
     always_ff @(posedge clk) begin
-        if (ica0_reload_vsr) `dp_vsr(("Reload VSR %x", ica0_vsr));
+        if (ica0_reload_vsr) `dp_vsr(("Reload VSR0 %x", ica0_vsr));
+        if (ica1_reload_vsr) `dp_vsr(("Reload VSR1 %x", ica1_vsr));
 
         if (dca0_read) `dp_dcaptr(("Start DCA0 on line %d", video_y));
         if (dca1_read) `dp_dcaptr(("Start DCA1 on line %d", video_y));

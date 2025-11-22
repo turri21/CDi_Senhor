@@ -356,32 +356,8 @@ class CDi {
         }
 #endif
 
-        // Simulate CD data delivery from HPS
+        // Ignore CD data delivery from HPS
         if (dut.rootp->emu__DOT__cd_hps_req && sd_rd_q == 0 && dut.rootp->emu__DOT__nvram_hps_ack == 0) {
-            assert(dut.rootp->emu__DOT__cd_hps_ack == 0);
-            dut.rootp->emu__DOT__cd_hps_ack = 1;
-
-            uint32_t lba = dut.rootp->emu__DOT__cd_hps_lba;
-            uint32_t m_time = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__time_register;
-
-            uint32_t reference_lba = lba_from_time(m_time);
-            // assert(lba == reference_lba);
-            // assert(lba >= 150);
-
-            if (lba < 150)
-                lba += 150;
-            uint32_t file_offset = (lba - 150) * kSectorSize;
-
-            printf("Request CD Sector %x %x %x\n", m_time, lba, file_offset);
-
-            int res = fseek(f_cd_bin, file_offset, SEEK_SET);
-            assert(res == 0);
-
-            fread(hps_buffer, 1, kSectorSize, f_cd_bin);
-
-            struct subcode &out = *reinterpret_cast<struct subcode *>(&hps_buffer[kSectorSize / 2]);
-            subcode_data(dut.rootp->emu__DOT__cd_hps_lba, out);
-            hps_buffer_index = 0;
         }
 
         if (dut.rootp->emu__DOT__nvram_hps_rd && sd_rd_q == 0 && dut.rootp->emu__DOT__cd_hps_ack == 0) {
@@ -562,6 +538,7 @@ class CDi {
         dut.trace(&m_trace, 5);
 
         if (do_trace) {
+            char filename[100];
             sprintf(filename, "/tmp/waveform.vcd", instanceid);
             fprintf(stderr, "Writing to %s\n", filename);
             m_trace.open(filename);

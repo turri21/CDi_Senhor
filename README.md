@@ -74,7 +74,6 @@ Expected synthesis times with Quartus 17.0.2
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
 * "The Secret of Nimh" (VCD) doesn't play
     * Huffman decoding in state 14 takes too long
-* Broken crossfade effect when moving without FMV in "Lost Eden"
 * Slow motion with VCDs is behaving incorrect
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Weird shifted graphics with "David and Goliath"
