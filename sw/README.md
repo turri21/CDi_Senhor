@@ -2,10 +2,13 @@
 
 This folder contains the firmware that drives the actual MPEG decoding inside the VMPEG replication.
 Since not much is known about the actual hardware, it is substituted with a hybrid approach of software and hardware.
-This project uses a modified port of the MPEG1 decoding library [pl_mpeg](https://github.com/phoboslab/pl_mpeg), augmented with FPGA based accelerators.
+This project uses a modified port of the MPEG1 decoding library [pl_mpeg](https://github.com/phoboslab/pl_mpeg), augmented with
+FPGA based accelerators.
 It is compiled for a RISC-V target via GCC to be executed on the [VexiiRiscv](https://github.com/SpinalHDL/VexiiRiscv) soft core.
 
-For MPEG1 video decoding, the pl_mpeg library is manually partitioned for running on multiple asymmetric cores. One VexiiRiscv is clocked at about 80 MHz to decode the MPEG bitstream. It creates commands for image manipulation and inserts them into a FIFO to grab by 2 identical worker cores, also running at 80 MHz.
+For MPEG1 video decoding, the pl_mpeg library is manually partitioned for running on multiple asymmetric cores.
+One VexiiRiscv is clocked at about 80 MHz to decode the MPEG bitstream. It creates commands for image manipulation
+and inserts them into a FIFO to grab by 2 identical worker cores, also running at 80 MHz.
 
 For MP2 audio decoding, a single VexiiRiscv at CD-i system frequency of 30 MHz is sufficient.
 

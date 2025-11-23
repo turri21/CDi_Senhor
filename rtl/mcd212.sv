@@ -215,12 +215,11 @@ module mcd212 (
     end
 `endif
 
-    wire display_active;
-
     always_comb begin
         status_register1 = 0;
+        status_register1.da = !vblank;
+
         // TODO This might not be accurate
-        status_register1.da = display_active;
         status_register1.pa = fake_parity;
     end
 
@@ -494,8 +493,7 @@ module mcd212 (
         .new_line(new_line),
         .new_pixel(new_pixel),
         .new_pixel_lores(new_pixel_lores),
-        .new_pixel_hires(new_pixel_hires),
-        .display_active(display_active)
+        .new_pixel_hires(new_pixel_hires)
     );
 
 
