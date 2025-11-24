@@ -307,6 +307,7 @@ class CDi {
 
     uint32_t prevpc = 0;
     uint32_t leave_sys_callpc = 0;
+    SttFunction call_func;
 
     int pixel_index = 0;
 
@@ -438,6 +439,146 @@ class CDi {
         if (fmv_fifo_level > 8000) {
             clockmpeg();
         }
+    }
+
+    /// @brief Reads from RAM based on CPU memory view
+    uint16_t cpu_memory_read_u16(uint32_t addr) {
+        // ensure alignment
+        assert((addr & 1) == 0);
+
+        if (addr < 0x080000) {
+            return dut.rootp->emu__DOT__ram[(addr) >> 1]; // Video A bank
+        } else if (addr >= 0x200000 && addr < 0x280000) {
+            return dut.rootp->emu__DOT__ram[(addr - 0x200000 + 0x80000) >> 1]; // Video B bank
+        } else if (addr >= 0x400000 && addr <= 0x4ffbff) {
+            return dut.rootp->emu__DOT__rom[(addr - 0x400000) >> 1]; // System ROM
+        } else if (addr >= 0xd00000 && addr <= 0xdfffff) {
+            return dut.rootp->emu__DOT__ram[(addr - 0xd00000 + 0x100000) >> 1]; // DVC RAM
+        } else if (addr >= 0xe40000 && addr < 0xe60000) {
+            return dut.rootp->emu__DOT__vmpega_rom[(addr - 0xe40000) >> 1]; // VMPEG ROM
+        } else {
+            printf("Not mapped? %x\n", addr);
+            return 0;
+            // exit(1);
+        }
+    }
+
+    uint8_t cpu_memory_read_u8(uint32_t addr) {
+        if (addr & 1)
+            return cpu_memory_read_u16(addr);
+        else
+            return cpu_memory_read_u16(addr) >> 8;
+    }
+
+    uint32_t cpu_memory_read_u32(uint32_t addr) {
+        uint32_t high = cpu_memory_read_u16(addr);
+        uint32_t low = cpu_memory_read_u16(addr + 2);
+
+        return (high << 16) | low;
+    }
+
+    typedef struct _motionstatus {
+        unsigned short MVS_LCntr;  /* loops remaining */
+        unsigned long MVS_CurAdr;  /* address to retrieve data */
+        unsigned long MVS_Speed;   /* display speed */
+        unsigned long MVS_ImgSz;   /* image size of current stream */
+        unsigned long MVS_TimeCd;  /* timecode of current picture */
+        unsigned short MVS_TmpRef; /* temporal reference */
+        unsigned short MVS_Stream; /* current stream number */
+        unsigned char MVS_PicRt,   /* picture rate */
+            MVS_Res1;              /* reserved */
+        unsigned long MVS_DSC,     /* Video decoder system clock */
+            MVS_Res2;              /* reserved */
+    } MotionStatus;
+
+    void PrintMvStatus(uint32_t addr) {
+        MotionStatus status;
+        status.MVS_LCntr = cpu_memory_read_u16(addr + 0);
+        status.MVS_CurAdr = cpu_memory_read_u32(addr + 2);
+        status.MVS_Speed = cpu_memory_read_u32(addr + 6);
+        status.MVS_ImgSz = cpu_memory_read_u32(addr + 10);
+        status.MVS_TimeCd = cpu_memory_read_u32(addr + 14);
+        status.MVS_TmpRef = cpu_memory_read_u16(addr + 18);
+        status.MVS_Stream = cpu_memory_read_u16(addr + 20);
+        status.MVS_PicRt = cpu_memory_read_u8(addr + 22);
+        status.MVS_DSC = cpu_memory_read_u32(addr + 24);
+
+        printf("MVS_LCntr %x\n", status.MVS_LCntr);
+        printf("MVS_CurAdr %x\n", status.MVS_CurAdr);
+        printf("MVS_Speed %x\n", status.MVS_Speed);
+        printf("MVS_ImgSz %x\n", status.MVS_ImgSz);
+        printf("MVS_TimeCd %x\n", status.MVS_TimeCd);
+        printf("MVS_TmpRef %x\n", status.MVS_TmpRef);
+        printf("MVS_Stream %x\n", status.MVS_Stream);
+        printf("MVS_PicRt %x\n", status.MVS_PicRt);
+        printf("MVS_DSC %x\n", status.MVS_DSC);
+    }
+
+    void AnalyzeSyscall() {
+        // A syscall is a "Trap #0" followed by a 16 bit argument
+        assert((prevpc & 1) == 0);
+        uint32_t calladdr = prevpc + 2;
+        uint16_t call = cpu_memory_read_u16(calladdr);
+        printf("Syscall @ %x %x %s", prevpc, call, systemCallNameToString(static_cast<SystemCallType>(call)));
+        uint32_t *cpu_d = &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[0];
+        uint32_t *cpu_a = &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[8];
+
+        for (int i = 0; i < 8; i++) {
+            printf(" %08x", cpu_d[i]);
+        }
+        printf(" ");
+        for (int i = 0; i < 8; i++) {
+            printf(" %08x", cpu_a[i]);
+        }
+
+        if (static_cast<SystemCallType>(call) == SystemCallType::I_SetStt) {
+            SttFunction func = static_cast<SttFunction>(cpu_d[1] & 0xffff);
+
+            printf(" SetStt %s", sttFunctionToString(func));
+
+            if (func == SttFunction::MV_Window) {
+                uint32_t height = cpu_d[4] & 0xffff;
+                uint32_t width = (cpu_d[4] >> 16) & 0xffff;
+                printf(" %d %d ", width, height);
+                // Check plausibility
+                if ((width > 1000) || (height > 1000))
+                    status = 1;
+            }
+
+            if (func == SttFunction::SS_DC) {
+                printf(" %s", ss_dc_FunctionToString(cpu_d[2]));
+                if (cpu_d[2] == 0x0a && (cpu_d[6] & 0xF0000000) == 0x40000000) {
+                    printf(" VSR %x", cpu_d[6] & 0xFFFFFFF);
+                }
+            }
+
+            call_func = func;
+        }
+        if (static_cast<SystemCallType>(call) == SystemCallType::I_GetStt) {
+            SttFunction func = static_cast<SttFunction>(cpu_d[1] & 0xffff);
+            printf(" GetStt %s", sttFunctionToString(func));
+            call_func = func;
+        }
+        printf("\n");
+
+        leave_sys_callpc = prevpc + 4;
+
+        // SysDbg ? Just give up!
+        if (static_cast<SystemCallType>(call) == SystemCallType::F_SysDbg) {
+            fprintf(stderr, "System halted and debugger calted!\n");
+            exit(1);
+        }
+    }
+
+    void AnalyzeSyscallReturn() {
+        uint32_t *cpu_d = &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[0];
+        uint32_t *cpu_a = &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[8];
+
+        if (call_func == MV_Status) {
+            PrintMvStatus(cpu_a[0]);
+        }
+
+        call_func = SS_Opt; // Invalidate
     }
 
   public:
@@ -679,17 +820,7 @@ class CDi {
             uint32_t m_pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
 
             if (m_pc == 0x62c) {
-                assert((prevpc & 1) == 0);
-                uint32_t callpos = ((prevpc & 0x3fffff) >> 1) + 1;
-                uint32_t call = dut.rootp->emu__DOT__rom[callpos];
-                printf("Syscall %x %x %s\n", prevpc, call, systemCallNameToString(static_cast<SystemCallType>(call)));
-                leave_sys_callpc = prevpc + 4;
-
-                // SysDbg ? Just give up!
-                if (static_cast<SystemCallType>(call) == F_SysDbg) {
-                    fprintf(stderr, "System halted and debugger calted!\n");
-                    exit(1);
-                }
+                AnalyzeSyscall();
             }
 
             if (print_instructions) {
@@ -697,18 +828,14 @@ class CDi {
             }
 
             if (m_pc == leave_sys_callpc) {
-                printf("Return from Syscall %x %x\n",
+                printf("Return from Syscall %x %x  ",
                        dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flags,
                        dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flagssr);
                 printstate();
+                AnalyzeSyscallReturn();
             }
 
             prevpc = m_pc;
-        }
-
-        // Trace CPU state
-        if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__decodeopc &&
-            dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__clkena_in) {
         }
 #endif
 
@@ -750,6 +877,7 @@ class CDi {
 
                 uint32_t mpeg_frequency = mpeg_clk_calc_ticks * 30 / mpeg_clk_calc_ticks30;
 
+                printf("Written %s after %.2fs. FMV at %d MHz\n", filename, elapsed_seconds.count(), mpeg_frequency);
                 fprintf(stderr, "Written %s after %.2fs. FMV at %d MHz\n", filename, elapsed_seconds.count(),
                         mpeg_frequency);
 
@@ -823,7 +951,6 @@ class CDi {
             assert(f);
             fwrite(&dut.rootp->emu__DOT__ddram[0], 1, 5000000, f);
             fclose(f);
-            exit(0);
 #endif
         }
 
@@ -1010,8 +1137,8 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        // do_trace = false;
-        // fprintf(stderr, "Trace off!\n");
+        do_trace = false;
+        fprintf(stderr, "Trace off!\n");
 #endif
 
 #ifdef SIMULATE_RC5
@@ -1024,14 +1151,27 @@ class CDi {
         clock30();
         dut.RESET = 0;
     }
-
-    void dump_system_memory() {
+    /// @brief 1MB of Video RAM dumped
+    /// Located in SDRAM at 0x000000
+    void dump_base_case_memory() {
         char filename[100];
-        sprintf(filename, "%d/ramdump.bin", instanceid);
+        sprintf(filename, "%d/video_ramdump.bin", instanceid);
         printf("Writing %s!\n", filename);
         FILE *f = fopen(filename, "wb");
         assert(f);
         fwrite(&dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
+        fclose(f);
+    }
+
+    /// @brief 1MB of DVC RAM dumped
+    /// Located in SDRAM at 0x100000
+    void dump_dvc_sys_memory() {
+        char filename[100];
+        sprintf(filename, "%d/dvc_ramdump.bin", instanceid);
+        printf("Writing %s!\n", filename);
+        FILE *f = fopen(filename, "wb");
+        assert(f);
+        fwrite(&dut.rootp->emu__DOT__ram[0x100000 / 2], 1, 1024 * 256 * 4, f);
         fclose(f);
     }
 
@@ -1085,10 +1225,10 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/addams.bin", "rb");
+        f_cd_bin = fopen("images/david.bin", "rb");
         break;
     case 1:
-        f_cd_bin = fopen("images/coneheads.bin", "rb");
+        f_cd_bin = fopen("images/braindead13.bin", "rb");
         break;
     case 2:
         f_cd_bin = fopen("images/LuckyLuke.bin", "rb");
@@ -1124,6 +1264,9 @@ int main(int argc, char **argv) {
     CDi machine(machineindex);
 
     machine.dut.rootp->emu__DOT__config_auto_play = argc >= 3 ? 1 : 0;
+    if (machine.dut.rootp->emu__DOT__config_auto_play) {
+        fprintf(stderr, "Autoplay enabled!\n");
+    }
 
     while (status == 0 && !Verilated::gotFinish()) {
         machine.modelstep();
@@ -1132,7 +1275,8 @@ int main(int argc, char **argv) {
     machine.modelstep();
     machine.modelstep();
     machine.modelstep();
-    machine.dump_system_memory();
+    machine.dump_base_case_memory();
+    machine.dump_dvc_sys_memory();
     machine.dump_slave_memory();
 
     fclose(f_cd_bin);
