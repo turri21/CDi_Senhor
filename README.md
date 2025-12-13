@@ -97,7 +97,6 @@ Expected synthesis times with Quartus 17.0.2
 * Investigate input responsiveness (skipped events?)
 * Fix hang on audio track stop or change in media player
 * Cheat support?
-* Investigate "Gray border glitch" at the top of "Myst" gameplay (seems to be only one plane)
 * Fix reset behaviour (Core is sometimes hanging after reset)
 * Investigate desaturated colors / low contrast in "Photo CD Sample Disc"
     * Probably fixable with 16-235 to 0-255 scaling
