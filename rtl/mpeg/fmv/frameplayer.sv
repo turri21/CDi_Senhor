@@ -17,15 +17,19 @@ module frameplayer (
     input           vblank,
 
     input planar_yuv_s frame,
-    input [8:0] frame_width,  // expected to be clocked at clkddr
-    input [8:0] frame_height,  // expected to be clocked at clkddr
+    input [8:0] frame_width,  // expected to be clocked at clkvideo
+    input [10:0] frame_stride,  // expected to be clocked at clkddr
+    input [8:0] frame_height,  // expected to be clocked at clkvideo
     input [8:0] offset_y,  // expected to be clocked at clkvideo
     input [8:0] offset_x,  // expected to be clocked at clkvideo
+    input [8:0] window_y,  // expected to be clocked at clkvideo
+    input [8:0] window_x,  // expected to be clocked at clkvideo
+
 
     input latch_frame_clkvideo,
     input latch_frame_clkddr,
     input invalidate_latched_frame,
-    input show_on_next_video_frame
+    input show_on_next_video_frame   // expected to be clocked at clkddr
 );
 
     assign ddrif.byteenable = 8'hff;
@@ -48,6 +52,11 @@ module frameplayer (
     bit [8:0] frame_width_clkvideo = 100;
     bit [8:0] frame_height_clkvideo = 100;
 
+    bit [8:0] frame_width_clkddr = 100;
+    bit [8:0] frame_height_clkddr = 100;
+    bit [8:0] window_x_clkddr;
+    bit [8:0] window_y_clkddr;
+
     always_ff @(posedge clkvideo) begin
         if (latch_frame_clkvideo) begin
             frame_width_clkvideo  <= frame_width;
@@ -55,9 +64,21 @@ module frameplayer (
         end
     end
 
+    always_ff @(posedge clkddr) begin
+        if (latch_frame_clkddr) begin
+            frame_width_clkddr <= frame_width;
+            frame_height_clkddr <= frame_height;
+            window_x_clkddr <= window_x;
+            window_y_clkddr <= window_y;
+        end
+    end
+
     bit [28:0] address_y;
     bit [28:0] address_u;
     bit [28:0] address_v;
+
+    bit [28:0] address_y_offset;
+    bit [28:0] address_uv_offset;
 
     enum bit [1:0] {
         IDLE,
@@ -65,15 +86,7 @@ module frameplayer (
         SETTLE
     } fetchstate;
 
-    wire y_half_empty;
-    wire u_half_empty;
-    wire v_half_empty;
     bit luma_fifo_strobe;
-    bit chroma_fifo_strobe;
-
-    wire y_valid;
-    wire u_valid;
-    wire v_valid;
     yuv_s current_color;
 
     bit target_y;
@@ -85,19 +98,6 @@ module frameplayer (
 
     wire reset_clkddr;
     wire vblank_clkddr;
-
-    ddr_to_byte_fifo fifo_y (
-        .clk_in(clkddr),
-        .reset_in(vblank_clkddr),
-        .reset_out(vblank),
-        .wdata(ddrif.rdata),
-        .we(ddrif.rdata_ready && target_y),
-        .half_empty(y_half_empty),
-        .clk_out(clkvideo),
-        .strobe(luma_fifo_strobe),
-        .valid(y_valid),
-        .q(current_color.y)
-    );
 
     flag_cross_domain cross_new_line_started (
         .clk_a(clkvideo),
@@ -128,7 +128,13 @@ module frameplayer (
         .signal_out_clk_b(fetch_and_show_frame_clkvideo)
     );
 
-    bit [7:0] chroma_read_addr;
+    bit [9:0] luma_read_addr;
+    bit [9:0] chroma_read_addr;
+
+    /// Since DD4 access is aligned to 8 byte,
+    /// we need a way of throwing up to 7 byte away
+    bit [2:0] initial_luma_read_addr;
+    bit [3:0] initial_chroma_read_addr;
 
     ddr_chroma_line_buffer line_buffer_u (
         .clk_in(clkddr),
@@ -137,7 +143,7 @@ module frameplayer (
         .we(ddrif.rdata_ready && target_u),
         .clk_out(clkvideo),
         .q(current_color.u),
-        .raddr(chroma_read_addr)
+        .raddr(chroma_read_addr[9:1])
     );
 
     ddr_chroma_line_buffer line_buffer_v (
@@ -147,7 +153,17 @@ module frameplayer (
         .we(ddrif.rdata_ready && target_v),
         .clk_out(clkvideo),
         .q(current_color.v),
-        .raddr(chroma_read_addr)
+        .raddr(chroma_read_addr[9:1])
+    );
+
+    ddr_luma_line_buffer line_buffer_y (
+        .clk_in(clkddr),
+        .reset(new_line_started_clkddr),
+        .wdata(ddrif.rdata),
+        .we(ddrif.rdata_ready && target_y),
+        .clk_out(clkvideo),
+        .q(current_color.y),
+        .raddr(luma_read_addr)
     );
 
 
@@ -158,41 +174,50 @@ module frameplayer (
     bit line_alternate;
     bit u_requested;
     bit v_requested;
+    bit y_requested;
 
     bit [8:0] vertical_offset_wait;
-    bit [8:0] horizontal_offset_wait;
+    bit [10:0] horizontal_offset_wait;
+    bit [8:0] latched_offset_x;
 
     always_ff @(posedge clkvideo) begin
         hsync_q <= hsync;
 
-        if (reset || vsync) begin
+        if (reset || vblank) begin
             linecnt <= 0;
             vertical_offset_wait <= offset_y;
+            latched_offset_x <= offset_x;
         end else if (!vblank && hsync && !hsync_q) begin
             if (vertical_offset_wait != 0) vertical_offset_wait <= vertical_offset_wait - 1;
             else linecnt <= linecnt + 1;
         end
 
-        if (chroma_fifo_strobe) chroma_read_addr <= chroma_read_addr + 1;
+        if (luma_fifo_strobe) begin
+            luma_read_addr   <= luma_read_addr + 1;
+            chroma_read_addr <= chroma_read_addr + 1;
+        end
+
+        if (vblank) begin
+            initial_luma_read_addr   <= window_x[2:0];
+            initial_chroma_read_addr <= window_x[3:0];
+        end
 
         if (hblank || reset) begin
             pixelcnt <= 0;
-            chroma_fifo_strobe <= 0;
             luma_fifo_strobe <= 0;
-            chroma_read_addr <= 0;
-            horizontal_offset_wait <= offset_x;
+
+            luma_read_addr <= {7'b0, initial_luma_read_addr};
+            chroma_read_addr <= {6'b000000, initial_chroma_read_addr};
+            horizontal_offset_wait <= {latched_offset_x, 2'b00};
         end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && fetch_and_show_frame_clkvideo) begin
 
             if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
             else begin
                 pixelcnt <= pixelcnt + 1;
                 luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
-                chroma_fifo_strobe <= pixelcnt[2:0] == 7 - 2;
-                assert (y_valid);
             end
         end else begin
-            chroma_fifo_strobe <= 0;
-            luma_fifo_strobe   <= 0;
+            luma_fifo_strobe <= 0;
         end
 
         /*
@@ -204,7 +229,7 @@ module frameplayer (
         */
     end
 
-    bit [5:0] data_burst_cnt;
+    bit [6:0] data_burst_cnt;
 
     // 0011 like the N64 core to force a base of 0x30000000
     localparam bit [3:0] DDR_CORE_BASE = 4'b0011;
@@ -217,13 +242,6 @@ module frameplayer (
         .signal_out_clk_b(vertical_offset_wait_not_null_clkddr)
     );
 
-    wire show_on_next_video_frame_clkddr;
-    signal_cross_domain cross_vshow_on_next_video_frame (
-        .clk_a(clkvideo),
-        .clk_b(clkddr),
-        .signal_in_clk_a(show_on_next_video_frame),
-        .signal_out_clk_b(show_on_next_video_frame_clkddr)
-    );
 
     always_ff @(posedge clkddr) begin
         linecnt_clkddr <= linecnt;
@@ -238,26 +256,32 @@ module frameplayer (
             ddrif.acquire <= 0;
         end
 
+        address_y_offset  <= frame_stride * window_y_clkddr;
+        address_uv_offset <= 29'(frame_stride / 2) * 29'(window_y_clkddr / 2);
+
         if (reset_clkddr || vblank_clkddr || vertical_offset_wait_not_null_clkddr) begin
             fetchstate <= IDLE;
-            address_y <= latched_frame.y_adr;
-            address_u <= latched_frame.u_adr;
-            address_v <= latched_frame.v_adr;
-            fetch_and_show_frame <= latched_frame_valid && show_on_next_video_frame_clkddr;
+            address_y <= latched_frame.y_adr + address_y_offset + 29'(window_x_clkddr);
+            address_u <= latched_frame.u_adr + address_uv_offset + 29'(window_x_clkddr / 2);
+            address_v <= latched_frame.v_adr + address_uv_offset + 29'(window_x_clkddr / 2);
+            fetch_and_show_frame <= latched_frame_valid && show_on_next_video_frame;
             target_y <= 0;
             target_u <= 0;
             target_v <= 0;
-            line_alternate <= 0;
+            line_alternate <= window_y_clkddr[0];
             u_requested <= 0;
             v_requested <= 0;
+            y_requested <= 0;
         end else if (fetch_and_show_frame) begin
-            if (new_line_started_clkddr && linecnt_clkddr < frame_height) begin
+            if (new_line_started_clkddr && linecnt_clkddr < frame_height_clkddr) begin
                 line_alternate <= !line_alternate;
 
                 if (line_alternate) begin
                     u_requested <= 0;
                     v_requested <= 0;
                 end
+
+                y_requested <= 0;
             end
 
             case (fetchstate)
@@ -267,9 +291,9 @@ module frameplayer (
                         ddrif.addr <= {DDR_CORE_BASE, address_u[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        address_u <= address_u + 29'(frame_width / 2);
-                        ddrif.burstcnt <= 8'(frame_width / 16);
-                        data_burst_cnt <= 6'(frame_width / 16);
+                        address_u <= address_u + 29'(frame_stride / 2);
+                        ddrif.burstcnt <= 8'(9'(frame_width_clkddr + 15) / 16) + 1;
+                        data_burst_cnt <= 7'(9'(frame_width_clkddr + 15) / 16) + 1;
                         fetchstate <= WAITING;
                         target_u <= 1;
                     end else if (!v_requested) begin
@@ -277,18 +301,19 @@ module frameplayer (
                         ddrif.addr <= {DDR_CORE_BASE, address_v[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        address_v <= address_v + 29'(frame_width / 2);
-                        ddrif.burstcnt <= 8'(frame_width / 16);
-                        data_burst_cnt <= 6'(frame_width / 16);
+                        address_v <= address_v + 29'(frame_stride / 2);
+                        ddrif.burstcnt <= 8'(9'(frame_width_clkddr + 15) / 16) + 1;
+                        data_burst_cnt <= 7'(9'(frame_width_clkddr + 15) / 16) + 1;
                         fetchstate <= WAITING;
                         target_v <= 1;
-                    end else if (y_half_empty) begin
+                    end else if (!y_requested) begin
+                        y_requested <= 1;
                         ddrif.addr <= {DDR_CORE_BASE, address_y[27:3]};
                         ddrif.read <= 1;
                         ddrif.acquire <= 1;
-                        ddrif.burstcnt <= 50;
-                        data_burst_cnt <= 50;
-                        address_y <= address_y + 8 * 50;
+                        address_y <= address_y + 29'(frame_stride);
+                        ddrif.burstcnt <= 8'(9'(frame_width_clkddr + 7) / 8) + 1;
+                        data_burst_cnt <= 7'(9'(frame_width_clkddr + 7) / 8) + 1;
                         fetchstate <= WAITING;
                         target_y <= 1;
                     end

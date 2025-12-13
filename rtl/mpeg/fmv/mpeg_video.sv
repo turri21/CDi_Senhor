@@ -23,13 +23,20 @@ module mpeg_video (
 
     input [8:0] display_offset_y,
     input [8:0] display_offset_x,
+    input [8:0] window_offset_y,
+    input [8:0] window_offset_x,
+    input [8:0] window_width,
+    input [8:0] window_height,
     input show_on_next_video_frame,
     output event_sequence_end,
     output event_buffer_underflow,
     output bit event_picture_starts_display,
     output event_last_picture_starts_display,
     output bit event_first_intra_frame_starts_display,
-    output [3:0] pictures_in_fifo
+    output [3:0] pictures_in_fifo,
+    output bit [10:0] decoder_width,
+    output bit [8:0] decoder_height
+
 );
 
     ddr_if worker_2_ddr ();
@@ -756,8 +763,8 @@ module mpeg_video (
     end
 
     planar_yuv_s just_decoded;
-    bit [8:0] decoder_width = 100;
-    bit [8:0] decoder_height = 100;
+    bit [10:0] decoder_width_clk_mpeg = 100;
+    bit [8:0] decoder_height_clk_mpeg = 100;
 
     bit signed [15:0] shared_buffer_level = 0;
 
@@ -780,12 +787,9 @@ module mpeg_video (
     bit dmem_cmd_ready_3_q;
     bit dmem_cmd_payload_write_3_q;
 
-    bit frame_period_clk_mpeg_set_clk_mpeg;
-
     always_ff @(posedge clk_mpeg) begin
         imem_rsp_valid_1 <= 0;
         dmem_rsp_valid_1 <= 0;
-        frame_period_clk_mpeg_set_clk_mpeg <= 0;
 
         dmem_cmd_payload_address_1_q <= dmem_cmd_payload_address_1;
         dmem_cmd_valid_1_q <= dmem_cmd_valid_1;
@@ -795,12 +799,6 @@ module mpeg_video (
         shared_buffer_level <= shared_buffer_level + (shared_buffer_level_inc ? 1:0) - (shared_buffer_level_dec1 ? 1 : 0) - (shared_buffer_level_dec2 ? 1:0);
 
         event_sequence_end_clk_mpeg <= 0;
-
-        if (dmem_cmd_payload_address_1 >= 32'h00002c10 && dmem_cmd_payload_address_1 <= 32'h0002cc0  && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1) begin
-            $display("Core 1 SEQ HDR write %x at %x during code address %x",
-                     dmem_cmd_payload_data_1, dmem_cmd_payload_address_1,
-                     imem_cmd_payload_address_1);
-        end
 
         if (dmem_cmd_payload_address_1 == 32'h1000000c && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1)begin
             $display("Core 1 stopped at %x with code %x", imem_cmd_payload_address_1,
@@ -835,9 +833,9 @@ module mpeg_video (
                         if (dmem_cmd_payload_address_1[15:0] == 16'h3008)
                             just_decoded.v_adr <= dmem_cmd_payload_data_1[28:0];
                         if (dmem_cmd_payload_address_1[15:0] == 16'h300c)
-                            decoder_width <= dmem_cmd_payload_data_1[8:0];
+                            decoder_width_clk_mpeg <= dmem_cmd_payload_data_1[10:0];
                         if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
-                            decoder_height <= dmem_cmd_payload_data_1[8:0];
+                            decoder_height_clk_mpeg <= dmem_cmd_payload_data_1[8:0];
 
                         if (dmem_cmd_payload_address_1[15:0] == 16'h2010) begin
                             has_sequence_header <= dmem_cmd_payload_data_1[0];
@@ -846,7 +844,6 @@ module mpeg_video (
 
                         if (dmem_cmd_payload_address_1[15:0] == 16'h3014) begin
                             frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
-                            frame_period_clk_mpeg_set_clk_mpeg <= 1;
                         end
 
                         if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
@@ -1191,24 +1188,34 @@ module mpeg_video (
     bit vblank_q2;
     bit for_display_valid;
 
-    wire frame_period_clk_mpeg_set_clk30;
+    wire just_decoded_commit_clk30;
 
-    // frame_period_clk_mpeg is set very infrequently.
-    // frame_period_clk_mpeg_set_clk_mpeg is set for one clk_mpeg tick to indicate change
-    // frame_period_clk_mpeg_set_clk30 is this flag moved over to the clk30 domain
-    // When frame_period_clk_mpeg_set_clk30 is high, the stability of frame_period_clk_mpeg is assumed
-    flag_cross_domain cross_frame_period_clk_mpeg_set (
+    // frame info are set very infrequently.
+    // just_decoded_commit is set for one clk_mpeg tick to indicate change
+    // just_decoded_commit_clk30 is this flag moved over to the clk30 domain
+    // When just_decoded_commit_clk30 is high, the stability of all frame info is assumed
+    flag_cross_domain cross_just_decoded_commit (
         .clk_a(clk_mpeg),
         .clk_b(clk30),
-        .flag_in_clk_a(frame_period_clk_mpeg_set_clk_mpeg),
-        .flag_out_clk_b(frame_period_clk_mpeg_set_clk30)
+        .flag_in_clk_a(just_decoded_commit),
+        .flag_out_clk_b(just_decoded_commit_clk30)
     );
 
     always_ff @(posedge clk30) begin
         vblank_q1 <= vblank;
         vblank_q2 <= vblank_q1;
 
-        if (frame_period_clk_mpeg_set_clk30) frame_period <= frame_period_clk_mpeg;
+        if (just_decoded_commit_clk30) begin
+            frame_period   <= frame_period_clk_mpeg;
+            decoder_width  <= decoder_width_clk_mpeg;
+            decoder_height <= decoder_height_clk_mpeg;
+        end
+
+        if (!dsp_enable) begin
+            decoder_width  <= 0;
+            decoder_height <= 0;
+            frame_period   <= 0;
+        end
 
         for_display_valid <= for_display_valid_clk_mpeg;
         first_intra_frame_of_gop_clk30 <= for_display.first_intra_frame_of_gop;
@@ -1268,12 +1275,20 @@ module mpeg_video (
     );
 
 
+    wire show_on_next_video_frame_clkddr;
+    signal_cross_domain cross_vshow_on_next_video_frame (
+        .clk_a(clk30),
+        .clk_b(clk_mpeg),
+        .signal_in_clk_a(show_on_next_video_frame),
+        .signal_out_clk_b(show_on_next_video_frame_clkddr)
+    );
+
     yuv_frame_adr_fifo readyframes (
         .clk(clk_mpeg),
         .reset(reset_dsp_enabled_clk_mpeg),
         .wdata(just_decoded),
         .we(just_decoded_commit),
-        .strobe(latch_frame_for_display_clk_mpeg),
+        .strobe(latch_frame_for_display_clk_mpeg && show_on_next_video_frame_clkddr),
         .valid(for_display_valid_clk_mpeg),
         .q(for_display),
         .cnt(pictures_in_fifo_clk_mpeg)
@@ -1290,14 +1305,17 @@ module mpeg_video (
         .hblank,
         .vblank,
         .frame(for_display),
-        .frame_width(decoder_width),
-        .frame_height(decoder_height),
+        .frame_width(window_width),
+        .frame_stride(decoder_width_clk_mpeg),
+        .frame_height(window_height),
         .offset_y(display_offset_y),
         .offset_x(display_offset_x),
+        .window_y(window_offset_y),
+        .window_x(window_offset_x),
         .latch_frame_clkvideo(latch_frame_for_display),
         .latch_frame_clkddr(latch_frame_for_display_clk_mpeg),
         .invalidate_latched_frame(reset_persistent_storage_clk_mpeg),
-        .show_on_next_video_frame(show_on_next_video_frame)
+        .show_on_next_video_frame(show_on_next_video_frame_clkddr)
     );
 endmodule
 

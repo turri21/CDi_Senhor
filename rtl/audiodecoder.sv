@@ -163,8 +163,6 @@ module audiodecoder (
     bit signed [31:0] mac;
     bit stop_playback_latch;
 
-    wire inbetween  /*verilator public_flat_rd*/ = decoder_state == APPLY_FILTER1;
-
     always_ff @(posedge clk) begin
         disable_audiomap <= 0;
 

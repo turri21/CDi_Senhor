@@ -47,10 +47,10 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  22,424 / 41,910 ( 54 % )
-    Total registers              25036
-    Total block memory bits      2,331,040 / 5,662,720 ( 41 % )
-    Total DSP Blocks             96 / 112 ( 86 % )
+    Logic utilization (in ALMs)  22,603 / 41,910 ( 54 % )
+    Total registers              25334
+    Total block memory bits      2,336,208 / 5,662,720 ( 41 % )
+    Total DSP Blocks             98 / 112 ( 88 % )
 
 Expected synthesis times with Quartus 17.0.2
 
@@ -64,10 +64,8 @@ Expected synthesis times with Quartus 17.0.2
 * Regression of "Historia del Arte Español" (working in DVC rc2)
     * Blank video?
 * Fix Christmas Crisis bonus ride
-    * Video is much wider than the CD-i resolution. Window function required
-* Fix position of MPEG video, relative to base case video
-    * Seems very perceivable with "Les Guignols de l’Info"
-* Add MPEG audio attenuation
+    * Might still stutter. Analysis required.
+* Add MPEG audio attenuation (e.g. Lost Eden)
 * "Mutant Rampage - Bodyslam" has a tendency to freeze?
 * "The Last Bounty Hunter", "Drug Wars", "Mad Dog 2", "Who Shot Johnny Rock?" have regressions (works in rc2)?
 * "Chaos Control" has video glitches?
@@ -77,11 +75,8 @@ Expected synthesis times with Quartus 17.0.2
 * "Brain Dead 13" having no video during intro. And hangs afterwards.
     * The decoding and playback does occur but mv_show() is not done?
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
-* "The Secret of Nimh" (VCD) doesn't play
-    * Huffman decoding in state 14 takes too long
 * Slow motion with VCDs is behaving incorrect
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
-* Weird shifted graphics with "David and Goliath"
 * VCD resolution for white book
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
@@ -107,7 +102,7 @@ Expected synthesis times with Quartus 17.0.2
     * RC5 support is added. A test using real hardware is required.
 * Add 2 player support
 * CD+G
-* Check compatibilitiy with CDs that have track index 2 as opposed to the usual 0 and 1
+* Check compatibility with CDs that have track index 2 as opposed to the usual 0 and 1
 * Possibly adding support for other PCBs (like Mono II)
 * Refurbish I2C for the front display and show the content as picture in picture during changes?
     * It might not even be required at all.
