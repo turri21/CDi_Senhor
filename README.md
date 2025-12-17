@@ -47,8 +47,8 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  22,603 / 41,910 ( 54 % )
-    Total registers              25334
+    Logic utilization (in ALMs)  22,718 / 41,910 ( 54 % )
+    Total registers              25755
     Total block memory bits      2,336,208 / 5,662,720 ( 41 % )
     Total DSP Blocks             98 / 112 ( 88 % )
 
@@ -59,9 +59,14 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* "Who Shot Johnny Rock?" is not stopping the Philips Logo animation when pressing a button
+    * A gun shot can be heard, so the press is registered.
+    * The intro of the game also can't be skipped
+* Very short MPEG videos are problematic
+    * Last frame might be missing
+    * Single frame MPEG files don't decode at all
 * Fix stop of CD reading from MiSTer Main when reading is deactivated
 * "Uncover featuring Tatjana (Europe)" regressions?
-* Star Trek VI - Terre Inconnue (France) (Disc 1) freezes? Disc 2 does too?
 * Regression of "Historia del Arte Español" (working in DVC rc2)
     * Blank video?
 * Fix Christmas Crisis bonus ride
@@ -73,8 +78,7 @@ Expected synthesis times with Quartus 17.0.2
 * "The Lost Ride" has video glitches?
 * "Crime Patrol" has video glitches?
 * "Solar Crusade" has video glitches?
-* "Brain Dead 13" having no video during intro. And hangs afterwards.
-    * The decoding and playback does occur but mv_show() is not done?
+* "Brain Dead 13" hangs after company logo
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
 * Slow motion with VCDs is behaving incorrect
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)

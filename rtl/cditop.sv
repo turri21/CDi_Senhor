@@ -270,7 +270,7 @@ module cditop (
     wire signed [15:0] mpeg_audio_right;
 
     wire sample_tick37;
-    wire sample_tick44;
+    wire sample_tick44  /*verilator public_flat_rd*/;
     wire mpeg_45tick;
 
     cdic_clock_gen cdic_clk_gen (

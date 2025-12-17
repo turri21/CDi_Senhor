@@ -1,3 +1,5 @@
+// verilator lint_off ALWNEVER
+
 module fadd
   (input  a,
    input  b,
