@@ -2356,7 +2356,7 @@ void plm_video_decode_picture(plm_video_t *self) {
 		OUT_DEBUG = 7;
 
 		plm_video_decode_slice(self, self->start_code & 0x000000FF);
-		if (self->macroblock_address >= seq_hdr_conf.mb_size - 2) {
+		if (self->macroblock_address >= seq_hdr_conf.mb_size - 1) {
 			break;
 		}
 		self->start_code = plm_dma_buffer_next_start_code(self->buffer);

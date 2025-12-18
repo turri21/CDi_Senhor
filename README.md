@@ -59,9 +59,11 @@ Expected synthesis times with Quartus 17.0.2
 
 ### TODOs
 
+* Add support for an emulated Peacekeeper Revolver Light Gun
 * "Who Shot Johnny Rock?" is not stopping the Philips Logo animation when pressing a button
     * A gun shot can be heard, so the press is registered.
     * The intro of the game also can't be skipped
+    * cdiemu doesn't have this problem
 * Very short MPEG videos are problematic
     * Last frame might be missing
     * Single frame MPEG files don't decode at all
