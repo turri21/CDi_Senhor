@@ -635,14 +635,24 @@ module cditop (
 `ifdef VERILATOR
     // Tool to observe variables in fdrvs1 driver code
     struct {
-        bit [7:0]  V_BufStat;
-        bit [15:0] V_Stat;
-        bit [15:0] V_VCMD;
-        bit [15:0] V_DTSVal;
-        bit [31:0] V_SCR;
-        bit [15:0] V_Status;   //0x136
-        bit [15:0] V_SigStat;  //0x13c
-        bit [15:0] V_AsyStat;  //0x16e
+        bit [7:0] V_BufStat;  // 0x17b char*
+        bit [7:0] V_UpdFlag;  // 0x12e char*
+        bit [15:0] V_Stat;    // 0x134
+        bit [15:0] V_VCMD;    // 0x16c
+        bit [15:0] V_Scroll;  // 0x16a
+        bit [15:0] V_DTSVal;  // 0x1c0
+        bit [31:0] V_SCR;     // 0xca
+        bit [15:0] V_Status;  // 0x136
+        bit [15:0] V_SigStat; // 0x13c
+        bit [15:0] V_AsyStat; // 0x16e
+        bit [31:0] V_Window;  // 0xe6
+        bit [31:0] V_DecOff;  // 0xea
+        bit [31:0] V_ScrOrg;  // 0xee
+        bit [31:0] V_ScrOff;  // 0xf2
+        bit [31:0] V_NISFnd;  // 0x170
+        bit [7:0]  V_PicRt; // 0x0x17f
+        bit [31:0] V_PWI; // 0x180
+        bit [15:0] V_PRPA; //0x194
     } fdrvs1 = '{default: 0};
     bit [23:0] fdrvs1_static  /*verilator public_flat_rw*/ = 0;
     always @(posedge clk30) begin
@@ -659,18 +669,36 @@ module cditop (
             end
             if (addr_byte == fdrvs1_static + 24'h016e) begin
                 fdrvs1.V_AsyStat = cpu_data;
-                $display("V_AsyStat = %d dez", cpu_data);
+                $display("V_AsyStat = %x hex %d dez", cpu_data, cpu_data);
             end
-
             if (addr_byte == fdrvs1_static + 24'h0134) begin
                 fdrvs1.V_Stat = cpu_data;
                 $display("V_Stat = %d dez", cpu_data);
             end
+            if (addr_byte == fdrvs1_static + 24'h0194) begin
+                fdrvs1.V_PRPA = cpu_data;
+                $display("V_PRPA = %d dez", cpu_data);
+            end
 
             // I assume that fdrvs1_static is always aligned to words
-            if (addr_byte == fdrvs1_static + 24'h017a) begin  // Location is 0x17b
+            if (addr_byte == fdrvs1_static + 24'h017a) begin  // Location is 0x17b -> low byte
                 fdrvs1.V_BufStat = cpu_data[7:0];
                 $display("V_BufStat = %d dez", cpu_data[7:0]);
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h012e) begin  // Location is 0x12e -> high byte
+                fdrvs1.V_UpdFlag = cpu_data[15:8];
+                $display("V_UpdFlag = %d dez", cpu_data[15:8]);
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h017e) begin  // Location is 0x17f -> low byte
+                fdrvs1.V_PicRt = cpu_data[7:0];
+                $display("V_PicRt = %d dez", cpu_data[7:0]);
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h016a) begin
+                fdrvs1.V_Scroll = cpu_data;
+                $display("V_Scroll = %x", cpu_data);
             end
 
             if (addr_byte == fdrvs1_static + 24'h016c) begin
@@ -693,6 +721,65 @@ module cditop (
                 $display("V_SCR = %x", {fdrvs1.V_SCR[31:16], cpu_data});
             end
 
+            if (addr_byte == fdrvs1_static + 24'h0e6) begin
+                fdrvs1.V_Window[31:16] = cpu_data;
+                $display("V_Window = %x", {cpu_data, fdrvs1.V_Window[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0e8) begin
+                fdrvs1.V_Window[15:0] = cpu_data;
+                $display("V_Window = %x", {fdrvs1.V_Window[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0ea) begin
+                fdrvs1.V_DecOff[31:16] = cpu_data;
+                $display("V_DecOff = %x", {cpu_data, fdrvs1.V_DecOff[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0ec) begin
+                fdrvs1.V_DecOff[15:0] = cpu_data;
+                $display("V_DecOff = %x", {fdrvs1.V_DecOff[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0ee) begin
+                fdrvs1.V_ScrOrg[31:16] = cpu_data;
+                $display("V_ScrOrg = %x", {cpu_data, fdrvs1.V_ScrOrg[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0f0) begin
+                fdrvs1.V_ScrOrg[15:0] = cpu_data;
+                $display("V_ScrOrg = %x", {fdrvs1.V_ScrOrg[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0f2) begin
+                fdrvs1.V_ScrOff[31:16] = cpu_data;
+                $display("V_ScrOff = %x", {cpu_data, fdrvs1.V_ScrOff[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h0f4) begin
+                fdrvs1.V_ScrOff[15:0] = cpu_data;
+                $display("V_ScrOff = %x", {fdrvs1.V_ScrOff[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h170) begin
+                fdrvs1.V_NISFnd[31:16] = cpu_data;
+                $display("V_NISFnd = %x", {cpu_data, fdrvs1.V_NISFnd[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h172) begin
+                fdrvs1.V_NISFnd[15:0] = cpu_data;
+                $display("V_NISFnd = %x", {fdrvs1.V_NISFnd[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h180) begin
+                fdrvs1.V_PWI[31:16] = cpu_data;
+                $display("V_PWI = %x", {cpu_data, fdrvs1.V_PWI[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h182) begin
+                fdrvs1.V_PWI[15:0] = cpu_data;
+                $display("V_PWI = %x", {fdrvs1.V_PWI[31:16], cpu_data});
+            end
 
         end
     end
