@@ -769,6 +769,8 @@ module cdic (
                             if (!din[14]) begin
                                 // Reset everything related to CD reading.
                                 cd_reading_active <= 0;
+                                cd_stop_sector_delivery <= 1;
+
                                 data_target_buffer <= 0;
 
                                 // Note: The first audio buffer must be delivered to 2800
