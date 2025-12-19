@@ -8,6 +8,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/cdic.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cditop.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/clut_rle.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddr_mux3.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddr_mux4.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/delta_yuv_decoder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/display_file_reader.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/dual_ad7528.sv

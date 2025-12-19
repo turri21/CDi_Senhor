@@ -2402,6 +2402,8 @@ void plm_video_decode_macroblock(plm_video_t *self) {
 	OUT_DEBUG = 14;
 
     worker_cnt++;
+	if (worker_cnt >= 3)
+		worker_cnt = 0;
 
 	// Decode increment
 	int increment = 0;

@@ -41,14 +41,16 @@ module mpeg_video (
 
     ddr_if worker_2_ddr ();
     ddr_if worker_3_ddr ();
+    ddr_if worker_4_ddr ();
     ddr_if player_ddr ();
 
-    ddr_mux3 ddrmux (
+    ddr_mux4 ddrmux (
         .clk(clk_mpeg),
         .x  (ddrif),
         .a  (player_ddr),
         .b  (worker_2_ddr),
-        .c  (worker_3_ddr)
+        .c  (worker_3_ddr),
+        .d  (worker_4_ddr)
     );
 
 
@@ -285,9 +287,6 @@ module mpeg_video (
         .data_out1(memory_out_d1)
     );
 
-    wire [31:0] shared12_out_1;
-    wire [31:0] shared13_out_1;
-
     // Core 1 signals
     wire        imem_cmd_valid_1;
     bit         imem_cmd_ready_1;
@@ -347,6 +346,7 @@ module mpeg_video (
     );
     /*verilator tracing_on*/
 
+    wire [31:0] shared_out_1[3];
 
     macroblock_worker #(
         .unit_index(0)
@@ -361,7 +361,7 @@ module mpeg_video (
         .dmem_cmd_payload_mask_1,
         .dmem_cmd_payload_write_1,
 
-        .shared12_out_1(shared12_out_1),
+        .shared12_out_1(shared_out_1[0]),
 
         .ddrif(worker_2_ddr)
     );
@@ -379,9 +379,27 @@ module mpeg_video (
         .dmem_cmd_payload_mask_1,
         .dmem_cmd_payload_write_1,
 
-        .shared12_out_1(shared13_out_1),
+        .shared12_out_1(shared_out_1[1]),
 
         .ddrif(worker_3_ddr)
+    );
+
+    macroblock_worker #(
+        .unit_index(2)
+    ) worker4 (
+        .clk_mpeg,
+        .reset_dsp_enabled_clk_mpeg,
+
+        .dmem_cmd_valid_1,
+        .dmem_cmd_ready_1(dmem_cmd_ready_1),
+        .dmem_cmd_payload_address_1,
+        .dmem_cmd_payload_data_1,
+        .dmem_cmd_payload_mask_1,
+        .dmem_cmd_payload_write_1,
+
+        .shared12_out_1(shared_out_1[2]),
+
+        .ddrif(worker_4_ddr)
     );
 
 
@@ -442,9 +460,7 @@ module mpeg_video (
         if (dmem_cmd_valid_1_q && dmem_cmd_ready_1_q) begin
             case (dmem_cmd_payload_address_1_q[31:28])
                 4'd4: begin  // Shared SRAM region
-                    if (dmem_cmd_payload_address_1_q[27:24] == 1)
-                        dmem_rsp_payload_data_1 = shared13_out_1;
-                    else dmem_rsp_payload_data_1 = shared12_out_1;
+                    dmem_rsp_payload_data_1 = shared_out_1[dmem_cmd_payload_address_1_q[25:24]];
                 end
                 4'd1: begin
                     // I/O Area

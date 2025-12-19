@@ -1262,7 +1262,7 @@ int main(int argc, char **argv) {
         f_cd_bin = fopen("images/christ_country.bin", "rb");
         break;
     case 5:
-        f_cd_bin = fopen("images/fmvtest.bin", "rb");
+        f_cd_bin = fopen("images/startrek.bin", "rb");
         break;
     case 6:
         f_cd_bin = fopen("images/FMVTEST.BIN", "rb");

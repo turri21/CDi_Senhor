@@ -36,42 +36,29 @@ struct image_synthesis_descriptor
     uint8_t cmdcnt;
 };
 
-struct image_synthesis_descriptor * const image_synthesis_buffer = (struct image_synthesis_descriptor *)0x40000000;
-struct image_synthesis_descriptor * const image_synthesis_buffer2 = (struct image_synthesis_descriptor *)0x41000000;
-int image_synthesis_buffer_index = 0;
-int image_synthesis_buffer_index2 = 0;
-static uint8_t cmdcnt = 0;
-static uint8_t cmdcnt1 = 0;
-static uint8_t cmdcnt2 = 0;
+struct image_synthesis_descriptor *const image_synthesis_buffer[3] = {
+    (struct image_synthesis_descriptor *)0x40000000,
+    (struct image_synthesis_descriptor *)0x41000000,
+    (struct image_synthesis_descriptor *)0x42000000,
+};
+int image_synthesis_buffer_index[3] = {0,0,0};
+static uint8_t cmdcnt[3] = {0,0,0};
 static int worker_cnt = 0;
 
 #define CMD_SIZE 288
-#define SHARED_BUFFER_ENTRIES (16384 / CMD_SIZE)
+#define SHARED_BUFFER_ENTRIES (8192 / CMD_SIZE)
 
 struct image_synthesis_descriptor *get_next_synthesis_desc()
 {
     struct image_synthesis_descriptor *retval;
 
-    if (worker_cnt & 1)
-    {
-        retval = &image_synthesis_buffer[image_synthesis_buffer_index++];
+    retval = &image_synthesis_buffer[worker_cnt][image_synthesis_buffer_index[worker_cnt]++];
 
-        if (image_synthesis_buffer_index == SHARED_BUFFER_ENTRIES)
-            image_synthesis_buffer_index = 0;
+    if (image_synthesis_buffer_index[worker_cnt] == SHARED_BUFFER_ENTRIES)
+        image_synthesis_buffer_index[worker_cnt] = 0;
 
-        cmdcnt1++;
-        retval->cmdcnt = cmdcnt1;
-    }
-    else
-    {
-        retval = &image_synthesis_buffer2[image_synthesis_buffer_index2++];
-
-        if (image_synthesis_buffer_index2 == SHARED_BUFFER_ENTRIES)
-            image_synthesis_buffer_index2 = 0;
-
-        cmdcnt2++;
-        retval->cmdcnt = cmdcnt2;
-    }
+    cmdcnt[worker_cnt]++;
+    retval->cmdcnt = cmdcnt[worker_cnt];
 
     __asm volatile("" : : : "memory");
 
@@ -95,15 +82,15 @@ struct image_synthesis_descriptor *get_next_synthesis_desc()
 /// Meant to be executed by the consuming worker cores
 void clear_shared_memory()
 {
-    for (int i=0; i< SHARED_BUFFER_ENTRIES;i++)
+    for (int i = 0; i < SHARED_BUFFER_ENTRIES; i++)
     {
-        image_synthesis_buffer[i].ready=0;
+        image_synthesis_buffer[0][i].ready = 0;
     }
 }
 
 struct image_synthesis_descriptor *get_next_ready_synthesis_desc()
 {
-    struct image_synthesis_descriptor *retval = &image_synthesis_buffer[image_synthesis_buffer_index++];
+    struct image_synthesis_descriptor *retval = &image_synthesis_buffer[0][image_synthesis_buffer_index[0]++];
 
     OUT_DEBUG = 35;
     __asm volatile("" : : : "memory");
@@ -111,8 +98,8 @@ struct image_synthesis_descriptor *get_next_ready_synthesis_desc()
     while (retval->ready == 0)
         __asm volatile("" : : : "memory");
 
-    cmdcnt++;
-    if (cmdcnt != retval->cmdcnt)
+    cmdcnt[0]++;
+    if (cmdcnt[0] != retval->cmdcnt)
     {
         // something went horribly wrong
         *((volatile uint8_t *)OUTPORT_END) = 8;
@@ -122,8 +109,8 @@ struct image_synthesis_descriptor *get_next_ready_synthesis_desc()
 
     OUT_DEBUG = 36;
 
-    if (image_synthesis_buffer_index == SHARED_BUFFER_ENTRIES)
-        image_synthesis_buffer_index = 0;
+    if (image_synthesis_buffer_index[0] == SHARED_BUFFER_ENTRIES)
+        image_synthesis_buffer_index[0] = 0;
 
     return retval;
 }

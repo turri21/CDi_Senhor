@@ -145,12 +145,18 @@ static void push_frame(plm_frame_t *frame)
 
 void main(void)
 {
+	OUT_DEBUG = 1;
+
 	plm_dma_buffer_t *buffer = plm_buffer_create_with_memory((uint8_t *)0x20000000, 700 * 1024 * 1024);
 	if (!buffer)
 		*((volatile uint8_t *)OUTPORT_END) = 2;
 
+	OUT_DEBUG = 29;
+
 	while (!plm_dma_buffer_has(buffer, 1000))
 		;
+
+	OUT_DEBUG = 30;
 
 	plm_video_t *mpeg = plm_video_create_with_buffer(buffer, 0);
 	if (!mpeg)
@@ -164,8 +170,11 @@ void main(void)
 		{
 			OUT_DEBUG = 27;
 
+			worker_cnt=0;
 			sync_to_worker();
-			worker_cnt++;
+			worker_cnt=1;
+			sync_to_worker();
+			worker_cnt=2;
 			sync_to_worker();
 
 			OUT_DEBUG = 28;

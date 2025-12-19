@@ -10,7 +10,7 @@
 
 module dualport_shared_ram #(
     parameter int BYTE_WIDTH = 8,
-    ADDRESS_WIDTH = 12,
+    ADDRESS_WIDTH = 11,
     BYTES = 4,
     DATA_WIDTH_R = BYTE_WIDTH * BYTES
 ) (
@@ -31,7 +31,7 @@ module dualport_shared_ram #(
     // templated RAM, but the data read from it is corrupted.
     // Because of this, black box RAM from Quartus is used instead for synthesis
 `ifdef VERILATOR
-    localparam RAM_DEPTH = 4096;
+    localparam RAM_DEPTH = 2048;
 
     // model the RAM with two dimensional packed array
     /* verilator lint_off MULTIDRIVEN */
@@ -109,8 +109,8 @@ module dualport_shared_ram #(
 		altsyncram_component.indata_reg_b = "CLOCK0",
 		altsyncram_component.intended_device_family = "Cyclone V",
 		altsyncram_component.lpm_type = "altsyncram",
-		altsyncram_component.numwords_a = 4096,
-		altsyncram_component.numwords_b = 4096,
+		altsyncram_component.numwords_a = 2048,
+		altsyncram_component.numwords_b = 2048,
 		altsyncram_component.operation_mode = "BIDIR_DUAL_PORT",
 		altsyncram_component.outdata_aclr_a = "NONE",
 		altsyncram_component.outdata_aclr_b = "NONE",
@@ -120,8 +120,8 @@ module dualport_shared_ram #(
 		altsyncram_component.read_during_write_mode_mixed_ports = "OLD_DATA",
 		altsyncram_component.read_during_write_mode_port_a = "NEW_DATA_NO_NBE_READ",
 		altsyncram_component.read_during_write_mode_port_b = "NEW_DATA_NO_NBE_READ",
-		altsyncram_component.widthad_a = 12,
-		altsyncram_component.widthad_b = 12,
+		altsyncram_component.widthad_a = 11,
+		altsyncram_component.widthad_b = 11,
 		altsyncram_component.width_a = 32,
 		altsyncram_component.width_b = 32,
 		altsyncram_component.width_byteena_a = 4,

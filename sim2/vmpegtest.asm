@@ -48,24 +48,27 @@ main:
 	; #$00363000 Secret of Nimh (Redump VCD)
 	; #$09235200 Les Guignols de l’info - "Böööh" (Stream 6)
 	; #$00333500 Lost Eden - When entering gameplay (Stream 0)
+	; #$05402000 Star Trek VI - Terre Inconnue (France) (Disc 1) - Good match for SEQHDR of High CPU Load scene
 
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$ffffffff,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$00323400,$303C02 ; Timer Register
+	move.l #$05412700,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 	; Usually one would use the DTS and SCR to start playback
 	; But I feel lazy and use the number of pics instead
 waitforpics:
 	jsr WaitForSectorAndUse
-	cmp.w #5,$00E040A4 ; Compare 5 against pictures in FIFO
+	cmp.w #4,$00E040A4 ; Compare 5 against pictures in FIFO
 	bmi waitforpics
 
 	move.b #'B',$80002019
 
 	move.w #$0008,$E040C0 ; FMV SYSCMD - Play
+	move.w #$0420,$E040C2 ; FMV VIDCMD - Show on next frame
+
 
 endless:
 	jsr WaitForSectorAndUse
