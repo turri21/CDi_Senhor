@@ -82,12 +82,12 @@ module mpeg_demuxer (
             })
 
                 // verilog_format: off
-                {PACK5, 8'h??}: begin         
+                {PACK5, 8'h??}: begin
                     demux_state <= IDLE;
                     $display ("%s PACK %d", unit, system_clock_reference);
                 end
-                
-                {PACK4, 8'h??}: begin                    
+
+                {PACK4, 8'h??}: begin
                     demux_state <= PACK5;
                     system_clock_reference[6:0] <= mpeg_data[7:1];
                 end
@@ -108,7 +108,10 @@ module mpeg_demuxer (
                     system_clock_reference[32:30] <= mpeg_data[3:1];
                 end
 
-                {PES8, 8'h??}: begin         
+                {PES8, 8'h??}: begin
+                    // This state is only reached if at least PTS exists
+                    // DTS is optional. DTS can never occur without PTS!
+
                     demux_state <= IDLE;
 
                     if (dts_present) begin
@@ -116,8 +119,13 @@ module mpeg_demuxer (
                         decoding_timestamp <= decoding_timestamp_temp;
                         decoding_timestamp_updated <= 1;
                     end
-                    else
+                    else begin
+                        // We don't have DTS. VMPEG seems to use PTS instead
+                        // ffprobe does so too...
                         $display ("%s PES %d", unit, presentation_timestamp);
+                        decoding_timestamp <= presentation_timestamp;
+                        decoding_timestamp_updated <= 1;
+                    end
 
                     if (!system_clock_reference_start_time_valid) begin
                         system_clock_reference_start_time_valid <= 1;
@@ -195,7 +203,7 @@ module mpeg_demuxer (
                 {PES2, 8'hff}: begin // stuffing byte
                     demux_state <= PES2;
                 end
-                
+
                 {PES1, 8'h??}: begin
                     demux_state <= PES2;
                     packet_length[7:0] <= mpeg_data;
