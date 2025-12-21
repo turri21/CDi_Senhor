@@ -64,8 +64,16 @@ static bool do_trace{true};
 #endif
 volatile sig_atomic_t status = 0;
 
+// #define CROP
+
+#ifdef CROP
+const int width = 1536; // 768*2
+const int height = 280;
+#else
 const int width = 120 * 16;
 const int height = 312;
+#endif
+
 const int size = width * height * 3;
 const int png_height_scale = 4;
 
@@ -513,19 +521,18 @@ class CDi {
                 r = dut.VGA_R;
                 g = dut.VGA_G;
                 b = dut.VGA_B;
-            }
-#if 0
-            if (dut.VGA_HS) {
-                r += 100;
+#ifdef CROP
+                output_image[pixel_index++] = r;
+                output_image[pixel_index++] = g;
+                output_image[pixel_index++] = b;
+#endif
             }
 
-            if (dut.VGA_VS) {
-                g += 100;
-            }
-#endif
+#ifndef CROP
             output_image[pixel_index++] = r;
             output_image[pixel_index++] = g;
             output_image[pixel_index++] = b;
+#endif
         }
     }
 
@@ -721,6 +728,13 @@ void get_video_frame(std::string binpath, std::string pngpath) {
     fread(&machine.dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
     fclose(f);
 
+    // To support multiple endianesses, we use the second word to detect it
+    if (machine.dut.rootp->emu__DOT__ram[1] == 0x0015) {
+        for (int i = 0; i < 1024 * 256 * 2; i++) {
+            machine.dut.rootp->emu__DOT__ram[i] = bswap_16(machine.dut.rootp->emu__DOT__ram[i]);
+        }
+    }
+
     if (binpath == "ramdumps/frogfeast3.bin" || binpath == "ramdumps/frogfeast4.bin") {
         fprintf(stderr, "Overwrite CLUT\n");
         auto &clut = frogfeast_clut;
@@ -781,6 +795,8 @@ void get_video_frame(std::string binpath, std::string pngpath) {
     }
     machine.modelstep();
 
+    // #define TWO_ROUNDS
+
 #ifdef TWO_ROUNDS
     // And again!
     while (machine.dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y == 0) {
@@ -827,7 +843,8 @@ void forked_run() {
                 printf("Runner %d %s\n", runner, iterator->c_str());
 
                 auto binpath = *iterator;
-                auto pngpath = std::regex_replace(binpath, std::regex("ramdumps/(.*).bin"), "videosim/$1.png");
+                auto pngpath = std::regex_replace(binpath, std::regex(".*/(.*).bin"), "videosim/$1.png");
+
                 get_video_frame(binpath, pngpath);
 
                 iterator++;

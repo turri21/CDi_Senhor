@@ -24,10 +24,9 @@ set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|de
 
 
 # protected by latch_frame_clkvideo
-set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|video_ctrl_window_height*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|frame_height_clkddr*}
-set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|video_ctrl_window_width*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|frame_width_clkddr*}
+set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_height*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|frame_height_clkddr*}
+set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_width*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|frame_width_clkddr*}
 
 # protected by latch_frame_clkddr
-set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|video_ctrl_decoder_offset_y*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_y_clkddr*}
-set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|video_ctrl_decoder_offset_x*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_x_clkddr*}
-
+set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_offset_y*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_y_clkddr*}
+set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_offset_x*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_x_clkddr*}

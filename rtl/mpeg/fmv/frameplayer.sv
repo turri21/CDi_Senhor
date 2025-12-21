@@ -57,21 +57,6 @@ module frameplayer (
     bit [8:0] window_x_clkddr;
     bit [8:0] window_y_clkddr;
 
-    always_ff @(posedge clkvideo) begin
-        if (latch_frame_clkvideo) begin
-            frame_width_clkvideo  <= frame_width;
-            frame_height_clkvideo <= frame_height;
-        end
-    end
-
-    always_ff @(posedge clkddr) begin
-        if (latch_frame_clkddr) begin
-            frame_width_clkddr <= frame_width;
-            frame_height_clkddr <= frame_height;
-            window_x_clkddr <= window_x;
-            window_y_clkddr <= window_y;
-        end
-    end
 
     bit [28:0] address_y;
     bit [28:0] address_u;
@@ -180,6 +165,16 @@ module frameplayer (
     bit [10:0] horizontal_offset_wait;
     bit [8:0] latched_offset_x;
 
+    always_ff @(posedge clkddr) begin
+        if (vblank_clkddr) begin
+            window_x_clkddr <= window_x;
+            window_y_clkddr <= window_y;
+
+            frame_width_clkddr <= frame_width;
+            frame_height_clkddr <= frame_height;
+        end
+    end
+
     always_ff @(posedge clkvideo) begin
         hsync_q <= hsync;
 
@@ -187,6 +182,9 @@ module frameplayer (
             linecnt <= 0;
             vertical_offset_wait <= offset_y;
             latched_offset_x <= offset_x;
+
+            frame_width_clkvideo <= frame_width;
+            frame_height_clkvideo <= frame_height;
         end else if (!vblank && hsync && !hsync_q) begin
             if (vertical_offset_wait != 0) vertical_offset_wait <= vertical_offset_wait - 1;
             else linecnt <= linecnt + 1;

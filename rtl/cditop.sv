@@ -633,6 +633,9 @@ module cditop (
 
 
 `ifdef VERILATOR
+    // Only for gtkwave to align video images with the signals in the waveform
+    int frame_index  /*verilator public_flat_rw*/;
+
     // Tool to observe variables in fdrvs1 driver code
     struct {
         bit [7:0] V_BufStat;  // 0x17b char*

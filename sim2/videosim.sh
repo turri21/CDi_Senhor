@@ -1,5 +1,12 @@
 mkdir -p videosim
 rm videosim/*.png
+
+set -e
+
+# Prepare something that is not affecting video playback
+vasmm68k_mot -Fbin -m68000 cdic_cdda_play.asm -o cdic_cdda_play.rom
+xxd -p -c2 cdic_cdda_play.rom cdi200.mem
+
 verilator --top-module emu  \
      --trace --trace-fst --trace-structs --cc --assert --exe --build   \
     --build-jobs 8 videosim_top.cpp -I../rtl  \

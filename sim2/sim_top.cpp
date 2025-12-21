@@ -21,7 +21,7 @@
 
 #define SCC68070
 #define SLAVE
-// #define TRACE
+#define TRACE
 // #define SIMULATE_RC5
 
 #define PL_MPEG_IMPLEMENTATION
@@ -582,6 +582,24 @@ class CDi {
         call_func = SS_Opt; // Invalidate
     }
 
+    /// Presses buttons until game is reached
+    void space_ace_pal() {
+        switch (frame_index) {
+        case 154:
+            // Skip Philips Intro
+            press_button_signal = true;
+            break;
+        case 414:
+            // Skip SUPERCLUB company logo
+            press_button_signal = true;
+            break;
+        case 460:
+            // Skip game intro
+            press_button_signal = true;
+            break;
+        }
+    }
+
   public:
     void loadfile(uint16_t index, const char *path) {
 
@@ -870,7 +888,6 @@ class CDi {
             } else {
                 // PAL
             }
-
 #endif
 
             if (press_button_signal) {
@@ -905,6 +922,7 @@ class CDi {
                 mpeg_clk_calc_ticks = 0;
 
                 frame_index++;
+                dut.rootp->emu__DOT__cditop__DOT__frame_index = frame_index;
             }
             pixel_index = 0;
             memset(output_image, 0, sizeof(output_image));
@@ -1272,11 +1290,9 @@ int main(int argc, char **argv) {
         break;
     case 8:
         f_cd_bin = fopen("images/Dragon_s_Lair_US.bin", "rb");
-        prepare_apprentice_usa_toc();
         break;
     case 9:
         f_cd_bin = fopen("images/space_ace_eu.bin", "rb");
-        prepare_apprentice_usa_toc();
         break;
     }
 

@@ -113,6 +113,14 @@ module vmpeg (
     wire fmv_event_buffer_underflow;
     wire [3:0] fmv_pictures_in_fifo;
 
+
+    bit [8:0] latched_display_offset_y;
+    bit [8:0] latched_display_offset_x;
+    bit [8:0] latched_window_offset_y;
+    bit [8:0] latched_window_offset_x;
+    bit [8:0] latched_window_width;
+    bit [8:0] latched_window_height;
+
     mpeg_video video (
         .clk30(clk),
         .clk_mpeg(clk_mpeg),
@@ -129,12 +137,12 @@ module vmpeg (
         .hblank,
         .vblank,
         .vidout,
-        .display_offset_x(video_ctrl_x_display[8:0]),
-        .display_offset_y(video_ctrl_y_display[8:0]),
-        .window_offset_y(video_ctrl_decoder_offset_y[8:0]),
-        .window_offset_x(video_ctrl_decoder_offset_x[8:0]),
-        .window_width(video_ctrl_window_width[8:0]),
-        .window_height(video_ctrl_window_height[8:0]),
+        .display_offset_x(latched_display_offset_y),
+        .display_offset_y(latched_display_offset_x),
+        .window_offset_y(latched_window_offset_y),
+        .window_offset_x(latched_window_offset_x),
+        .window_width(latched_window_width),
+        .window_height(latched_window_height),
         .show_on_next_video_frame(fmv_show_on_next_video_frame),
         .event_sequence_end(fmv_event_sequence_end),
         .event_buffer_underflow(fmv_event_buffer_underflow),
@@ -167,7 +175,6 @@ module vmpeg (
         .tmpref(fmv_tmpref),
         .timecode(fmv_timecode)
     );
-
 
     wire signed [32:0] fma_system_clock_reference_start_time;
     wire fma_system_clock_reference_start_time_valid;
@@ -291,6 +298,11 @@ module vmpeg (
     bit fmv_show_on_next_video_frame;
 
     // FMV ISR @ 00E04062
+    // I once thought that bits inside this register are only set
+    // if the matching enable bit in IER is set too.
+    // But that is wrong since MV_Abort sets IER=0x2000, keeping only VCUP activated.
+    // Within the call to MV_Release, there is a sudden expectation to poll for VSync in ISR
+    // at ROM address 0xe529f8. So, this theory was proven wrong
     interrupt_flags_s fmv_interrupt_status_register;
     // FMV IER @ 00E04060
     // TODO typically 0xf7cf? Masking out NDAT, RFB and VSYNC?
@@ -338,7 +350,20 @@ module vmpeg (
     wire [10:0] fmv_decoder_width;
     wire [ 8:0] fmv_decoder_height;
 
-    bit  [15:0] video_data_input_command_register = 0;
+    bit  [15:0] fmv_video_data_input_command_register = 0;
+
+    // GEN_DEC_CMD @ 00E04088
+    // 0x2202 for stills?
+    // [15:14] Redecode count?
+    // [11] Display new?
+    // [10] Step is accepted?
+    // [5] RUN_RYTHM? in previous release of fmv driver?
+    // [1:0] MODE?
+    // Typical values?
+    // 0x7952  0111 1001 0101 0010  when playing
+    // 0x1942  0001 1001 0100 0010  when playing
+    // 0x42 decoding status?
+    bit  [15:0] fmv_decoder_command;
 
     bit  [15:0] image_height = 0;
     bit  [15:0] image_width = 0;
@@ -395,7 +420,7 @@ module vmpeg (
             15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
             15'h2031: dout = fmv_interrupt_status_register;  // 0E04062
             15'h2032: dout = fmv_timer_compare_register;  // 0E04064
-            15'h2036: dout = video_ctrl_y_offset;  // 0E0406C FMA_VOFF
+            15'h2036: dout = video_ctrl_y_offset;  // 0E0406C FMV_VOFF
             15'h2037: dout = video_ctrl_x_offset;  // 0E0406E FMV_HOFF
             15'h2038: dout = video_ctrl_y_active;  // 0E04070 FMV_VPIX
             15'h2039: dout = video_ctrl_x_active;  // 0E04072 FMV_HPIX
@@ -405,8 +430,8 @@ module vmpeg (
             15'h203d: dout = video_ctrl_window_width;  // 0E0407A FMV_DECWIN W
             15'h203e: dout = video_ctrl_decoder_offset_y;  // 0E0407C FMV_DECOFF Y
             15'h203f: dout = video_ctrl_decoder_offset_x;  // 0E0407E FMV_DECOFF X
-            15'h2044: dout = 0;  // E04088 Decoder Command? GEN_DEC_CMD?
-            15'h2046: dout = video_data_input_command_register;  // 0E0408C GEN_VDI_CMD
+            15'h2044: dout = fmv_decoder_command;  // E04088 Decoder Command? GEN_DEC_CMD?
+            15'h2046: dout = fmv_video_data_input_command_register;  // 0E0408C GEN_VDI_CMD
             15'h204C: dout = fmv_dclk[21:6];  // 0E04098 GEN_SYSCR
             15'h204E: dout = 0;  // e0409c GEN_SYNC_DIFF? Always reads 0 on real machine
             15'h204F: dout = 16'hfe96;  // e0409e GEN_DEC_DELAY? Always changing but negative?
@@ -442,6 +467,7 @@ module vmpeg (
     bit restart_fmv_dsp_enable  /*verilator public_flat_rd*/;
     bit restart_fmv_dsp_enable_q;
     bit pending_fma_stream_change;
+    bit register_update_latch;
 
     always @(posedge clk) begin
         bus_ack <= 0;
@@ -488,16 +514,34 @@ module vmpeg (
             video_ctrl_window_height <= 0;
             video_ctrl_decoder_offset_y <= 0;
             video_ctrl_decoder_offset_x <= 0;
-            video_data_input_command_register <= 0;
+            fmv_video_data_input_command_register <= 0;
             fmv_show_on_next_video_frame <= 0;
             pending_fma_stream_change <= 0;
+            fmv_decoder_command <= 0;
         end else begin
 
             if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
-            if (fmv_decoding_timestamp_updated) video_data_input_command_register[14] <= 1;
+            if (fmv_decoding_timestamp_updated) fmv_video_data_input_command_register[14] <= 1;
 
             if (vsync && !vsync_q) begin
                 fmv_interrupt_status_register.vsync <= 1;
+
+                if (register_update_latch) begin
+                    fmv_interrupt_status_register.vcup <= 1;
+                    // Always present on VMPEG when VCUP occurs, never asked for in the driver
+                    // At 0x00e52ed2 there is a check for a solo occurence of VCUP
+                    // This never happens on real hardware since DCL is always there
+                    // resulting into a dead branch in the driver?
+                    fmv_interrupt_status_register.dcl <= 1;
+                    register_update_latch <= 0;
+
+                    latched_display_offset_y <= video_ctrl_x_display[8:0];
+                    latched_display_offset_x <= video_ctrl_y_display[8:0];
+                    latched_window_offset_y <= video_ctrl_decoder_offset_y[8:0];
+                    latched_window_offset_x <= video_ctrl_decoder_offset_x[8:0];
+                    latched_window_width <= video_ctrl_window_width[8:0];
+                    latched_window_height <= video_ctrl_window_height[8:0];
+                end
             end
 
             if (fmv_event_sequence_header) begin
@@ -731,6 +775,10 @@ module vmpeg (
                                 // Really correct?
                                 image_width <= {5'b0, fmv_decoder_width};
                                 image_height <= {7'b0, fmv_decoder_height};
+
+                                // TODO can't be correct. set 0x42
+                                fmv_decoder_command[6] <= 1;
+                                fmv_decoder_command[1] <= 1;
                             end
 
                             if (din[4]) begin  // 0010 Pause
@@ -784,11 +832,13 @@ module vmpeg (
                               0020 VidOn
                               0100 Hide
                               0200 Show
+                              0420 Show on next picture change
                             */
                             fmv_video_command_register <= din;
 
                             // 0008 RegsUpd
                             if (din[3]) begin
+                                register_update_latch <= 1;
                                 $display("RegsUpd");
                             end
 
@@ -853,10 +903,13 @@ module vmpeg (
                             $display("FMV Write FMV_DECOFF X %x %x ?", address[15:1], din);
                             video_ctrl_decoder_offset_x <= din;
                         end
-
+                        15'h2044: begin
+                            $display("FMV Write GEN_DEC_CMD %x %x ?", address[15:1], din);
+                            fmv_decoder_command <= din;
+                        end
                         15'h2046: begin
                             $display("FMV Write GEN_VDI_CMD %x %x ?", address[15:1], din);
-                            video_data_input_command_register <= din;
+                            fmv_video_data_input_command_register <= din;
                         end
                         15'h204C: begin
                             $display("FMV Write GEN_SYSCR %x %x ?", address[15:1], din);

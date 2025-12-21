@@ -205,4 +205,7 @@ by emulation errors but are also present on the real machine.
   * I thought that this is a decoding error, but it is actually there on real hardware
 * "Lost Eden" hangs for 1-2 seconds when the music restarts
   * This seems to be an oversight by the developers. It occurs on real hardware all well.
-
+* Graphical glitches at the top of the Philips Intro in "Mystic Midway - Rest in Pieces"
+  * Yes, those exist on real hardware as well and are maybe hidden by overscan
+  * A side note, "Dr. Dearth" was probably filmed in front of a blue screen, but the cut out is not very good.
+    Blue pixels at the edges are visible on real hardware as well.
