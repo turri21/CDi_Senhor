@@ -132,6 +132,7 @@ module vmpeg (
         .data_strobe(fmv_data_valid && fmv_packet_body),
         .fifo_full(fmv_fifo_full),
         .ddrif,
+        .vcd_pixel_clock(vcd_pixel_clock),
         .hsync,
         .vsync,
         .hblank,
@@ -244,6 +245,12 @@ module vmpeg (
         bit gop;  // GOP Decoded
         bit seq;  // SEQ Decoded
     } interrupt_flags_s;
+
+    // VMPEG VCD @ 00E01000
+    // Write only register. Reading is impossible!
+    // 0 for base case pixel clock of 15 MHz
+    // 1 for VCD pixel clock of 13.5 MHz
+    bit vcd_pixel_clock;
 
     // FMA CMD @ 00E03000
     // 0001 Stop?
@@ -489,35 +496,36 @@ module vmpeg (
             fma_interrupt_vector_register <= 0;
             fma_status_register <= 0;
             fma_stream_number <= 0;
-            fmv_system_command_register <= 0;
             fmv_dclk <= 0;
+            fmv_decoder_command <= 0;
             fmv_dsp_enable <= 0;
             fmv_frame_rate <= 0;
             fmv_interrupt_enable_register <= 0;
             fmv_interrupt_status_register <= 0;
             fmv_interrupt_vector_register <= 0;
             fmv_playback_active <= 0;
+            fmv_show_on_next_video_frame <= 0;
             fmv_stream_number <= 0;
+            fmv_system_command_register <= 0;
+            fmv_video_data_input_command_register <= 0;
+            image_width <= 0;
             image_height <= 0;
             image_rt <= 0;
-            image_width <= 0;
             mpeg_ram_enabled <= 0;
             mpeg_ram_enabled_cnt <= 0;
+            pending_fma_stream_change <= 0;
             timer_cnt <= 0;
+            vcd_pixel_clock <= 0;
+            video_ctrl_decoder_offset_x <= 0;
+            video_ctrl_decoder_offset_y <= 0;
+            video_ctrl_window_height <= 0;
+            video_ctrl_window_width <= 0;
             video_ctrl_x_active <= 0;
             video_ctrl_x_display <= 0;
             video_ctrl_x_offset <= 0;
             video_ctrl_y_active <= 0;
             video_ctrl_y_display <= 0;
             video_ctrl_y_offset <= 0;
-            video_ctrl_window_width <= 0;
-            video_ctrl_window_height <= 0;
-            video_ctrl_decoder_offset_y <= 0;
-            video_ctrl_decoder_offset_x <= 0;
-            fmv_video_data_input_command_register <= 0;
-            fmv_show_on_next_video_frame <= 0;
-            pending_fma_stream_change <= 0;
-            fmv_decoder_command <= 0;
         end else begin
 
             if (restart_fmv_dsp_enable_q) fmv_dsp_enable <= 1;
@@ -657,7 +665,11 @@ module vmpeg (
                     end
 
                     case (address[15:1])
-
+                        // VMPEG Pixelclock
+                        15'h0800: begin
+                            $display("VMPEG VCD %x %x", address[15:1], din);
+                            vcd_pixel_clock <= din[0];
+                        end
                         // FMA Registers
                         15'h1800: begin
                             $display("FMA CMD %x %x", address[15:1], din);
@@ -749,7 +761,7 @@ module vmpeg (
 	                          1000 Decoder on
 	                          2000 Decoder off
 	                          8000 Start DMA
-                            
+
                             Certain patterns observed on 210/05 with VMPEG:
                               mv_freeze()
                                 0x8000 -> 0x0010 and stay like that. no further events via mv_trigger() callback

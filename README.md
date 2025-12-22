@@ -47,9 +47,9 @@ CD images can be stored as CHD or CUE/BIN format.
 
 Core Utilization:
 
-    Logic utilization (in ALMs)  24,814 / 41,910 ( 59 % )
-    Total registers              27675
-    Total block memory bits      2,301,648 / 5,662,720 ( 41 % )
+    Logic utilization (in ALMs)  24,585 / 41,910 ( 59 % )
+    Total registers              27746
+    Total block memory bits      2,314,448 / 5,662,720 ( 41 % )
     Total DSP Blocks             102 / 112 ( 91 % )
 
 Expected synthesis times with Quartus 17.0.2
@@ -64,10 +64,6 @@ Expected synthesis times with Quartus 17.0.2
     * A gun shot can be heard, so the press is registered.
     * The intro of the game also can't be skipped
     * cdiemu doesn't have this problem
-* Very short MPEG videos are problematic
-    * Last frame might be missing
-    * Single frame MPEG files don't decode at all
-* Fix stop of CD reading from MiSTer Main when reading is deactivated
 * "Uncover featuring Tatjana (Europe)" regressions?
 * Regression of "Historia del Arte Español" (working in DVC rc2)
     * Blank video?

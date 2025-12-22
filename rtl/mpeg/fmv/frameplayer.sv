@@ -11,10 +11,12 @@ module frameplayer (
     ddr_if.to_host ddrif,
 
     output rgb888_s vidout,
-    input           hsync,
-    input           vsync,
-    input           hblank,
-    input           vblank,
+
+    input vcd_pixel_clock,
+    input hsync,
+    input vsync,
+    input hblank,
+    input vblank,
 
     input planar_yuv_s frame,
     input [8:0] frame_width,  // expected to be clocked at clkvideo
@@ -24,7 +26,6 @@ module frameplayer (
     input [8:0] offset_x,  // expected to be clocked at clkvideo
     input [8:0] window_y,  // expected to be clocked at clkvideo
     input [8:0] window_x,  // expected to be clocked at clkvideo
-
 
     input latch_frame_clkvideo,
     input latch_frame_clkddr,
@@ -152,7 +153,7 @@ module frameplayer (
     );
 
 
-    bit [10:0] pixelcnt;
+    bit [8:0] pixelcnt;
     bit [8:0] linecnt;
     bit [8:0] linecnt_clkddr;
     bit hsync_q;
@@ -175,8 +176,18 @@ module frameplayer (
         end
     end
 
+    sample_rate_converter pixel_src (
+        .clk30(clkvideo),
+        .reset(horizontal_offset_wait != 0 || hblank),
+        .vcd_mode(vcd_pixel_clock),
+        .newpixel(luma_fifo_strobe)
+    );
+
+    bit luma_fifo_strobe_q;
+
     always_ff @(posedge clkvideo) begin
         hsync_q <= hsync;
+        luma_fifo_strobe_q <= luma_fifo_strobe;
 
         if (reset || vblank) begin
             linecnt <= 0;
@@ -202,29 +213,17 @@ module frameplayer (
 
         if (hblank || reset) begin
             pixelcnt <= 0;
-            luma_fifo_strobe <= 0;
 
             luma_read_addr <= {7'b0, initial_luma_read_addr};
             chroma_read_addr <= {6'b000000, initial_chroma_read_addr};
             horizontal_offset_wait <= {latched_offset_x, 2'b00};
-        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo << 2 && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && fetch_and_show_frame_clkvideo) begin
+        end else if (!vblank && !hblank && pixelcnt < frame_width_clkvideo && linecnt < frame_height_clkvideo && vertical_offset_wait==0 && fetch_and_show_frame_clkvideo) begin
 
             if (horizontal_offset_wait != 0) horizontal_offset_wait <= horizontal_offset_wait - 1;
-            else begin
+            else if (luma_fifo_strobe_q) begin
                 pixelcnt <= pixelcnt + 1;
-                luma_fifo_strobe <= pixelcnt[1:0] == 3 - 2;
             end
-        end else begin
-            luma_fifo_strobe <= 0;
         end
-
-        /*
-        if (fifo_strobe) pixeldebugcnt <= pixeldebugcnt + 1;
-        if (hblank && pixeldebugcnt > 0) begin
-            $display("Pixels %d", pixeldebugcnt);
-            pixeldebugcnt <= 0;
-        end
-        */
     end
 
     bit [6:0] data_burst_cnt;
@@ -359,7 +358,7 @@ module frameplayer (
         vidout.g = clamp8(g);
         vidout.b = clamp8(b);
 
-        if ((pixelcnt >= (frame_width_clkvideo << 2)) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !fetch_and_show_frame_clkvideo) begin
+        if ((pixelcnt >= frame_width_clkvideo) || (linecnt >= frame_height_clkvideo) || (vertical_offset_wait!=0) || (horizontal_offset_wait!=0) || !fetch_and_show_frame_clkvideo) begin
             vidout.r = 0;
             vidout.g = 0;
             vidout.b = 0;

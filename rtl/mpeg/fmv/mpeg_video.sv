@@ -16,10 +16,12 @@ module mpeg_video (
     ddr_if.to_host ddrif,
 
     output rgb888_s vidout,
-    input           hsync,
-    input           vsync,
-    input           hblank,
-    input           vblank,
+
+    input vcd_pixel_clock,
+    input hsync,
+    input vsync,
+    input hblank,
+    input vblank,
 
     input [8:0] display_offset_y,
     input [8:0] display_offset_x,
@@ -36,7 +38,6 @@ module mpeg_video (
     output [3:0] pictures_in_fifo,
     output bit [10:0] decoder_width,
     output bit [8:0] decoder_height
-
 );
 
     ddr_if worker_2_ddr ();
@@ -458,7 +459,6 @@ module mpeg_video (
         if (expose_frame_y_adr_clk_mpeg) frame_y_adr <= dmem_cmd_payload_data_1;
     end
 
-
     always_comb begin
         imem_cmd_ready_1 = 1;
         imem_rsp_payload_word_1 = memory_out_i1;
@@ -729,6 +729,7 @@ module mpeg_video (
         .reset,
         .ddrif(player_ddr),
         .vidout,
+        .vcd_pixel_clock,
         .hsync,
         .vsync,
         .hblank,
