@@ -49,13 +49,19 @@ main:
 	; #$09235200 Les Guignols de l’info - "Böööh" (Stream 6)
 	; #$00333500 Lost Eden - When entering gameplay (Stream 0)
 	; #$05402000 Star Trek VI - Terre Inconnue (France) (Disc 1) - Good match for SEQHDR of High CPU Load scene
+	; #$00437300 Addams Family (Disc 2)
 
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register
 	move.l #$ffffffff,$303C08 ; Channel Register
 	move.w #$0000,$303C0C ; Audio Channel Register
-	move.l #$05412700,$303C02 ; Timer Register
+	move.l #$00437300,$303C02 ; Timer Register
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
+
+	move.l #0,$0E0407C ;FMV_DECOFF
+	move.l #$01800118,$0E04078 ;FMV_DECWIN 384 x 280
+	move.l #0,$0E04074 ;FMV_DECOFF
+	move.w #$8,$0E040C2; Request Update
 
 	; Usually one would use the DTS and SCR to start playback
 	; But I feel lazy and use the number of pics instead
@@ -63,6 +69,8 @@ waitforpics:
 	jsr WaitForSectorAndUse
 	cmp.w #4,$00E040A4 ; Compare 5 against pictures in FIFO
 	bmi waitforpics
+
+	move.w #$0008,$E040C0 ; FMV SYSCMD - Play
 
 	move.b #'B',$80002019
 

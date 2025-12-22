@@ -408,7 +408,8 @@ module vmpeg (
             15'h2044: dout = 0;  // E04088 Decoder Command? GEN_DEC_CMD?
             15'h2046: dout = video_data_input_command_register;  // 0E0408C GEN_VDI_CMD
             15'h204C: dout = fmv_dclk[21:6];  // 0E04098 GEN_SYSCR
-            15'h204E: dout = 0;  // e0409c GEN_SYNC_DIFF?
+            15'h204E: dout = 0;  // e0409c GEN_SYNC_DIFF? Always reads 0 on real machine
+            15'h204F: dout = 16'hfe96;  // e0409e GEN_DEC_DELAY? Always changing but negative?
             15'h2050: dout = {1'b0, fmv_decoding_timestamp[21:7]};  // 00E040A0 Decoding Timestamp
             15'h2052: dout = {12'b0, fmv_pictures_in_fifo};  // 00E040A4 ?? Pictures in fifo?
             15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS. Only read.
@@ -570,10 +571,6 @@ module vmpeg (
 
                 if (fma_system_clock_reference_start_time_valid && fma_dclk == fma_system_clock_reference_start_time[32:1] && !fma_dsp_enable) begin
                     fma_dsp_enable <= 1;
-                end
-
-                if (fmv_system_clock_reference_start_time_valid && fma_dclk == fmv_system_clock_reference_start_time[32:1] && !fmv_playback_active) begin
-                    // fmv_playback_active <= 1;
                 end
             end
 

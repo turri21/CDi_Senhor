@@ -19,11 +19,12 @@ struct frame_display_fifo
 	uint32_t width;					   // @0x1000300C
 	uint32_t height;				   // @0x10003010
 	uint32_t frameperiod;			   // @0x10003014, ticks of 30 MHz
-	uint32_t fractional_pixel_width;   // @0x10003018
-	uint32_t event_sequence_end;	   // @0x1000301C
-	uint32_t first_intra_frame_of_gop; // @0x10003020
-	uint32_t event_buffer_underflow;   // @0x10003024
-	uint32_t pictures_in_fifo;		   // @0x10003028
+	uint32_t event_at_least_one_frame; // @0x10003018 Write only
+	uint32_t event_sequence_end;	   // @0x1000301C Write only
+	uint32_t first_intra_frame_of_gop; // @0x10003020 Write only
+	uint32_t event_buffer_underflow;   // @0x10003024 Write only
+	uint32_t pictures_in_fifo;		   // @0x10003028 Read only
+	uint32_t playback_active;		   // @0x1000302c Read only
 };
 
 struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;
@@ -32,7 +33,6 @@ struct frame_display_fifo *const frame_display_fifo = (struct frame_display_fifo
 #define OUTPORT 0x10000000
 #define OUTPORT_END 0x1000000c
 #define OUTPORT_FRAME 0x10000010
-#define OUTPORT_HANDLE_SHARED 0x10000014
 
 #define OUT_DEBUG *(volatile uint32_t *)0x10000030
 

@@ -1288,29 +1288,40 @@ size_t plm_buffer_tell_file_callback(plm_buffer_t *self, void *user) {
 
 #endif // PLM_NO_STDIO
 
-int plm_dma_buffer_has_ended(plm_dma_buffer_t *self) {
-	return self->has_ended;
-}
 
 int plm_buffer_has_ended(plm_buffer_t *self) {
 	return self->has_ended;
 }
 
-static inline void plm_dma_buffer_wait_for_data(plm_dma_buffer_t *self, size_t count)
-{
+static inline int plm_dma_buffer_has(plm_dma_buffer_t *self, size_t count) {
 	__asm volatile("" : : : "memory");
-	uint32_t timeout = 800000;
 	while (((fifo_ctrl->write_byte_index << 3) - fifo_ctrl->read_bit_index) < count)
 	{
-		if (timeout-- == 0)
-			frame_display_fifo->event_buffer_underflow = 1;
 		__asm volatile("" : : : "memory");
+		// If the driver has not yet instructed to play, we will wait patiently
+		// But if the driver has told us to play, we accept an abort of the stream
+		// as long as no pictures are left in the output FIFO
+		if (frame_display_fifo->playback_active && frame_display_fifo->pictures_in_fifo == 0)
+		{
+			return FALSE;
+		}
 	}
+	return TRUE;
 }
 
-static inline int plm_dma_buffer_has(plm_dma_buffer_t *self, size_t count) {
-	plm_dma_buffer_wait_for_data(self,count);
-	return TRUE;
+static inline int plm_dma_buffer_has_noblock(plm_dma_buffer_t *self, size_t count)
+{
+	__asm volatile("" : : : "memory");
+	if (((fifo_ctrl->write_byte_index << 3) - fifo_ctrl->read_bit_index) >= count)
+	{
+		return TRUE;
+	}
+	return FALSE;
+}
+
+int plm_dma_buffer_has_ended(plm_dma_buffer_t *self)
+{
+	return !plm_dma_buffer_has_noblock(self, 32);
 }
 
 int plm_buffer_has(plm_buffer_t *self, size_t count) {
@@ -1333,7 +1344,10 @@ int plm_buffer_has(plm_buffer_t *self, size_t count) {
 }
 
 int plm_dma_buffer_read(plm_dma_buffer_t *self, int count) {
-    plm_dma_buffer_wait_for_data(self, count);
+	if (!plm_dma_buffer_has(self, count)) {
+		return 0;
+	}
+
 #if 0
 	__asm volatile("" : : : "memory");
 
@@ -1390,8 +1404,9 @@ void plm_buffer_align(plm_buffer_t *self) {
 }
 
 void plm_dma_buffer_skip(plm_dma_buffer_t *self, size_t count) {
-	plm_dma_buffer_wait_for_data(self,count);
-	fifo_ctrl->read_bit_index += count;
+	if (plm_dma_buffer_has(self, count)) {
+		fifo_ctrl->read_bit_index += count;
+	}
 }
 
 static const int PLM_START_SEQ_END = 0xB7;
@@ -1622,7 +1637,7 @@ static inline int plm_dma_read_macroblock_address_increment(plm_dma_buffer_t *bu
 {
 	int result;
 	// Use soft huffman decoding in case we have less than 13 bits
-	if (!plm_dma_buffer_has(buffer, 13))
+	if (!plm_dma_buffer_has_noblock(buffer, 13))
 	{
 		result = plm_dma_buffer_read_vlc(buffer, PLM_VIDEO_MACROBLOCK_ADDRESS_INCREMENT);
 	}
@@ -1932,7 +1947,8 @@ static inline uint16_t plm_dma_read_dct_coeff(plm_dma_buffer_t *buffer)
 	uint16_t result;
 	
 	// Use soft huffman decoding in case we have less than 16 bits
-	if (!plm_dma_buffer_has(buffer, 16))
+
+	if (!plm_dma_buffer_has_noblock(buffer, 16))
 	{
 		result = plm_dma_buffer_read_vlc_uint(buffer, PLM_VIDEO_DCT_COEFF);
 	}
@@ -2362,6 +2378,11 @@ void plm_video_decode_picture(plm_video_t *self) {
 		self->start_code = plm_dma_buffer_next_start_code(self->buffer);
 	}
 
+	// If we have reached this point, we have at least one frame that will be
+	// returned, even if the decoding process was aborted, trying to get another one
+	frame_display_fifo->event_at_least_one_frame=1;
+	__asm volatile("": : :"memory");
+	
 	// If this is a reference picture rotate the prediction pointers
 	if (
 		self->picture_type == PLM_VIDEO_PICTURE_TYPE_INTRA ||
@@ -2659,8 +2680,7 @@ void plm_video_process_macroblock(
 		return; // corrupt video
 	}
 
-	struct image_synthesis_descriptor *desc = get_next_synthesis_desc();
-	
+	struct image_synthesis_descriptor *desc = get_next_free_synthesis_desc();
 	desc->cpm.interpolate=interpolate;
 	desc->cpm.block_size=block_size;
 	desc->cpm.odd_h=odd_h;
@@ -2670,10 +2690,7 @@ void plm_video_process_macroblock(
 	desc->cpm.di=di;
 	desc->cpm.d=d;
 	desc->cpm.dw=dw;
-	__asm volatile("": : :"memory");
-	desc->ready=2;
-	*((int*)OUTPORT_HANDLE_SHARED) = 1;
-	__asm volatile("": : :"memory");
+	commit_synthesis_desc(desc, 2);
 }
 
 #if 1
@@ -2711,7 +2728,7 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	uint8_t *quant_matrix;
 	OUT_DEBUG = 8;
 
-	struct image_synthesis_descriptor *desc = get_next_synthesis_desc();
+	struct image_synthesis_descriptor *desc = get_next_free_synthesis_desc();
 	int* block_data=desc->cwp.block_data;
 	fast_block_zero(block_data);
 
@@ -2850,11 +2867,7 @@ void plm_video_decode_block(plm_video_t *self, int block) {
 	desc->cwp.di=di;
 	desc->cwp.d=d;
 	desc->cwp.dw=dw;
-	__asm volatile("": : :"memory");
-	desc->ready=1;
-	*((int*)OUTPORT_HANDLE_SHARED) = 1;
-	__asm volatile("": : :"memory");
-
+	commit_synthesis_desc(desc, 1);
 	OUT_DEBUG = 12;
 }
 

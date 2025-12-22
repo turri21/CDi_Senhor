@@ -58,11 +58,8 @@ void stop_verilator()
 
 void sync_to_worker()
 {
-	struct image_synthesis_descriptor *desc = get_next_synthesis_desc();
-	__asm volatile("" : : : "memory");
-	desc->ready = 3;
-	*((int *)OUTPORT_HANDLE_SHARED) = 1;
-	__asm volatile("" : : : "memory");
+	struct image_synthesis_descriptor *desc = get_next_free_synthesis_desc();
+	commit_synthesis_desc(desc, 3);
 	while (desc->ready == 3)
 		__asm volatile("" : : : "memory");
 }
@@ -162,6 +159,8 @@ void main(void)
 	if (!mpeg)
 		*((volatile uint8_t *)OUTPORT_END) = 3;
 
+	int underflow_occured = 0;
+
 	for (;;)
 	{
 		plm_frame_t *frame = plm_video_decode(mpeg);
@@ -170,24 +169,25 @@ void main(void)
 		{
 			OUT_DEBUG = 27;
 
-			worker_cnt=0;
+			worker_cnt = 0;
 			sync_to_worker();
-			worker_cnt=1;
+			worker_cnt = 1;
 			sync_to_worker();
-			worker_cnt=2;
+			worker_cnt = 2;
 			sync_to_worker();
 
 			OUT_DEBUG = 28;
 
-			// Give some feedback to the user that we are running
-			*((volatile uint32_t *)OUTPORT) = frame->time;
-
 			push_frame(frame);
+			underflow_occured = 0;
 		}
 		else
 		{
-			// End simulation since the MPEG stream has ended
-			//*((volatile uint8_t *)OUTPORT_END) = 0;
+			if (!underflow_occured)
+			{
+				frame_display_fifo->event_buffer_underflow = 1;
+				underflow_occured = 1;
+			}
 		}
 	}
 }

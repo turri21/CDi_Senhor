@@ -41,32 +41,22 @@ struct image_synthesis_descriptor *const image_synthesis_buffer[3] = {
     (struct image_synthesis_descriptor *)0x41000000,
     (struct image_synthesis_descriptor *)0x42000000,
 };
-int image_synthesis_buffer_index[3] = {0,0,0};
-static uint8_t cmdcnt[3] = {0,0,0};
+int image_synthesis_buffer_index[3] = {0, 0, 0};
+static uint8_t cmdcnt[3] = {0, 0, 0};
 static int worker_cnt = 0;
 
 #define CMD_SIZE 288
 #define SHARED_BUFFER_ENTRIES (8192 / CMD_SIZE)
 
-struct image_synthesis_descriptor *get_next_synthesis_desc()
+struct image_synthesis_descriptor *get_next_free_synthesis_desc()
 {
     struct image_synthesis_descriptor *retval;
-
-    retval = &image_synthesis_buffer[worker_cnt][image_synthesis_buffer_index[worker_cnt]++];
-
-    if (image_synthesis_buffer_index[worker_cnt] == SHARED_BUFFER_ENTRIES)
-        image_synthesis_buffer_index[worker_cnt] = 0;
-
-    cmdcnt[worker_cnt]++;
-    retval->cmdcnt = cmdcnt[worker_cnt];
-
+    retval = &image_synthesis_buffer[worker_cnt][image_synthesis_buffer_index[worker_cnt]];
     __asm volatile("" : : : "memory");
-
 #if 1
     while (retval->ready != 0)
         __asm volatile("" : : : "memory");
-#endif
-
+#else
     if (retval->ready != 0)
     {
         // something went horribly wrong
@@ -74,8 +64,21 @@ struct image_synthesis_descriptor *get_next_synthesis_desc()
         for (;;)
             ;
     }
-
+#endif
     return retval;
+}
+
+void commit_synthesis_desc(struct image_synthesis_descriptor *desc, int ready_code)
+{
+    image_synthesis_buffer_index[worker_cnt]++;
+    if (image_synthesis_buffer_index[worker_cnt] == SHARED_BUFFER_ENTRIES)
+        image_synthesis_buffer_index[worker_cnt] = 0;
+
+    cmdcnt[worker_cnt]++;
+    desc->cmdcnt = cmdcnt[worker_cnt];
+    __asm volatile("": : :"memory");
+	desc->ready=ready_code;
+    __asm volatile("" : : : "memory");
 }
 
 /// @brief Invalidate all possible commands

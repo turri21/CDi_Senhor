@@ -85,7 +85,6 @@ void main(void)
 
     __asm volatile("" : : : "memory");
     desc->ready = 0; // give the buffer back
-    *((int *)OUTPORT_HANDLE_SHARED) = 1;
     __asm volatile("" : : : "memory");
   }
 }

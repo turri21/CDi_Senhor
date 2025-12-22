@@ -182,10 +182,6 @@ module macroblock_worker (
         end
 
     end
-    bit signed [15:0] shared_buffer_level = 0;
-
-    wire shared_buffer_level_inc = dmem_cmd_payload_address_1 == 32'h10000014 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1;
-    wire shared_buffer_level_dec = dmem_cmd_payload_address_2 == 32'h10000014 && dmem_cmd_payload_write_2 && dmem_cmd_valid_2;
 
     bit [31:0] dmem_cmd_payload_address_2_q;
     bit dmem_cmd_valid_2_q;
@@ -228,10 +224,6 @@ module macroblock_worker (
     end
 
     always_ff @(posedge clk_mpeg) begin
-        shared_buffer_level <= shared_buffer_level + (shared_buffer_level_inc ? 1:0) - (shared_buffer_level_dec ? 1 : 0);
-    end
-
-    always_ff @(posedge clk_mpeg) begin
         integer i;
 
         dmem_rsp_valid_2 <= 0;
@@ -266,8 +258,8 @@ module macroblock_worker (
 
 
         if (dmem_cmd_payload_address_2 == 32'h1000000c && dmem_cmd_payload_write_2 && dmem_cmd_valid_2 && dmem_cmd_ready_2) begin
-            $display("Core 2 stopped at %x with code %x", imem_cmd_payload_address_2,
-                     dmem_cmd_payload_data_2);
+            $display("Worker Core %d stopped at %x with code %x", unit_index,
+                     imem_cmd_payload_address_2, dmem_cmd_payload_data_2);
             $finish();
         end
 

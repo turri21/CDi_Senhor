@@ -409,6 +409,8 @@ module mpeg_video (
     wire expose_frame_struct_adr_clk_mpeg  = (dmem_cmd_payload_address_1 == 32'h10000010 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
     wire expose_frame_y_adr_clk_mpeg  = (dmem_cmd_payload_address_1 == 32'h10000018 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
     wire event_buffer_underflow_clk_mpeg  = (dmem_cmd_payload_address_1 == 32'h10003024 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1) ;
+    wire playback_active_clkddr;
+    bit event_at_least_one_frame_clk_mpeg;
 
     bit [31:0] soft_state1  /*verilator public_flat_rd*/ = 0;
     wire expose_frame_struct_adr  /*verilator public_flat_rd*/;
@@ -440,6 +442,13 @@ module mpeg_video (
         .clk_b(clk30),
         .flag_in_clk_a(event_buffer_underflow_clk_mpeg),
         .flag_out_clk_b(event_buffer_underflow)
+    );
+
+    signal_cross_domain cross_playback_active (
+        .clk_a(clk30),
+        .clk_b(clk_mpeg),
+        .signal_in_clk_a(playback_active),
+        .signal_out_clk_b(playback_active_clkddr)
     );
 
     always_ff @(posedge clk_mpeg) begin
@@ -478,7 +487,8 @@ module mpeg_video (
 
                         if (dmem_cmd_payload_address_1_q == 32'h10003028)
                             dmem_rsp_payload_data_1 = {28'b0, pictures_in_fifo_clk_mpeg};
-
+                        if (dmem_cmd_payload_address_1_q == 32'h1000302c)
+                            dmem_rsp_payload_data_1 = {31'b0, playback_active_clkddr};
                     end
                 end
                 4'd0: begin
@@ -521,9 +531,8 @@ module mpeg_video (
         if (dmem_cmd_payload_address_1 == 32'h10000030 && dmem_cmd_payload_write_1 && dmem_cmd_valid_1 && dmem_cmd_ready_1)
             soft_state1 <= dmem_cmd_payload_data_1;
 
-        if (expose_frame_struct_adr_clk_mpeg) begin
-            frames_decoded <= frames_decoded + 1;
-        end
+        if (just_decoded_commit || reset_dsp_enabled_clk_mpeg)
+            event_at_least_one_frame_clk_mpeg <= 0;
 
         if (dmem_cmd_payload_address_1 == 32'h10000000 && dmem_cmd_valid_1 && dmem_cmd_payload_write_1 && dmem_cmd_ready_1)
             $display("Debug out %x", dmem_cmd_payload_data_1);
@@ -558,6 +567,9 @@ module mpeg_video (
                         if (dmem_cmd_payload_address_1[15:0] == 16'h3014) begin
                             frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
                         end
+
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
+                            event_at_least_one_frame_clk_mpeg <= 1;
 
                         if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
                             event_sequence_end_clk_mpeg <= 1;
@@ -678,8 +690,8 @@ module mpeg_video (
     b2g_converter #(
         .WIDTH(4)
     ) pictures_in_fifo_b2g (
-        .binary(pictures_in_fifo_clk_mpeg),
-        .gray  (pictures_in_fifo_clk_mpeg_gray_d)
+        .binary((event_at_least_one_frame_clk_mpeg && pictures_in_fifo_clk_mpeg==0) ? 1 : pictures_in_fifo_clk_mpeg),
+        .gray(pictures_in_fifo_clk_mpeg_gray_d)
     );
     always_ff @(posedge clk_mpeg)
         pictures_in_fifo_clk_mpeg_gray_q <= pictures_in_fifo_clk_mpeg_gray_d;
