@@ -18,13 +18,16 @@ struct frame_display_fifo
 	uint32_t v_adr;					   // @0x10003008
 	uint32_t width;					   // @0x1000300C
 	uint32_t height;				   // @0x10003010
-	uint32_t frameperiod;			   // @0x10003014, ticks of 30 MHz
+	uint32_t frameperiod_30mhz;		   // @0x10003014, ticks of 30 MHz
 	uint32_t event_at_least_one_frame; // @0x10003018 Write only
 	uint32_t event_sequence_end;	   // @0x1000301C Write only
 	uint32_t first_intra_frame_of_gop; // @0x10003020 Write only
 	uint32_t event_buffer_underflow;   // @0x10003024 Write only
 	uint32_t pictures_in_fifo;		   // @0x10003028 Read only
 	uint32_t playback_active;		   // @0x1000302c Read only
+	uint32_t frameperiod_rawhdr;	   // @0x10003030 Write only
+	uint32_t frameperiod_90khz;		   // @0x10003034 Write only
+	uint32_t temporal_ref;			   // @0x10003038 Write only
 };
 
 struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;

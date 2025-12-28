@@ -341,6 +341,7 @@ module cditop (
         .clk(clk30),
         .clk_mpeg,
         .reset,
+        .tvmode_pal,
         .address(addr),
         .din(vmpeg_dma_ack ? mcd212_dout : cpu_data_out),
         .dout(vmpeg_dout),

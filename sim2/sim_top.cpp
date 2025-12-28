@@ -1035,9 +1035,9 @@ class CDi {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv_m1v);
             }
 #ifdef TRACE
-            // if (!do_trace)
-            //     fprintf(stderr, "Trace on!\n");
-            // do_trace = true;
+            if (!do_trace)
+                fprintf(stderr, "Trace on!\n");
+            do_trace = true;
 #endif
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {

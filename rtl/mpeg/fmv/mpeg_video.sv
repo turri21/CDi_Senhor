@@ -36,8 +36,12 @@ module mpeg_video (
     output event_last_picture_starts_display,
     output bit event_first_intra_frame_starts_display,
     output [3:0] pictures_in_fifo,
+
     output bit [10:0] decoder_width,
-    output bit [8:0] decoder_height
+    output bit [ 8:0] decoder_height,
+    output bit [ 7:0] decoder_tempref,
+    output bit [15:0] decoder_frameperiod_90khz,
+    output bit [ 7:0] decoder_frameperiod_rawhdr
 );
 
     ddr_if worker_2_ddr ();
@@ -505,7 +509,9 @@ module mpeg_video (
     planar_yuv_s just_decoded;
     bit [10:0] decoder_width_clk_mpeg = 100;
     bit [8:0] decoder_height_clk_mpeg = 100;
-
+    bit [7:0] decoder_tempref_clk_mpeg;
+    bit [15:0] decoder_frameperiod_90khz_clk_mpeg;
+    bit [7:0] decoder_frameperiod_rawhdr_clk_mpeg;
 
     bit [31:0] dmem_cmd_payload_address_1_q;
     bit dmem_cmd_valid_1_q;
@@ -558,24 +564,26 @@ module mpeg_video (
                             decoder_width_clk_mpeg <= dmem_cmd_payload_data_1[10:0];
                         if (dmem_cmd_payload_address_1[15:0] == 16'h3010)
                             decoder_height_clk_mpeg <= dmem_cmd_payload_data_1[8:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3014)
+                            frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
+                            event_at_least_one_frame_clk_mpeg <= 1;
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
+                            event_sequence_end_clk_mpeg <= 1;
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3020)
+                            just_decoded.first_intra_frame_of_gop <= dmem_cmd_payload_data_1[0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3030)
+                            decoder_frameperiod_rawhdr_clk_mpeg <= dmem_cmd_payload_data_1[7:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3034)
+                            decoder_frameperiod_90khz_clk_mpeg <= dmem_cmd_payload_data_1[15:0];
+                        if (dmem_cmd_payload_address_1[15:0] == 16'h3038)
+                            decoder_tempref_clk_mpeg <= dmem_cmd_payload_data_1[7:0];
 
                         if (dmem_cmd_payload_address_1[15:0] == 16'h2010) begin
                             has_sequence_header <= dmem_cmd_payload_data_1[0];
                             $display("has_sequence_header %d", dmem_cmd_payload_data_1[0]);
                         end
 
-                        if (dmem_cmd_payload_address_1[15:0] == 16'h3014) begin
-                            frame_period_clk_mpeg <= dmem_cmd_payload_data_1[23:0];
-                        end
-
-                        if (dmem_cmd_payload_address_1[15:0] == 16'h3018)
-                            event_at_least_one_frame_clk_mpeg <= 1;
-
-                        if (dmem_cmd_payload_address_1[15:0] == 16'h301c)
-                            event_sequence_end_clk_mpeg <= 1;
-
-                        if (dmem_cmd_payload_address_1[15:0] == 16'h3020)
-                            just_decoded.first_intra_frame_of_gop <= dmem_cmd_payload_data_1[0];
                     end
                 end
                 4'd0: begin
@@ -635,15 +643,21 @@ module mpeg_video (
         vblank_q2 <= vblank_q1;
 
         if (just_decoded_commit_clk30) begin
-            frame_period   <= frame_period_clk_mpeg;
-            decoder_width  <= decoder_width_clk_mpeg;
+            frame_period <= frame_period_clk_mpeg;
+            decoder_width <= decoder_width_clk_mpeg;
             decoder_height <= decoder_height_clk_mpeg;
+            decoder_tempref <= decoder_tempref_clk_mpeg;
+            decoder_frameperiod_90khz <= decoder_frameperiod_90khz_clk_mpeg;
+            decoder_frameperiod_rawhdr <= decoder_frameperiod_rawhdr_clk_mpeg;
         end
 
         if (!dsp_enable) begin
-            decoder_width  <= 0;
+            decoder_width <= 0;
             decoder_height <= 0;
-            frame_period   <= 0;
+            frame_period <= 0;
+            decoder_tempref <= 0;
+            decoder_frameperiod_90khz <= 0;
+            decoder_frameperiod_rawhdr <= 0;
         end
 
         for_display_valid <= for_display_valid_clk_mpeg;

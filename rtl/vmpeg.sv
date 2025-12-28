@@ -4,6 +4,7 @@ module vmpeg (
     input clk,
     input clk_mpeg,
     input reset,
+    input tvmode_pal,
     // CPU interface
     input [23:1] address,
     input [15:0] din,
@@ -99,7 +100,6 @@ module vmpeg (
     wire fmv_event_sequence_header = fmv_event_first_intra_frame_starts_display;
     wire fmv_event_group_of_pictures = fmv_event_first_intra_frame_starts_display;
     wire fmv_event_picture = fmv_event_picture_starts_display;
-    wire [15:0] fmv_tmpref;
     // TIMECD @ 00E04058
     // example 0x07800280 -> 10:00:30.0
     // mv_info() would have MD_TimeCd=0x0a001e00
@@ -152,7 +152,10 @@ module vmpeg (
         .event_first_intra_frame_starts_display(fmv_event_first_intra_frame_starts_display),
         .pictures_in_fifo(fmv_pictures_in_fifo),
         .decoder_width(fmv_decoder_width),
-        .decoder_height(fmv_decoder_height)
+        .decoder_height(fmv_decoder_height),
+        .decoder_tempref(fmv_decoder_tempref),
+        .decoder_frameperiod_90khz(fmv_decoder_frameperiod_90khz),
+        .decoder_frameperiod_rawhdr(fmv_decoder_frameperiod_rawhdr)
     );
 
     always_ff @(posedge clk) begin
@@ -173,7 +176,7 @@ module vmpeg (
         .event_sequence_header(),
         .event_group_of_pictures(),
         .event_picture(),
-        .tmpref(fmv_tmpref),
+        .tmpref(),
         .timecode(fmv_timecode)
     );
 
@@ -356,7 +359,14 @@ module vmpeg (
 
     wire [10:0] fmv_decoder_width;
     wire [ 8:0] fmv_decoder_height;
+    wire [ 7:0] fmv_decoder_tempref;
+    wire [15:0] fmv_decoder_frameperiod_90khz;
+    wire [ 7:0] fmv_decoder_frameperiod_rawhdr;
 
+    localparam kDisplayRate_PAL = 16'h0708;
+    localparam kDisplayRate_NTSC = 16'h05DC;  // TODO confirmation required
+
+    wire [15:0] fmv_display_rate = tvmode_pal ? kDisplayRate_PAL : kDisplayRate_NTSC;
     bit  [15:0] fmv_video_data_input_command_register = 0;
 
     // GEN_DEC_CMD @ 00E04088
@@ -419,10 +429,10 @@ module vmpeg (
             15'h2005: dout = fmv_timecode[15:0];  // 00E0400C Temporal time code Low. During scan
             15'h2029: dout = {5'b0, fmv_decoder_width};  // e04052 Picture Width ?? Only read
             15'h202a: dout = {7'b0, fmv_decoder_height};  // e04054 Picture Height ?? Only read
-            15'h202b: dout = image_rt;  // e04056 Pic Rt ??
+            15'h202b: dout = {8'b0, fmv_decoder_frameperiod_rawhdr};  // e04056 Pic Rt ??
             15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High ??
             15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low ??
-            15'h202e: dout = fmv_tmpref;  // 00E0405C TMP REF?? SYS_VSR?
+            15'h202e: dout = {6'b0, fmv_decoder_tempref, 2'b0};  // 00E0405C TMP REF?? SYS_VSR?
             15'h202f: dout = 16'h2000;  // 00E0405E ?? STS ? always 2000 on cdiemu
             15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
             15'h2031: dout = fmv_interrupt_status_register;  // 0E04062
@@ -444,8 +454,8 @@ module vmpeg (
             15'h204F: dout = 16'hfe96;  // e0409e GEN_DEC_DELAY? Always changing but negative?
             15'h2050: dout = {1'b0, fmv_decoding_timestamp[21:7]};  // 00E040A0 Decoding Timestamp
             15'h2052: dout = {12'b0, fmv_pictures_in_fifo};  // 00E040A4 ?? Pictures in fifo?
-            15'h2054: dout = 16'h0e10;  // E040A8 Picture Rate ? e10 is 25 FPS. Only read.
-            15'h2055: dout = 16'h0708;  // e040aa ?? Display Rate ? Never written. Only read.
+            15'h2054: dout = fmv_decoder_frameperiod_90khz;  // E040A8 Picture Rate Only read.
+            15'h2055: dout = fmv_display_rate;  // e040aa ?? Display Rate ? Only read.
             15'h2056: dout = fmv_frame_rate;  // e040ac ?? GEN_FRAME_RATE Read and written.
             15'h2060: dout = fmv_system_command_register;  // e040c0
             15'h2061: dout = fmv_video_command_register;  // e040c2
@@ -787,7 +797,7 @@ module vmpeg (
                                 // Really correct?
                                 image_width <= {5'b0, fmv_decoder_width};
                                 image_height <= {7'b0, fmv_decoder_height};
-                                image_rt <= 16'h00c2; // TODO must be fixed with the correct value
+                                image_rt <= {8'b0, fmv_decoder_frameperiod_rawhdr};
 
                                 // TODO can't be correct. set 0x42
                                 fmv_decoder_command[6] <= 1;

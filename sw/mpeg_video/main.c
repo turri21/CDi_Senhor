@@ -117,21 +117,28 @@ static void push_frame(plm_frame_t *frame)
 
 	frame_display_fifo->width = frame->width;
 
+	int period30mhz = PLM_VIDEO_PICTURE_RATE_30MHZ[seq_hdr_conf.frameperiod];
+	int period90khz = PLM_VIDEO_PICTURE_RATE_90KHZ[seq_hdr_conf.frameperiod];
+
+	frame_display_fifo->frameperiod_90khz = period90khz;
+	frame_display_fifo->frameperiod_rawhdr = seq_hdr_conf.frameperiod;
+	frame_display_fifo->temporal_ref = frame->temporal_ref;
+	
 	if (frame_display_fifo->pictures_in_fifo < 5)
 	{
 		// It seems our FIFO is loosing pictures. Maybe the frame rate is slightly off?
 		// Increase frame period by 0.1Hz when running at 25 FPS
-		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod + 4780;
+		frame_display_fifo->frameperiod_30mhz = period30mhz + 4780;
 	}
 	else if (frame_display_fifo->pictures_in_fifo > 6)
 	{
 		// It seems our FIFO is slightly overflowing. Maybe the frame rate is slightly off?
 		// Decrease frame period by 0.1Hz when running at 25 FPS
-		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod - 4780;
+		frame_display_fifo->frameperiod_30mhz = period30mhz - 4780;
 	}
 	else
 	{
-		frame_display_fifo->frameperiod = seq_hdr_conf.frameperiod;
+		frame_display_fifo->frameperiod_30mhz = period30mhz;
 	}
 
 	// The order is crucial since a write to height will commit the frame!

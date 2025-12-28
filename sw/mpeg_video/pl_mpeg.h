@@ -154,7 +154,7 @@ extern "C" {
 // Public Data Types
 
 extern struct seq_hdr_conf {
-	int frameperiod;
+	int frameperiod; // raw value from header
 	int pixel_aspect_ratio;
 
 	int width;
@@ -354,12 +354,6 @@ int plm_get_num_video_streams(plm_t *self);
 
 int plm_get_width(plm_t *self);
 int plm_get_height(plm_t *self);
-
-
-// Get the frameperiod of the video stream in frames per second.
-
-int32_t plm_get_frameperiod(plm_t *self);
-
 
 // Get or set whether audio decoding is enabled. Default TRUE.
 
@@ -707,12 +701,6 @@ void plm_video_destroy(plm_video_t *self);
 
 int plm_video_has_header(plm_video_t *self);
 
-
-// Get the frameperiod in frames per second.
-
-int32_t plm_video_get_frameperiod(plm_video_t *self);
-
-
 // Get the display width/height.
 
 int plm_video_get_width(plm_video_t *self);
@@ -915,12 +903,6 @@ int plm_get_width(plm_t *self) {
 int plm_get_height(plm_t *self) {
 	return (plm_init_decoders(self) && self->video_decoder)
 		? plm_video_get_height(self->video_decoder)
-		: 0;
-}
-
-int32_t plm_get_frameperiod(plm_t *self) {
-	return (plm_init_decoders(self) && self->video_decoder)
-		? plm_video_get_frameperiod(self->video_decoder)
 		: 0;
 }
 
@@ -1527,7 +1509,7 @@ static const int PLM_START_USER_DATA = 0xB2;
 	(c >= PLM_START_SLICE_FIRST && c <= PLM_START_SLICE_LAST)
 
 #define TICKS_30MHZ(x) (x ? 30000000.0/x : 10000)
-static const uint32_t PLM_VIDEO_PICTURE_RATE[] = {
+static const uint32_t PLM_VIDEO_PICTURE_RATE_30MHZ[] = {
 	TICKS_30MHZ(0.000),
 	TICKS_30MHZ(23.976),
 	TICKS_30MHZ(24.000),
@@ -1545,6 +1527,27 @@ static const uint32_t PLM_VIDEO_PICTURE_RATE[] = {
 	TICKS_30MHZ(0.000),
 	TICKS_30MHZ(0.0),
 };
+
+#define TICKS_90KHZ(x) (x ? 90000.0/x : 100)
+static const uint32_t PLM_VIDEO_PICTURE_RATE_90KHZ[] = {
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(23.976),
+	TICKS_90KHZ(24.000),
+	TICKS_90KHZ(25.000),
+	TICKS_90KHZ(29.970),
+	TICKS_90KHZ(30.000),
+	TICKS_90KHZ(50.000),
+	TICKS_90KHZ(59.94),
+	TICKS_90KHZ(60.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.000),
+	TICKS_90KHZ(0.0),
+};
+
 
 static const uint8_t PLM_VIDEO_ZIG_ZAG[] = {
 	 0,  1,  8, 16,  9,  2,  3, 10,
@@ -2092,12 +2095,6 @@ plm_video_t * plm_video_create_with_buffer(plm_dma_buffer_t *buffer, int destroy
 	return self;
 }
 
-int32_t plm_video_get_frameperiod(plm_video_t *self) {
-	return plm_video_has_header(self)
-		? seq_hdr_conf.frameperiod
-		: 0;
-}
-
 int plm_video_get_width(plm_video_t *self) {
 	return plm_video_has_header(self)
 		? seq_hdr_conf.width
@@ -2235,7 +2232,7 @@ int plm_video_decode_sequence_header(plm_video_t *self) {
     seq_hdr_conf.pixel_aspect_ratio =  plm_dma_buffer_read(self->buffer, 4);
 
 	// Get frame rate
-	seq_hdr_conf.frameperiod = PLM_VIDEO_PICTURE_RATE[plm_dma_buffer_read(self->buffer, 4)];
+	seq_hdr_conf.frameperiod = plm_dma_buffer_read(self->buffer, 4);
 
 	// Skip bit_rate, marker, buffer_size and constrained bit
 	plm_dma_buffer_skip(self->buffer, 18 + 1 + 10 + 1);
