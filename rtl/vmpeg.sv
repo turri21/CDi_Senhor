@@ -787,6 +787,7 @@ module vmpeg (
                                 // Really correct?
                                 image_width <= {5'b0, fmv_decoder_width};
                                 image_height <= {7'b0, fmv_decoder_height};
+                                image_rt <= 16'h00c2; // TODO must be fixed with the correct value
 
                                 // TODO can't be correct. set 0x42
                                 fmv_decoder_command[6] <= 1;
@@ -827,6 +828,11 @@ module vmpeg (
                                 fmv_playback_active <= 0;
                                 fmv_reset_persistent_storage <= 1;
                                 $display("FMV Decoder Off");
+
+                                // TODO confirm that this is happening
+                                image_width <= 0;
+                                image_height <= 0;
+                                image_rt <= 0;
                             end
 
                             if (din[15]) begin  // 8000 DMA

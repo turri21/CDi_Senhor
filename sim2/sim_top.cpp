@@ -600,6 +600,34 @@ class CDi {
         }
     }
 
+    /// Presses buttons until game is reached
+    void braindead13_pal() {
+        switch (frame_index) {
+        case 250:
+            // Skip Philips Intro
+            press_button_signal = true;
+            break;
+        case 300:
+            // Skip ICDI company logo
+            press_button_signal = true;
+            break;
+        case 313:
+#ifdef TRACE
+            do_trace = true;
+            fprintf(stderr, "Trace on!\n");
+#endif
+            break;
+        case 365:
+            // status = 1;
+            // fprintf(stderr, "Stop!\n");
+            break;
+        case 460: // TODO index might be wrong
+            // Skip game intro
+            press_button_signal = true;
+            break;
+        }
+    }
+
   public:
     void loadfile(uint16_t index, const char *path) {
 
@@ -887,6 +915,8 @@ class CDi {
                 // NTSC
             } else {
                 // PAL
+                // space_ace_pal();
+                // braindead13_pal();
             }
 #endif
 
@@ -1005,9 +1035,9 @@ class CDi {
                 fwrite(&dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__mpeg_data, 1, 1, f_fmv_m1v);
             }
 #ifdef TRACE
-            if (!do_trace)
-                fprintf(stderr, "Trace on!\n");
-            do_trace = true;
+            // if (!do_trace)
+            //     fprintf(stderr, "Trace on!\n");
+            // do_trace = true;
 #endif
         }
         if (dut.rootp->emu__DOT__cditop__DOT__vmpeg_inst__DOT__fma_data_valid) {
@@ -1264,7 +1294,7 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/addams.bin", "rb");
+        f_cd_bin = fopen("images/braindead13.bin", "rb");
         break;
     case 1:
         f_cd_bin = fopen("images/braindead13.bin", "rb");

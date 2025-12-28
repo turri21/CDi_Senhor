@@ -717,7 +717,7 @@ module mpeg_video (
         .reset(reset_dsp_enabled_clk_mpeg),
         .wdata(just_decoded),
         .we(just_decoded_commit),
-        .strobe(latch_frame_for_display_clk_mpeg && show_on_next_video_frame_clkddr),
+        .strobe(latch_frame_for_display_clk_mpeg),
         .valid(for_display_valid_clk_mpeg),
         .q(for_display),
         .cnt(pictures_in_fifo_clk_mpeg)

@@ -50,6 +50,7 @@ main:
 	; #$00333500 Lost Eden - When entering gameplay (Stream 0)
 	; #$05402000 Star Trek VI - Terre Inconnue (France) (Disc 1) - Good match for SEQHDR of High CPU Load scene
 	; #$00437300 Addams Family (Disc 2)
+	; #$01133900 Brain Dead 13 - Intro
 
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register

@@ -17,11 +17,10 @@
 * "The Lost Ride" has video glitches?
 * "Crime Patrol" has video glitches?
 * "Solar Crusade" has video glitches?
-* "Brain Dead 13" hangs after company logo
+* "Brain Dead 13" has video glitches when switching MPEG streams
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
 * Slow motion with VCDs is behaving incorrect
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
-* VCD resolution for white book
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
 * Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode
