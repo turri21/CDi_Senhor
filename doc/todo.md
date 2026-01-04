@@ -1,5 +1,7 @@
 # TODOs and known issues
 
+* "Imagination in Motion - A New Era in 3D Chill Out Video"
+    * Pause/Unpause and Fast Forward is broken
 * Improve implementation of VCD pixel clock
     * The current visual quality is subpar and shows scaling artifacts during panning shots
     * Analysis of digital VMPEG DVCs might be required
@@ -7,10 +9,6 @@
 * Add support for MPEG Layer I
     * Affected disc is "AIMS - Learning About Ecology (1995)(AIMS Multimedia)(US)"
 * Add support for an emulated Peacekeeper Revolver Light Gun
-* "Who Shot Johnny Rock?" is not stopping the Philips Logo animation when pressing a button
-    * A gun shot can be heard, so the press is registered.
-    * The intro of the game also can't be skipped
-    * cdiemu doesn't have this problem
 * "Uncover featuring Tatjana (Europe)" regressions?
 * Regression of "Historia del Arte Español" (working in DVC rc2)
     * Blank video?
