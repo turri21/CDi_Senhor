@@ -66,6 +66,7 @@ by unplugging the current device and plugging in the next.
     * 0-255 - Full RGB range
     * 16-235 - Reduced RGB range (might provide more accurate color / more contrast)
 * Hardware Config
+  * Ports - Either 1 Player with additional UART, or 2 players.*
   * Disable VMPEG DVC - Reset core to take effect
   * Overclock input device - Increase update rate (no longer accurate, but recommended for games)
   * Fast CD Seek - Skip 20 sector seek delay, a real CDIC always ensures (might be unstable)
@@ -73,10 +74,16 @@ by unplugging the current device and plugging in the next.
   * NvRAM live update - Allows loading NvRAM from storage on CD image change without reset (might corrupt NvRAM)
 * Autoplay - Injects a kernel module into OS9 to skip the system menu and directly start the title (thx to CD-i Fan for this)
 
+Note*: 2 controllers are an unusual state for a CD-i machine. Keep that in mind.
+
 ## Troubleshooting
 
 * My NTSC CRT television set is not getting a stable image
   *  Please switch the core to NTSC and reset via OSD. This should fix the problem.
+* The image has a vertical offset
+  * Do you have used "NvRAM live update" together with a switch between PAL and NTSC? That might be the cause. Please reset the machine to fix the NvRAM.
+* The number of controllers is not updated
+  * Do you have used "NvRAM live update" together with a switch between PAL and NTSC? That might be the cause because the info is stored there. Please reset the machine to fix the NvRAM.
 
 ## Status
 

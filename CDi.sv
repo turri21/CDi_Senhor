@@ -236,10 +236,10 @@ module emu (
 
         "P3,Hardware Config;",
         "P3-;",
-        "P3O[13],Disable VMPEG DVC,No,Yes;",
+        "P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
         "P3O[5],Overclock input device,No,Yes;",
+        "P3O[13],Disable VMPEG DVC,No,Yes;",
         "P3-;",
-        //"P3O[15],Ports, P1 Front + UART Back, P1 Back + P2 Front;",
         "P3-,(U) = unsafe, experimental;",
         "P3O[16],Fast CD Seek,No,Yes(U);",
         "P3O[11],CPU Turbo,No,Yes(U);",
@@ -268,7 +268,10 @@ module emu (
     wire [ 10:0] ps2_key;
 
     wire [ 15:0] JOY0  /*verilator public_flat_rw*/;
+    wire [ 15:0] JOY1  /*verilator public_flat_rw*/;
     wire [ 15:0] JOY0_ANALOG  /*verilator public_flat_rw*/;
+    wire [ 15:0] JOY1_ANALOG  /*verilator public_flat_rw*/;
+
     wire [ 24:0] MOUSE  /*verilator public_flat_rw*/;
 
     wire         ioctl_download  /*verilator public_flat_rw*/;
@@ -281,7 +284,6 @@ module emu (
     wire         clk_sys  /*verilator public_flat_rw*/;
     wire         clk_audio  /*verilator public_flat_rw*/;
     wire         clk_mpeg  /*verilator public_flat_rw*/;
-
 
     wire [ 31:0] cd_hps_lba;
     wire         cd_hps_req  /*verilator public_flat_rd*/;
@@ -360,8 +362,9 @@ module emu (
         .ps2_mouse(MOUSE),
 
         .joystick_l_analog_0(JOY0_ANALOG),
+        .joystick_l_analog_1(JOY1_ANALOG),
         .joystick_0(JOY0),
-
+        .joystick_1(JOY1),
         .RTC(hps_rtc)
     );
 
@@ -746,13 +749,29 @@ module emu (
     bytestream slave_serial_in ();
     wire slave_rts;
 
+    bytestream scc68070_bypass_serial_out ();
+    bytestream scc68070_bypass_serial_in ();
+    wire scc68070_rts;
+
+    // "INPUT" port at the front of a CDI 210/05
     pointing_device pointing_dev_front (
         .clk(clk_sys),
-        .mister_joystick(JOY0),
-        .mister_joystick_analog(JOY0_ANALOG),
-        .mister_mouse(MOUSE),
+        .mister_joystick(config_first_player_back_port ? JOY1 : JOY0),
+        .mister_joystick_analog(config_first_player_back_port ? JOY1_ANALOG : JOY0_ANALOG),
+        .mister_mouse(config_first_player_back_port ? 0 : MOUSE),
         .rts(slave_rts),
         .serial_out(slave_serial_in),
+        .overclock(overclock_pointing_device)
+    );
+
+    // ""INPUT 2" port at the back of a CDI 210/05
+    pointing_device pointing_dev_back (
+        .clk(clk_sys),
+        .mister_joystick(config_first_player_back_port ? JOY0 : JOY1),
+        .mister_joystick_analog(config_first_player_back_port ? JOY0_ANALOG : JOY1_ANALOG),
+        .mister_mouse(config_first_player_back_port ? MOUSE : 0),
+        .rts(config_first_player_back_port ? scc68070_rts : 1'b1),
+        .serial_out(scc68070_bypass_serial_in),
         .overclock(overclock_pointing_device)
     );
 
@@ -863,6 +882,11 @@ module emu (
         .slave_serial_in(slave_serial_in),
         .slave_serial_out(slave_serial_out),
         .slave_rts(slave_rts),
+
+        .scc68070_bypass_serial_in(scc68070_bypass_serial_in),
+        .scc68070_bypass_serial_out(scc68070_bypass_serial_out),
+        .scc68070_rts(scc68070_rts),
+
         .rc_eye(rc_eye),
 
         .cd_seek_lba(cd_seek_lba),
