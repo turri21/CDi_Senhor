@@ -663,8 +663,10 @@ module cditop (
         bit [7:0]  V_PicRt; // 0x0x17f
         bit [31:0] V_PWI; // 0x180
         bit [15:0] V_PRPA; //0x194
+        bit [31:0] V_Speed; // 0x100
+        bit [15:0] V_PlayType; // 0x9a
     } fdrvs1 = '{default: 0};
-    bit [23:0] fdrvs1_static  /*verilator public_flat_rw*/ = 0;
+    bit [23:0] fdrvs1_static  /*verilator public_flat_rw*/ = 24'hdfb180;
     always @(posedge clk30) begin
 
         if (fdrvs1_static != 0 && bus_ack && write_strobe) begin
@@ -688,6 +690,10 @@ module cditop (
             if (addr_byte == fdrvs1_static + 24'h0194) begin
                 fdrvs1.V_PRPA = cpu_data;
                 $display("V_PRPA = %d dez", cpu_data);
+            end
+            if (addr_byte == fdrvs1_static + 24'h009a) begin
+                fdrvs1.V_PlayType = cpu_data;
+                $display("V_PlayType = %d dez", cpu_data);
             end
 
             // I assume that fdrvs1_static is always aligned to words
@@ -791,6 +797,15 @@ module cditop (
                 $display("V_PWI = %x", {fdrvs1.V_PWI[31:16], cpu_data});
             end
 
+            if (addr_byte == fdrvs1_static + 24'h100) begin
+                fdrvs1.V_Speed[31:16] = cpu_data;
+                $display("V_Speed = %x", {cpu_data, fdrvs1.V_Speed[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h102) begin
+                fdrvs1.V_Speed[15:0] = cpu_data;
+                $display("V_Speed = %x", {fdrvs1.V_Speed[31:16], cpu_data});
+            end
         end
     end
 `endif

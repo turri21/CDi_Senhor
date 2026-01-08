@@ -11,6 +11,9 @@ Titles which require the Digital Video Cartridge are considered experimental.
 
 ## Usage
 
+To play a title, load a CD and press on the play button at the start screen.
+CD images can be stored as CHD or CUE/BIN format.
+
 ### Required ROM files
 
 Place `cdi200.rom` as `boot0.rom` in `/media/fat/games/CD-i`.
@@ -38,9 +41,18 @@ a change is queued to store. When the OSD is opened, the NvRAM will be flushed t
 
 The save files containing the NvRAM are compatible with the CD-i emulation of MAME.
 
-Digital gamepads, analog gamepads and mice are supported for use with this core.
-To play a title, load a CD and press on the play button at the start screen.
-CD images can be stored as CHD or CUE/BIN format.
+### Pointing Devices
+
+The Philips CD-i has support for 3 classes of "Pointing Devices"
+
+* Maneuvering devices -> Gamepad (Digital or Analog)
+* Relative Coordinate Devices -> Mouse and Trackball
+* Absolute Coordinate Devices -> Light Gun, Graphics Tablet, Light Pen (not yet supported)
+
+Digital gamepads, Analog gamepads and Mice are supported for use with this core.
+
+To switch between Mouse and Gamepad, simply move the Mouse around. The core will switch automatically
+by unplugging the current device and plugging in the next.
 
 ### OSD
 
