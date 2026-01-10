@@ -1,7 +1,7 @@
 # TODOs and known issues
 
 * "Imagination in Motion - A New Era in 3D Chill Out Video"
-    * Pause/Unpause and Fast Forward is broken
+    * Fast Forward is broken
 * Improve implementation of VCD pixel clock
     * The current visual quality is subpar and shows scaling artifacts during panning shots
     * Analysis of digital VMPEG DVCs might be required

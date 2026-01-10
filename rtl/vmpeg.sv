@@ -444,7 +444,7 @@ module vmpeg (
             15'h202c: dout = fmv_timecode[31:16];  // 00E04058 Time Code High ??
             15'h202d: dout = fmv_timecode[15:0];  // 00E0405A Time Code Low ??
             15'h202e: dout = {6'b0, fmv_decoder_tempref, 2'b0};  // 00E0405C TMP REF?? SYS_VSR?
-            15'h202f: dout = 16'h2000;  // 00E0405E ?? STS ? always 2000 on cdiemu
+            15'h202f: dout = fmv_fifo_full ? 0 : 16'h2000;  // 00E0405E ? SYS_STS
             15'h2030: dout = fmv_interrupt_enable_register;  // 0E04060
             15'h2031: dout = fmv_interrupt_status_register;  // 0E04062
             15'h2032: dout = fmv_timer_compare_register;  // 0E04064

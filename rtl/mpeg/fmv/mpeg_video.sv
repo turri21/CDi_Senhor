@@ -160,7 +160,7 @@ module mpeg_video (
     end
 
     wire [28:0] fifo_level_clk_mpeg = mpeg_stream_fifo_write_adr_clk_mpeg - mpeg_stream_fifo_read_adr;
-    wire fifo_full_clk_mpeg = fifo_level_clk_mpeg > 29'd30500;
+    wire fifo_full_clk_mpeg = fifo_level_clk_mpeg > 29'd28000;
 
     bit has_sequence_header = 0;
     bit hw_read_mem_ready = 0;
