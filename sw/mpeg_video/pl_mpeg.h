@@ -1973,7 +1973,7 @@ typedef struct {
 	int v;
 } plm_video_motion_t;
 
-#define DDR_FRAMEBUFFER_CNT 30
+#define DDR_FRAMEBUFFER_CNT 35
 
 struct plm_video_t {
 	int time;
