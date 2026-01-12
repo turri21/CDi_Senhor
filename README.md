@@ -14,6 +14,16 @@ Titles which require the Digital Video Cartridge are considered experimental.
 To play a title, load a CD and press on the play button at the start screen.
 CD images can be stored as CHD or CUE/BIN format.
 
+### Button layout
+
+The CD-i usually has 2 buttons: • and ••
+Originally, this project aimed for replicating the `Philips RV 8701 Paddle Controller`.
+That has one downside of having no •/•• button, to press • and •• at the same time. Some games really need it.
+
+So instead, this project currently aims for a hybrid of the `RV 8701` and a `Philips 22ER9017 Touchpad`,
+which is similar to a `Gravis Ultrapad`. The layout can be compared to a SNES controller without shoulder buttons.
+Since the MiSTer is built around the modern PSX layout, this should be pretty accessible.
+
 ### Required ROM files
 
 Place `cdi200.rom` as `boot0.rom` in `/media/fat/games/CD-i`.

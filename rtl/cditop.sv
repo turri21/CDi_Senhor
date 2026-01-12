@@ -651,6 +651,7 @@ module cditop (
 
     // Tool to observe variables in fdrvs1 driver code
     struct {
+        bit [7:0] V_StepDone; // 0x17a char*
         bit [7:0] V_BufStat;  // 0x17b char*
         bit [7:0] V_UpdFlag;  // 0x12e char*
         bit [15:0] V_Stat;    // 0x134
@@ -666,7 +667,7 @@ module cditop (
         bit [31:0] V_ScrOrg;  // 0xee
         bit [31:0] V_ScrOff;  // 0xf2
         bit [31:0] V_NISFnd;  // 0x170
-        bit [7:0]  V_PicRt; // 0x0x17f
+        bit [7:0]  V_PicRt; // 0x0x17f char*
         bit [31:0] V_PWI; // 0x180
         bit [15:0] V_PRPA; //0x194
         bit [31:0] V_Speed; // 0x100
@@ -703,17 +704,22 @@ module cditop (
             end
 
             // I assume that fdrvs1_static is always aligned to words
-            if (addr_byte == fdrvs1_static + 24'h017a) begin  // Location is 0x17b -> low byte
+            if (addr_byte == fdrvs1_static + 24'h017a && uds) begin  // Location is 0x17a -> high byte
+                fdrvs1.V_StepDone = cpu_data[15:8];
+                $display("V_StepDone = %d dez", cpu_data[15:8]);
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h017a && lds) begin  // Location is 0x17b -> low byte
                 fdrvs1.V_BufStat = cpu_data[7:0];
                 $display("V_BufStat = %d dez", cpu_data[7:0]);
             end
 
-            if (addr_byte == fdrvs1_static + 24'h012e) begin  // Location is 0x12e -> high byte
+            if (addr_byte == fdrvs1_static + 24'h012e && uds) begin  // Location is 0x12e -> high byte
                 fdrvs1.V_UpdFlag = cpu_data[15:8];
                 $display("V_UpdFlag = %d dez", cpu_data[15:8]);
             end
 
-            if (addr_byte == fdrvs1_static + 24'h017e) begin  // Location is 0x17f -> low byte
+            if (addr_byte == fdrvs1_static + 24'h017e && lds) begin  // Location is 0x17f -> low byte
                 fdrvs1.V_PicRt = cpu_data[7:0];
                 $display("V_PicRt = %d dez", cpu_data[7:0]);
             end

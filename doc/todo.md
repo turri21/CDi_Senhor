@@ -1,7 +1,7 @@
 # TODOs and known issues
 
-* "Imagination in Motion - A New Era in 3D Chill Out Video"
-    * Fast Forward is broken
+* Implement the speed setting of the 22ER9017 Touchpad
+* Weird VCDs with multi track layout are not playing? (Might be a bootleg)
 * Improve implementation of VCD pixel clock
     * The current visual quality is subpar and shows scaling artifacts during panning shots
     * Analysis of digital VMPEG DVCs might be required
@@ -22,7 +22,8 @@
 * "Solar Crusade" has video glitches?
 * "Brain Dead 13" has video glitches when switching MPEG streams
 * "The Secret of Nimh" (Philips Edition) has the wrong frame rate? Sometimes?
-* Slow motion with VCDs is behaving incorrect
+* Slow motion with VCDs is desyncing audio and video
+    * Too many frames in output FIFO
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed

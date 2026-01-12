@@ -28,6 +28,7 @@ struct frame_display_fifo
 	uint32_t frameperiod_rawhdr;	   // @0x10003030 Write only
 	uint32_t frameperiod_90khz;		   // @0x10003034 Write only
 	uint32_t temporal_ref;			   // @0x10003038 Write only
+	uint32_t slow_motion;			   // @0x1000303c Read only
 };
 
 struct io_fifo_control *const fifo_ctrl = (struct io_fifo_control *)0x10002000;

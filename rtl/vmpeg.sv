@@ -115,10 +115,11 @@ module vmpeg (
     // [10:6] 5 Bits Hours. Not BCD
     wire [31:0] fmv_timecode;
     bit fmv_playback_active;
+    bit fmv_single_step;
     wire fmv_event_sequence_end;
     wire fmv_event_buffer_underflow;
     wire [4:0] fmv_pictures_in_fifo;
-
+    bit [2:0] fmv_slow_motion;
 
     bit [8:0] latched_display_offset_y;
     bit [8:0] latched_display_offset_x;
@@ -134,6 +135,8 @@ module vmpeg (
         .dsp_enable(fmv_dsp_enable),
         .reset_persistent_storage(fmv_reset_persistent_storage),
         .playback_active(fmv_playback_active),
+        .single_step(fmv_single_step),
+        .slow_motion(fmv_slow_motion),
         .data_byte(mpeg_data),
         .data_strobe(fmv_data_valid && fmv_packet_body),
         .fifo_full(fmv_fifo_full),
@@ -313,9 +316,25 @@ module vmpeg (
     bit [7:0] fma_dspa;
 
     // FMV SYSCMD @ 00E040C0
+    // [2:0] Slow Motion (only valid when Play | Continue ?)
+    // [3] Play
+    // [4] Pause
+    // [5] Continue
+    // [6] Step
+    // [7] Stop
+    // [15] Start DMA
     (* keep *) (* noprune *) bit [15:0] fmv_system_command_register = 0;
     // FMV VIDCMD @ 00E040C2
     (* keep *) (* noprune *) bit [15:0] fmv_video_command_register = 0;
+    // FMV SYS_SCR @ 00E040C6
+    // [1:0] BSIZ ?
+    // [2] 1=Synchronous 0=Asynchronous
+    // [3] CDI mode?
+    // [5:4] Decoder Mode
+    // 882D 1000 1000 0010 1101 During Addams Family playback, Sync, CD-i Mode, Fullmotion No Interlace
+    // 8829 1000 1000 0010 1001 During self build stepping, Async, CD-i Mode, Fullmotion No Interlace
+    (* keep *) (* noprune *) bit [15:0] fmv_system_control_register = 0;
+
     bit fmv_show_on_next_video_frame;
 
     // FMV ISR @ 00E04062
@@ -388,9 +407,13 @@ module vmpeg (
     // [5] RUN_RYTHM? in previous release of fmv driver?
     // [1:0] MODE?
     // Typical values?
+    // 0x0002  first run?
     // 0x7952  0111 1001 0101 0010  when playing
     // 0x1942  0001 1001 0100 0010  when playing
-    // 0x42 decoding status?
+    // 0x2242  0010 0010 0100 0010  Imagination in Motion - Step Reverse during Pause
+    // 0x2202  0010 0010 0000 0010  Self build, directly into step
+    // 0x2202 is essential for single step?
+    // 0x0042 decoding status?
     bit  [15:0] fmv_decoder_command;
 
     bit  [15:0] image_height = 0;
@@ -501,6 +524,7 @@ module vmpeg (
         bus_ack <= 0;
         vsync_q <= vsync;
         dsp_reset_input_fifo <= 0;
+        fmv_single_step <= 0;
 
         // create a single clock delay of this signal
         // should be better since this signal must be carried over to clk_mpeg
@@ -784,6 +808,7 @@ module vmpeg (
                               0008 Play
                               0010 Pause
                               0020 Continue
+                              0040 Step
                               0080 Stop
 	                          0100 Clear FIFO
                               0400 Search for GOP
@@ -821,6 +846,7 @@ module vmpeg (
                                 // TODO can't be correct. set 0x42
                                 fmv_decoder_command[6] <= 1;
                                 fmv_decoder_command[1] <= 1;
+                                fmv_slow_motion <= din[2:0];
                             end
 
                             if (din[4]) begin  // 0010 Pause
@@ -830,10 +856,18 @@ module vmpeg (
 
                             if (din[5]) begin  // 0020 Continue
                                 fmv_playback_active <= 1;
+                                fmv_slow_motion <= din[2:0];
+                            end
+
+                            if (din[6]) begin  // 0040 Step
+                                fmv_single_step <= 1;
                             end
 
                             if (din[7]) begin  // 0080 Stop
                                 fmv_playback_active <= 0;
+                                // TODO can't be correct
+                                fmv_decoder_command[6] <= 0;
+                                fmv_decoder_command[1] <= 0;
                             end
 
                             if (din[8]) begin  // 0100 Clear FIFO? What to do?
@@ -901,6 +935,10 @@ module vmpeg (
 
                             // TODO this might not be right
                         end
+                        15'h2063: begin
+                            $display("FMV Write SYSSCR Register %x %x", address[15:1], din);
+                            fmv_system_control_register <= din;
+                        end
                         15'h206F: begin  // 0E040DE
                             $display("FMV Write XFER Register %x %x", address[15:1], din);
                         end
@@ -908,7 +946,6 @@ module vmpeg (
                             fmv_interrupt_vector_register <= din;
                             $display("FMV Write IVEC Register %x %x", address[15:1], din);
                         end
-
                         15'h2036: begin
                             $display("FMV Write Y Offset %x %x", address[15:1], din);
                             video_ctrl_y_offset <= din;  // seems to be always 001A
@@ -953,6 +990,11 @@ module vmpeg (
                         15'h2044: begin
                             $display("FMV Write GEN_DEC_CMD %x %x ?", address[15:1], din);
                             fmv_decoder_command <= din;
+
+                            // TODO I'm very unsure about this
+                            if (din[15:8] == 8'h22 && fmv_system_command_register[4] == 0) begin
+                                fmv_single_step <= 1;
+                            end
                         end
                         15'h2046: begin
                             $display("FMV Write GEN_VDI_CMD %x %x ?", address[15:1], din);

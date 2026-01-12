@@ -117,13 +117,13 @@ static void push_frame(plm_frame_t *frame)
 
 	frame_display_fifo->width = frame->width;
 
-	int period30mhz = PLM_VIDEO_PICTURE_RATE_30MHZ[seq_hdr_conf.frameperiod];
+	int period30mhz = PLM_VIDEO_PICTURE_RATE_30MHZ[seq_hdr_conf.frameperiod] * (frame_display_fifo->slow_motion + 1);
 	int period90khz = PLM_VIDEO_PICTURE_RATE_90KHZ[seq_hdr_conf.frameperiod];
 
 	frame_display_fifo->frameperiod_90khz = period90khz;
 	frame_display_fifo->frameperiod_rawhdr = seq_hdr_conf.frameperiod;
 	frame_display_fifo->temporal_ref = frame->temporal_ref;
-	
+
 	if (frame_display_fifo->pictures_in_fifo < 3)
 	{
 		// It seems our FIFO is loosing pictures. Maybe the frame rate is slightly off?

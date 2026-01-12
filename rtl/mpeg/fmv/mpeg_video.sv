@@ -8,6 +8,8 @@ module mpeg_video (
     input dsp_enable,
     input reset_persistent_storage,
     input playback_active,
+    input single_step,
+    input [2:0] slow_motion,
 
     input  [7:0] data_byte,
     input        data_strobe,
@@ -58,6 +60,11 @@ module mpeg_video (
         .d  (worker_4_ddr)
     );
 
+
+    bit [2:0] slow_motion_clkddr;
+    // Metastability will result into a single wrongly timed frame
+    // when speed is changed. That should be OK
+    always_ff @(posedge clk_mpeg) slow_motion_clkddr <= slow_motion;
 
     wire reset_clk_mpeg;
 
@@ -250,7 +257,6 @@ module mpeg_video (
                 hw_read_mem_ready <= 1;
 
                 if (hw_read_mem_ready) begin
-
                     hw_read_result <= (hw_read_result<<hw_read_count_aligned) |
                         ((mpeg_in_fifo_out >> (32 - hw_read_count_aligned - hw_read_bit_shift)) & hw_read_mask);
 
@@ -493,6 +499,10 @@ module mpeg_video (
                             dmem_rsp_payload_data_1 = {27'b0, pictures_in_fifo_clk_mpeg};
                         if (dmem_cmd_payload_address_1_q == 32'h1000302c)
                             dmem_rsp_payload_data_1 = {31'b0, playback_active_clkddr};
+                        if (dmem_cmd_payload_address_1_q == 32'h1000303c)
+                            dmem_rsp_payload_data_1 = {29'b0, slow_motion_clkddr};
+
+
                     end
                 end
                 4'd0: begin
@@ -613,6 +623,10 @@ module mpeg_video (
 
     // 30 MHz clock rate and 25 Hz frame rate -> 1200000
     bit [8:0] fractional_pixel_width_clk_mpeg;
+
+    // 24 bits are required.
+    // Slow motion can be factor 2-8, slowest allowed period without
+    // that factor is 1251251 which requires 21 bits
     bit [23:0] frame_period_clk_mpeg = 1200000;
     bit [23:0] frame_period = 1200000;
     bit [23:0] playback_frame_cnt;
@@ -687,6 +701,12 @@ module mpeg_video (
                 latch_frame_until_vblank <= 1;
                 first_intra_frame_of_gop_in_prep <= first_intra_frame_of_gop_clk30;
             end
+        end
+
+        if (single_step) begin
+            latch_frame_until_vblank <= 1;
+            latch_frame_for_display <= 1;
+            first_intra_frame_of_gop_in_prep <= first_intra_frame_of_gop_clk30;
         end
     end
 

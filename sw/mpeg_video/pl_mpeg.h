@@ -1509,6 +1509,8 @@ static const int PLM_START_USER_DATA = 0xB2;
 	(c >= PLM_START_SLICE_FIRST && c <= PLM_START_SLICE_LAST)
 
 #define TICKS_30MHZ(x) (x ? 30000000.0/x : 10000)
+// Longest frame period: 1251251.25125125 = 30000000 / 23.976
+// Requires 21 bits for storage
 static const uint32_t PLM_VIDEO_PICTURE_RATE_30MHZ[] = {
 	TICKS_30MHZ(0.000),
 	TICKS_30MHZ(23.976),

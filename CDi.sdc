@@ -32,3 +32,6 @@ set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_widt
 # protected by latch_frame_clkddr
 set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_offset_y*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_y_clkddr*}
 set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|latched_window_offset_x*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|frameplayer:frameplayer|window_x_clkddr*}
+
+# protection not required because of context
+set_false_path -from {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|fmv_slow_motion*} -to {emu:emu|cditop:cditop|vmpeg:vmpeg_inst|mpeg_video:video|slow_motion_clkddr*}
