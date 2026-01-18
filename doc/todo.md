@@ -1,13 +1,9 @@
 # TODOs and known issues
 
 * Implement the speed setting of the 22ER9017 Touchpad
-* Weird VCDs with multi track layout are not playing? (Might be a bootleg)
-* Improve implementation of VCD pixel clock
-    * The current visual quality is subpar and shows scaling artifacts during panning shots
-    * Analysis of digital VMPEG DVCs might be required
-    * Alternative would be horizontal linear interpolation or a low pass
 * Add support for MPEG Layer I
     * Affected disc is "AIMS - Learning About Ecology (1995)(AIMS Multimedia)(US)"
+* Frequency response of CDIC and MPEG audio output might not be 100% accurate
 * Add support for an emulated Peacekeeper Revolver Light Gun
 * "Uncover featuring Tatjana (Europe)" regressions?
 * Regression of "Historia del Arte Español" (working in DVC rc2)
@@ -15,9 +11,10 @@
 * Fix Christmas Crisis bonus ride
     * Might still stutter. Analysis required.
 * "Mutant Rampage - Bodyslam" has a tendency to freeze?
+* "Mad Dog McCree (Europe)" seems to have corruption on macroblock level to the bottom right of the screen
 * "The Last Bounty Hunter", "Drug Wars", "Mad Dog 2", "Who Shot Johnny Rock?" have regressions (works in rc2)?
 * "Chaos Control" has video glitches?
-* "The Lost Ride" has video glitches?
+* "The Lost Ride" has video glitches. Wrong frame width? SEQ HDR problem?
 * "Crime Patrol" has video glitches?
 * "Solar Crusade" has video glitches?
 * "Brain Dead 13" has video glitches when switching MPEG streams
@@ -51,5 +48,6 @@
 * Check compatibility with CDs that have track index 2 as opposed to the usual 0 and 1
     * Possible discs? "Philips CDI Format Test Disc 1 (Europe)" and a disc by Zeneca Pharmaceuticals Group, "An Interactive Medical Program"
 * Possibly adding support for other PCBs (like Mono II)
+* Possibly adding support for the Quizard arcade hardware
 * Refurbish I2C for the front display and show the content as picture in picture during changes?
     * It might not even be required at all.

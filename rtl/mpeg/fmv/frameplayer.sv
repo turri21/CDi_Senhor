@@ -13,6 +13,7 @@ module frameplayer (
     output rgb888_s vidout,
 
     input vcd_pixel_clock,
+    input debug_activate_vcd_filter,
     input hsync,
     input vsync,
     input hblank,
@@ -57,7 +58,6 @@ module frameplayer (
     bit [8:0] frame_height_clkddr = 100;
     bit [8:0] window_x_clkddr;
     bit [8:0] window_y_clkddr;
-
 
     bit [28:0] address_y;
     bit [28:0] address_u;
@@ -239,7 +239,6 @@ module frameplayer (
         .signal_out_clk_b(vertical_offset_wait_not_null_clkddr)
     );
 
-
     always_ff @(posedge clkddr) begin
         linecnt_clkddr <= linecnt;
 
@@ -341,13 +340,41 @@ module frameplayer (
         else clamp8 = val[7:0];
     endfunction
 
+    // We use an AVG filter with 4 elements to soften the picture during VCD pixel clock mode
+    // This will not change the image quality on the analog video output,
+    // but improves perceived quality on HDMI
+    yuv_s color_window[3];
+    yuv_s filtered_color;
+    always_ff @(posedge clkvideo) begin
+        // Reset the filter with black to allow a fade-in on the left side
+        if (hblank) begin
+            color_window[0].y <= 0;
+            color_window[0].u <= 128;
+            color_window[0].v <= 128;
+        end else begin
+            color_window[0] <= current_color;
+        end
+
+        color_window[1] <= color_window[0];
+        color_window[2] <= color_window[1];
+
+        filtered_color.y <= (color_window[0].y + color_window[1].y + color_window[2].y + current_color.y)/4;
+        filtered_color.u <= (color_window[0].u + color_window[1].u + color_window[2].u + current_color.u)/4;
+        filtered_color.v <= (color_window[0].v + color_window[1].v + color_window[2].v + current_color.v)/4;
+    end
 
     always_comb begin
         bit signed [9:0] Y, Cb, Cr;
 
-        Y = {2'b00, current_color.y};
-        Cb = {2'b00, current_color.u};
-        Cr = {2'b00, current_color.v};
+        if (vcd_pixel_clock && debug_activate_vcd_filter) begin
+            Y  = {2'b00, filtered_color.y};
+            Cb = {2'b00, filtered_color.u};
+            Cr = {2'b00, filtered_color.v};
+        end else begin
+            Y  = {2'b00, current_color.y};
+            Cb = {2'b00, current_color.u};
+            Cr = {2'b00, current_color.v};
+        end
 
         // According to ITU-R BT.601
         r = ((Y - 16) * 298 + 409 * (Cr - 128)) / 256;

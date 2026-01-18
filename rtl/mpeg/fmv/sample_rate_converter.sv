@@ -55,7 +55,9 @@ module sample_rate_converter (
         phase_accu_last <= phase_accumulator[9:8];
 
         if (reset) begin
-            phase_accumulator <= 0;
+            // Initialize with 128 to start VCD pixels one clock earlier.
+            // Without this, the first pixel is one tick wider
+            phase_accumulator <= 128;
         end else begin
             phase_accumulator <= phase_accumulator + (vcd_mode ? kVcdPhaseInc : kBaseCasePhaseInc);
         end

@@ -40,6 +40,7 @@ module vmpeg (
     output linear_volume_s dsp_volume,
 
     input debug_disable_vcd_clock,
+    input debug_activate_vcd_filter,
     output bit mpeg_ram_enabled,  // Prohibits detection of MPEG RAM by the OS RAM crawler
     output bit debug_audio_fifo_overflow,
     output bit debug_video_fifo_overflow
@@ -142,6 +143,7 @@ module vmpeg (
         .fifo_full(fmv_fifo_full),
         .ddrif,
         .vcd_pixel_clock(vcd_pixel_clock && !debug_disable_vcd_clock),
+        .debug_activate_vcd_filter,
         .hsync,
         .vsync,
         .hblank,

@@ -20,6 +20,7 @@ module mpeg_video (
     output rgb888_s vidout,
 
     input vcd_pixel_clock,
+    input debug_activate_vcd_filter,
     input hsync,
     input vsync,
     input hblank,
@@ -764,6 +765,7 @@ module mpeg_video (
         .ddrif(player_ddr),
         .vidout,
         .vcd_pixel_clock,
+        .debug_activate_vcd_filter,
         .hsync,
         .vsync,
         .hblank,

@@ -233,6 +233,7 @@ module emu (
         "P2O[7:6],Force Video Plane,Original,A,B;",
         "P2O[12],SERVO Audio CD,No,Yes;",
         "P2O[17],Disable VCD pixel clock,No,Yes;",
+        "P2O[18],Activate VCD filter,Yes,No;",
 
         "P3,Hardware Config;",
         "P3-;",
@@ -713,6 +714,7 @@ module emu (
     wire config_first_player_back_port = 0;
     wire config_disable_seek_time = 1;
     wire debug_disable_vcd_clock = 0;
+    wire debug_activate_vcd_filter = 1;
 `else
     // Status seems to be all zero after reset
     // Should be considered for defining the default
@@ -729,6 +731,7 @@ module emu (
     wire config_first_player_back_port = status[15];
     wire config_disable_seek_time = status[16];
     wire debug_disable_vcd_clock = status[17];
+    wire debug_activate_vcd_filter = !status[18];
 
     always_ff @(posedge clk_sys) begin
         // only change during resets
@@ -838,6 +841,7 @@ module emu (
         .tvmode_pal(!tvmode_ntsc),
         .debug_uart_fake_space,
         .debug_disable_vcd_clock,
+        .debug_activate_vcd_filter,
         .debug_force_video_plane,
         .debug_limited_to_full,
         .audio_cd_in_tray,

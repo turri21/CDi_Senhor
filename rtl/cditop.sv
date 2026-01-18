@@ -10,6 +10,7 @@ module cditop (
     input tvmode_pal,
 
     input debug_disable_vcd_clock,
+    input debug_activate_vcd_filter,
     input debug_uart_fake_space,
     input [1:0] debug_force_video_plane,
     input [1:0] debug_limited_to_full,
@@ -367,6 +368,7 @@ module cditop (
         .done_in(dma_done_out),
         .done_out(),
         .debug_disable_vcd_clock,
+        .debug_activate_vcd_filter,
         .mpeg_ram_enabled(mpeg_ram_enabled),
         .debug_video_fifo_overflow(debug_video_fifo_overflow),
         .debug_audio_fifo_overflow(debug_audio_fifo_overflow),
