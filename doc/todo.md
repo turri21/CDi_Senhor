@@ -31,8 +31,6 @@
     * PSX core seems to halt the whole machine to avoid this situation
 * Fix regression: Audio hiccups during Philips Logo in Burn:Cycle
     * A workaround is CPU overclocking
-* Add missing MCD212 features
-    * Pixel Hold
 * Investigate input responsiveness (skipped events?)
 * Fix hang on audio track stop or change in media player
 * Cheat support?

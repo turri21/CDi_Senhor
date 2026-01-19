@@ -27,6 +27,10 @@ module video_timing (
     bit [12:0] h_start;  // C in datasheet
     bit [12:0] h_sync;  // E in datasheet
 
+    // Allows moving videotiming to the left
+    // to counter pipeline latencies
+    localparam kHBlankOffset = 1;
+
     always_comb begin
         if (st && cf) begin
             h_total  = 120;
@@ -47,7 +51,7 @@ module video_timing (
 
         h_total  = h_total * ClksPerCycle;
         h_active = h_active * ClksPerCycle;
-        h_start  = h_start * ClksPerCycle;
+        h_start  = h_start * ClksPerCycle - kHBlankOffset;
         h_sync   = h_sync * ClksPerCycle;
     end
 

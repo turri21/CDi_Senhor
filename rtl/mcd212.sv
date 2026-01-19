@@ -445,6 +445,7 @@ module mcd212 (
 
     bit hblank_vt;
     bit hblank_vt_q;
+    bit hblank_vt_q2;
 
     bit vblank_latched;
     bit vblank_q;
@@ -710,10 +711,13 @@ module mcd212 (
     always_ff @(posedge clk) begin
         if (reset) begin
             hblank_vt_q <= 0;
+            hblank_vt_q2 <= 0;
             hblank <= 0;
         end else begin
             hblank_vt_q <= hblank_vt;
-            hblank <= hblank_vt_q;
+            hblank_vt_q2 <= hblank_vt_q;
+
+            hblank <= hblank_vt_q2;
         end
 
     end
@@ -869,13 +873,51 @@ module mcd212 (
         if (clut_we1) clut_addr1 = clut_wr_addr1;
     end
 
+    typedef struct packed {
+        bit en;  //1 = mosaic on
+        bit [22:8] reserved;
+        bit [7:0] z;  // 1 normal, 2-255 mosaic effect
+    } mosaic_pixel_hold_factor_register_t;
+
+    mosaic_pixel_hold_factor_register_t mosaic_pixel_hold_factor_register_plane_a;
+    mosaic_pixel_hold_factor_register_t mosaic_pixel_hold_factor_register_plane_b;
+    bit [7:0] pixel_hold_cnt_a;
+    bit [7:0] pixel_hold_cnt_b;
+
+    bit pixel_hold_cnt_latch_a;
+    bit pixel_hold_cnt_latch_b;
+
     always_ff @(posedge clk) begin
         rgb555 <= {synchronized_pixel0, synchronized_pixel1};
+
+        plane_a_visible_q <= plane_a_visible;
+        plane_b_visible_q <= plane_b_visible;
+
+        pixel_hold_cnt_latch_a <= pixel_hold_cnt_a == 0 || !mosaic_pixel_hold_factor_register_plane_a.en;
+        pixel_hold_cnt_latch_b <= pixel_hold_cnt_b == 0 || !mosaic_pixel_hold_factor_register_plane_b.en;
 
         if (new_line) begin
             synchronized_pixel0 <= 0;
             synchronized_pixel1 <= 0;
+            pixel_hold_cnt_a <= 0;
+            pixel_hold_cnt_b <= 0;
+
         end else begin
+            if (pixel_hold_cnt_latch_a) plane_a_q <= plane_a;
+            if (pixel_hold_cnt_latch_b) plane_b_q <= plane_b;
+
+            if (new_pixel_plane_a && !hblank_vt_q2) begin
+                if (pixel_hold_cnt_a >= mosaic_pixel_hold_factor_register_plane_a.z - 1)
+                    pixel_hold_cnt_a <= 0;
+                else pixel_hold_cnt_a <= pixel_hold_cnt_a + 1;
+            end
+
+            if (new_pixel_plane_b && !hblank_vt_q2) begin
+                if (pixel_hold_cnt_b >= mosaic_pixel_hold_factor_register_plane_b.z - 1)
+                    pixel_hold_cnt_b <= 0;
+                else pixel_hold_cnt_b <= pixel_hold_cnt_b + 1;
+            end
+
             if (rle0_out.write && rle0_out.strobe) synchronized_pixel0 <= rle0_out.pixel;
             if (rle1_out.write && rle1_out.strobe) synchronized_pixel1 <= rle1_out.pixel;
 
@@ -894,6 +936,9 @@ module mcd212 (
                 };
         end
     end
+
+    wire new_pixel_plane_a = image_coding_method_register.cm13_10_planea == 4'b1011 ? new_pixel_hires : new_pixel_lores;
+    wire new_pixel_plane_b = image_coding_method_register.cm23_20_planeb == 4'b1011 ? new_pixel_hires : new_pixel_lores;
 
     always_ff @(posedge clk) begin
         if (ica0_reload_vsr) `dp_vsr(("Reload VSR0 %x", ica0_vsr));
@@ -960,7 +1005,9 @@ module mcd212 (
     bit [5:0] weight_a;
     bit [5:0] weight_b;
 
+    // Y Position of active pixels. Used for cursor sprite
     bit [9:0] active_line = 0;
+    // Always high resolution pixels, used for Region effects
     bit [9:0] active_pixel = 0;
 
     bit [15:0] active_cursor_line;
@@ -980,20 +1027,25 @@ module mcd212 (
 
     bit [1:0] subpixelcnt;
     assign new_pixel_lores = subpixelcnt[1:0] == 0 && !hblank_vt && !vblank;
-    assign new_pixel_hires = subpixelcnt[0] == 0  && !hblank_vt && !vblank;
+    assign new_pixel_hires = subpixelcnt[0] == 0 && !hblank_vt && !vblank;
+
+    bit inside_cursor_window_q;
+    bit cursor_pixel_q;
 
     // mouse cursor
     always_ff @(posedge clk) begin
         if (hblank_vt) subpixelcnt <= 0;
         else subpixelcnt <= subpixelcnt + 1;
 
-        if (hblank) active_pixel <= 0;
+        if (hblank_vt_q) active_pixel <= 0;
         else if (new_pixel_hires) active_pixel <= active_pixel + 1;
 
         if (vblank) active_line <= 0;
         else if (new_line) active_line <= active_line + 1;
 
         active_cursor_line <= cursor[4'(active_line-cursor_position_reg.y)];
+        inside_cursor_window_q <= inside_cursor_window;
+        cursor_pixel_q <= cursor_pixel;
 
         if (cursor_control_register.cuw) begin
             // Double Resolution
@@ -1046,6 +1098,9 @@ module mcd212 (
     // color mixing
     rgb888_s plane_a;
     rgb888_s plane_b;
+    rgb888_s plane_a_q;
+    rgb888_s plane_b_q;
+
     rgb555_s rgb555;
 
     function clut_entry_s RGB888ToClut(input rgb888_s rgb);
@@ -1056,6 +1111,9 @@ module mcd212 (
 
     bit plane_a_visible;
     bit plane_b_visible;
+
+    bit plane_a_visible_q;
+    bit plane_b_visible_q;
 
     bit [1:0] region_flags = 0;
 
@@ -1235,7 +1293,7 @@ module mcd212 (
         vidout.r = backdrop_color_register.r ? 8'hff : 0;
         vidout.g = backdrop_color_register.g ? 8'hff : 0;
         vidout.b = backdrop_color_register.b ? 8'hff : 0;
-        backdrop_pixel = (!plane_a_visible && !plane_b_visible);
+        backdrop_pixel = (!plane_a_visible_q && !plane_b_visible_q);
         if (!backdrop_color_register.y) begin
             // Half brightness
             vidout.r[7] = 0;
@@ -1246,27 +1304,27 @@ module mcd212 (
         if (transparency_control_register.mx) begin
             // No Mix. Only overlay
             if (plane_b_in_front_of_a) begin
-                if (plane_a_visible) vidout = plane_a;
-                if (plane_b_visible) vidout = plane_b;
+                if (plane_a_visible_q) vidout = plane_a_q;
+                if (plane_b_visible_q) vidout = plane_b_q;
             end else begin
-                if (plane_b_visible) vidout = plane_b;
-                if (plane_a_visible) vidout = plane_a;
+                if (plane_b_visible_q) vidout = plane_b_q;
+                if (plane_a_visible_q) vidout = plane_a_q;
             end
         end else begin
             // Perform mixing
-            if (plane_a_visible && plane_b_visible) begin
-                vidout.r = clamped_mix(plane_a.r, plane_b.r);
-                vidout.g = clamped_mix(plane_a.g, plane_b.g);
-                vidout.b = clamped_mix(plane_a.b, plane_b.b);
-            end else if (plane_a_visible) begin
-                vidout = plane_a;
-            end else if (plane_b_visible) begin
-                vidout = plane_b;
+            if (plane_a_visible_q && plane_b_visible_q) begin
+                vidout.r = clamped_mix(plane_a_q.r, plane_b_q.r);
+                vidout.g = clamped_mix(plane_a_q.g, plane_b_q.g);
+                vidout.b = clamped_mix(plane_a_q.b, plane_b_q.b);
+            end else if (plane_a_visible_q) begin
+                vidout = plane_a_q;
+            end else if (plane_b_visible_q) begin
+                vidout = plane_b_q;
             end
         end
 
-        if (debug_force_video_plane == 2'b01) vidout = plane_a;
-        else if (debug_force_video_plane == 2'b10) vidout = plane_b;
+        if (debug_force_video_plane == 2'b01) vidout = plane_a_q;
+        else if (debug_force_video_plane == 2'b10) vidout = plane_b_q;
 
         if (debug_limited_to_full == 1) begin
             vidout.r = limited_to_full1(vidout.r);
@@ -1279,7 +1337,7 @@ module mcd212 (
         end
 
         // cursor
-        if (cursor_pixel && inside_cursor_window && cursor_control_register.en) begin
+        if (cursor_pixel_q && inside_cursor_window_q && cursor_control_register.en) begin
             backdrop_pixel = 0;
             vidout.r = cursor_color.r ? 8'hff : 0;
             vidout.g = cursor_color.g ? 8'hff : 0;
@@ -1407,8 +1465,8 @@ module mcd212 (
                         backdrop_color_register <= ch0_register_data[3:0];
                     end
                     7'h59: begin
-                        // Mosaic Pixel Hold for Plane A
-                        // TODO is ignored
+                        // Pixel Hold for Plane A
+                        mosaic_pixel_hold_factor_register_plane_a <= ch0_register_data;
                         $display("Mosaic A %b %b", ch0_register_data[23], ch0_register_data[7:0]);
                     end
                     7'h5b: begin
@@ -1542,7 +1600,7 @@ module mcd212 (
                     end
                     7'h5A: begin
                         // Mosaic Pixel Hold for Plane B
-                        // TODO is ignored
+                        mosaic_pixel_hold_factor_register_plane_b <= ch1_register_data;
                         $display("Mosaic B %b %b", ch1_register_data[23], ch1_register_data[7:0]);
 
                     end
