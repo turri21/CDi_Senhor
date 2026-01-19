@@ -16,10 +16,7 @@ module video_timing (
     output bit vsync,
     output bit hblank,
     output bit vblank,
-    output bit new_line,
-    output bit new_pixel,
-    output bit new_pixel_hires,
-    output bit new_pixel_lores
+    output bit new_line
 );
 
     localparam bit [12:0] ClksPerCycle = 16;
@@ -143,9 +140,6 @@ module video_timing (
         vblank <= !(video_y >= v_start && video_y < (v_start + v_active));
     end
 
-    assign new_pixel_lores = video_x[1:0] == 1 && !hblank && !vblank;
-    assign new_pixel_hires = video_x[0] == 1 && !hblank && !vblank;
-    assign new_pixel = (cm ? video_x[0] == 1 : video_x[1:0] == 1) && !hblank && !vblank;
 
 `ifdef VERILATOR
     wire [4:0] timing_param = {sm, cf, st, cm, fd};
@@ -156,16 +150,6 @@ module video_timing (
 
         if (timing_param_q != timing_param) begin
             $display("Video Timing Parameters: %b", timing_param);
-        end
-    end
-
-    int pixels_per_line = 0;
-    always_ff @(posedge clk) begin
-        if (new_line) begin
-            //$display(pixels_per_line);
-            pixels_per_line <= 0;
-        end else if (new_pixel) begin
-            pixels_per_line <= pixels_per_line + 1;
         end
     end
 `endif

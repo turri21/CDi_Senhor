@@ -439,9 +439,10 @@ module mcd212 (
     wire [12:0] video_x;
     bit new_frame  /*verilator public_flat_rd*/;
     wire new_line  /*verilator public_flat_rd*/;
-    wire new_pixel;
+
     wire new_pixel_lores;
     wire new_pixel_hires;
+
     bit hblank_vt;
     bit hblank_vt_q;
 
@@ -490,10 +491,7 @@ module mcd212 (
         .vsync(vsync),
         .hblank(hblank_vt),
         .vblank(vblank),
-        .new_line(new_line),
-        .new_pixel(new_pixel),
-        .new_pixel_lores(new_pixel_lores),
-        .new_pixel_hires(new_pixel_hires)
+        .new_line(new_line)
     );
 
 
@@ -836,10 +834,10 @@ module mcd212 (
         .strobe(dyuv1_strobe)
     );
 
-    assign rle0_out.strobe = new_pixel;
-    assign rle1_out.strobe = new_pixel;
-    assign dyuv0_strobe = new_pixel;
-    assign dyuv1_strobe = new_pixel;
+    assign rle0_out.strobe = new_pixel_lores;
+    assign rle1_out.strobe = new_pixel_lores;
+    assign dyuv0_strobe = new_pixel_lores;
+    assign dyuv1_strobe = new_pixel_lores;
 
     bit [7:0] synchronized_pixel0;
     bit [7:0] synchronized_pixel1;
@@ -980,8 +978,15 @@ module mcd212 (
 
     localparam CURSOR_BLINK_PERIOD = 12;
 
+    bit [1:0] subpixelcnt;
+    assign new_pixel_lores = subpixelcnt[1:0] == 0 && !hblank_vt && !vblank;
+    assign new_pixel_hires = subpixelcnt[0] == 0  && !hblank_vt && !vblank;
+
     // mouse cursor
     always_ff @(posedge clk) begin
+        if (hblank_vt) subpixelcnt <= 0;
+        else subpixelcnt <= subpixelcnt + 1;
+
         if (hblank) active_pixel <= 0;
         else if (new_pixel_hires) active_pixel <= active_pixel + 1;
 
