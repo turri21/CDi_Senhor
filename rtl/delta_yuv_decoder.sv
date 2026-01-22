@@ -45,13 +45,6 @@ module delta_yuv_decoder (
 
     yuv_s current_color;
 
-    // Counting the words. Might be not the best solution.
-    bit [8:0] wordcnt;
-    always_ff @(posedge clk) begin
-        if (reset) wordcnt <= st ? 360 : 384;
-        else if (src.write && src.strobe) wordcnt <= wordcnt - 1;
-    end
-
     function [7:0] clamp8(input signed [9:0] val);
         if (val > 255) clamp8 = 255;
         else if (val < 0) clamp8 = 0;
@@ -119,7 +112,7 @@ module delta_yuv_decoder (
 
     always_comb begin
         src.strobe = 0;
-        if (src.write && !write && wordcnt != 0) begin
+        if (src.write && !write) begin
             if (state == STATE_UY || state == STATE_VY) src.strobe = 1;
         end
     end
@@ -144,7 +137,7 @@ module delta_yuv_decoder (
         end else begin
             case (state)
                 IDLE: begin
-                    if (src.write && wordcnt != 0) begin
+                    if (src.write) begin
                         //When the first data arrives we can be sure that ICA/DCA has
                         // updated the Absolute Start YUV
                         current_color <= absolute_start_yuv;
@@ -157,7 +150,7 @@ module delta_yuv_decoder (
                     end
                 end
                 STATE_UY: begin
-                    if (src.write && !write) begin
+                    if ((src.write || delayed_write != 0) && !write) begin
                         // First byte contains U0 and Y0
                         t0.y <= t0.y + dyuv_deltas[src.pixel[3:0]];
                         t1.y <= t0.y;
@@ -176,7 +169,7 @@ module delta_yuv_decoder (
                     end
                 end
                 STATE_VY: begin
-                    if (src.write && !write) begin
+                    if ((src.write || delayed_write != 0) && !write) begin
                         // Second byte contains V0 and Y1
                         t0.y <= t0.y + dyuv_deltas[src.pixel[3:0]];
                         t1.y <= t0.y;

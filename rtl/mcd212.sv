@@ -818,7 +818,7 @@ module mcd212 (
 
     delta_yuv_decoder dyuv0 (
         .clk,
-        .reset(reset || ica0_reload_vsr || vblank || new_line),
+        .reset(reset || ica0_reload_vsr || vblank || hsync),
         .st(control_register_crsr1w.st),
         .absolute_start_yuv(dyuv0_abs_start),
         .src(dyuv0_in),
@@ -829,7 +829,7 @@ module mcd212 (
 
     delta_yuv_decoder dyuv1 (
         .clk,
-        .reset(reset || ica1_reload_vsr || vblank || new_line),
+        .reset(reset || ica1_reload_vsr || vblank || hsync),
         .st(control_register_crsr1w.st),
         .absolute_start_yuv(dyuv1_abs_start),
         .src(dyuv1_in),

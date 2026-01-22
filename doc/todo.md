@@ -6,6 +6,7 @@
 * Frequency response of CDIC and MPEG audio output might not be 100% accurate
 * Add support for an emulated Peacekeeper Revolver Light Gun
 * "Uncover featuring Tatjana (Europe)" regressions?
+    * Corruption of MPEG footage in single step mode?
 * Regression of "Historia del Arte Español" (working in DVC rc2)
     * Blank video?
 * Fix Christmas Crisis bonus ride
@@ -14,7 +15,8 @@
 * "Mad Dog McCree (Europe)" seems to have corruption on macroblock level to the bottom right of the screen
 * "The Last Bounty Hunter", "Drug Wars", "Mad Dog 2", "Who Shot Johnny Rock?" have regressions (works in rc2)?
 * "Chaos Control" has video glitches?
-* "The Lost Ride" has video glitches. Wrong frame width? SEQ HDR problem?
+* "The Lost Ride" has video and audio glitches
+    * It changes Sequence Parameters on the fly
 * "Crime Patrol" has video glitches?
 * "Solar Crusade" has video glitches?
 * "Brain Dead 13" has video glitches when switching MPEG streams

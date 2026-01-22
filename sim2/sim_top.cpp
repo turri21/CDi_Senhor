@@ -543,7 +543,7 @@ class CDi {
                 printf(" %d %d ", width, height);
                 // Check plausibility
                 if ((width > 1000) || (height > 1000))
-                    status = 1;
+                    printf("UNPLAUSIBLE!\n");
             }
 
             if (func == SttFunction::SS_DC) {
@@ -580,6 +580,15 @@ class CDi {
         }
 
         call_func = SS_Opt; // Invalidate
+    }
+
+    // Keep pressing B1 until the broken game is reached
+    void lost_ride_pal() {
+        if (frame_index > 150) {
+            if ((frame_index % 40) == 10) {
+                press_button_signal = true;
+            }
+        }
     }
 
     /// Presses buttons until game is reached
