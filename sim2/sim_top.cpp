@@ -547,7 +547,9 @@ class CDi {
             }
 
             if (func == SttFunction::SS_DC) {
-                printf(" %s", ss_dc_FunctionToString(cpu_d[2]));
+                printf(" %s at video pos %d %d", ss_dc_FunctionToString(cpu_d[2]),
+                       dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_x,
+                       dut.rootp->emu__DOT__cditop__DOT__mcd212_inst__DOT__video_y);
                 if (cpu_d[2] == 0x0a && (cpu_d[6] & 0xF0000000) == 0x40000000) {
                     printf(" VSR %x", cpu_d[6] & 0xFFFFFFF);
                 }

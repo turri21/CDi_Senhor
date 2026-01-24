@@ -177,6 +177,8 @@ by emulation errors but are also present on the real machine.
   * Yes, those exist on real hardware as well and are maybe hidden by overscan
   * A side note, "Dr. Dearth" was probably filmed in front of a blue screen, but the cut out is not very good.
     Blue pixels at the edges are visible on real hardware as well.
+* "The Lost Ride" sometimes has an unexpected mirrored column of pixels on the right side of the screen
+  * This happens on real hardware as well. This seems to be an oversight by the developer.
 
 ## Simulation
 

@@ -172,7 +172,7 @@ module mcd212 (
 
     always_comb begin
         sdram_owner_next = CPU;
-        if (cpu_starve) sdram_owner_next = CPU_STARVE;
+        if (cpu_starve && cs_ram) sdram_owner_next = CPU_STARVE;
         if (file1_as) sdram_owner_next = FILE1;
         if (file0_as) sdram_owner_next = FILE0;
         if (ica1_as) sdram_owner_next = ICA_DCA1;

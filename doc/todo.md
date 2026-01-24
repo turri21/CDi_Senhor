@@ -26,8 +26,6 @@
 * Leaving the cake Puzzle in 7th Guest freezes (everytime?)
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
-* Black flicker during intro of Ultimate Noah's Ark in 60 Hz mode
-    * A workaround is CPU overclocking. Problem not visible on real machine.
 * Give a signal to the user when CPU data stalling occured
 * Find a better solution for CD data stalling (take a screenshot)
     * PSX core seems to halt the whole machine to avoid this situation
