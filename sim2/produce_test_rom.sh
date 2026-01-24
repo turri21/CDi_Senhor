@@ -1,6 +1,6 @@
 set -e
 
-vasmm68k_mot -Fbin -m68000 $1.asm -o $1.rom
+vasmm68k_mot -Fbin -m68000 testroms/$1.asm -o $1.rom
 
 xxd -p -c2 $1.rom cdi200.mem
 
