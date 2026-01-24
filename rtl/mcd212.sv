@@ -1467,7 +1467,8 @@ module mcd212 (
                     7'h59: begin
                         // Pixel Hold for Plane A
                         mosaic_pixel_hold_factor_register_plane_a <= ch0_register_data;
-                        $display("Mosaic A %b %b", ch0_register_data[23], ch0_register_data[7:0]);
+                        `dp_raster(
+                            ("Mosaic A %b %b", ch0_register_data[23], ch0_register_data[7:0]));
                     end
                     7'h5b: begin
                         // Weight Factor for Plane A
@@ -1601,7 +1602,8 @@ module mcd212 (
                     7'h5A: begin
                         // Mosaic Pixel Hold for Plane B
                         mosaic_pixel_hold_factor_register_plane_b <= ch1_register_data;
-                        $display("Mosaic B %b %b", ch1_register_data[23], ch1_register_data[7:0]);
+                        `dp_raster(
+                            ("Mosaic B %b %b", ch1_register_data[23], ch1_register_data[7:0]));
 
                     end
                     default: begin
@@ -1650,7 +1652,11 @@ module mcd212 (
             region_flags <= 0;
             rf0_index <= 0;
             rf1_index <= 0;
-        end else begin
+
+            // Only execute region effects when active_pixel is incrementing at the same time.
+            // To avoid repeated execution due to 30 MHz vs 15 MHz, only
+            // do it before the next hires pixel
+        end else if (!hblank_vt_q && !new_pixel_hires) begin
             if (image_coding_method_register.nr) begin
                 // Implicit Control of Regions Flags
                 // RF0 is handles by Region Control Registers 0123 in that order
