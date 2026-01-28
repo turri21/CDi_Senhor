@@ -128,7 +128,7 @@ void main(void)
 
 	fifo_ctrl->signal_decoding_started = 1;
 
-	int timeout = 100000;
+	int timeout = 100;
 
 	while (timeout)
 	{
@@ -139,7 +139,7 @@ void main(void)
 			// Give some feedback to the user that we are running
 			cnt++;
 			fifo_ctrl->signal_frame_decoded = cnt;
-			timeout = 100000;
+			timeout = 100;
 		}
 		else
 		{
