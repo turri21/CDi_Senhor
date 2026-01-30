@@ -378,7 +378,7 @@ module mpeg_audio (
     end
 
     // Used to reduce the speed of zeroing after playback has ended
-    bit dc_bias_cnt;
+    bit [6:0] dc_bias_cnt;
     bit audio_fifo_output_enabled = 0;
     assign playback_active = audio_fifo_output_enabled;
 
@@ -391,7 +391,7 @@ module mpeg_audio (
     end
 
     always_ff @(posedge clk) begin
-        dc_bias_cnt <= !dc_bias_cnt;
+        dc_bias_cnt <= dc_bias_cnt + 1;
 
         xa_fifo_out[0].strobe <= 0;
         xa_fifo_out[1].strobe <= 0;
@@ -418,7 +418,7 @@ module mpeg_audio (
                     audio_left <= xa_fifo_out[0].sample;
                     audio_right <= xa_fifo_out[1].sample;
                 end
-            end else if (dc_bias_cnt) begin
+            end else if (dc_bias_cnt == 0) begin
                 // Slowly move the current sample to zero
                 // to remove pops when playing the next samples
 

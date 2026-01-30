@@ -162,7 +162,7 @@ module audioplayer (
     end
 
     // Used to reduce the speed of zeroing after playback has ended
-    bit dc_bias_cnt;
+    bit [4:0] dc_bias_cnt;
 
     // To avoid buffer underflows between audio sectors,
     // we are waiting exactly two 37.8 kHz samples until playback starts.
@@ -174,7 +174,7 @@ module audioplayer (
     bit finished_buffer_playback_latched;
 
     always_ff @(posedge clk) begin
-        dc_bias_cnt <= !dc_bias_cnt;
+        dc_bias_cnt <= dc_bias_cnt + 1;
 
         decoder_idle_q <= decoder_idle;
 
@@ -216,7 +216,7 @@ module audioplayer (
                     audio_left <= xa_fifo_out[0].sample;
                     audio_right <= xa_fifo_out[1].sample;
                 end
-            end else if (dc_bias_cnt) begin
+            end else if (dc_bias_cnt == 0) begin
                 // Slowly move the current sample to zero
                 // to remove pops when playing the next samples
 
