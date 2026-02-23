@@ -84,6 +84,19 @@ With SLAVE 2.0
 
     87 20 ff  (Notice the missing A1)
 
+
+### Eject button on front panel
+
+With SLAVE 3.2
+
+    a1 87 00 ff
+
+With SLAVE 2.0
+
+    87 08 (??)
+
+This might be totally wrong, but the missing A1 is again visibly.
+
 ## PAL/NTSC responses on F6
 
     PAL  f6 02
@@ -105,7 +118,7 @@ With SLAVE 2.0
     0059 Checked on Unmute
     0063 Bit 4 set on channel 0 83?
     0064 Timer High (ACHR) is stored here at 0571
-         Written after Unmute but not always. There is a 
+         Written after Unmute but not always. There is a
          comparsion involved between ACHR and 0x0064. Fading?
     0066 SERVO SPI Byte 0
     0067 SERVO SPI Byte 1

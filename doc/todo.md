@@ -1,5 +1,6 @@
 # TODOs and known issues
 
+* Check random audio video out of sync (e.g. Mad Dog McCree)
 * Check correct timing of DVC clipping functionality when scroll bit is reset
 * Regression of "The Apprentice"?
     * The audio on the title screen sometimes has crackles. (~5% chance of occurrence)

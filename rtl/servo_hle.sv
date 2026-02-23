@@ -6,7 +6,8 @@ module servo_hle (
     output bit quirk_force_mode_fault,
     input audio_cd_in_tray,
     input cd_img_mount,
-    input cd_img_mounted
+    input cd_img_mounted,
+    output tray_is_closed
 );
 
     enum bit [6:0] {
@@ -33,6 +34,8 @@ module servo_hle (
         CLOSED,
         OPEN
     } tray_state = CLOSED;
+
+    assign tray_is_closed = tray_state == CLOSED;
 
     // Some measurements from a 210/05
     // A closed tray with Audio CD is B0 00 01 25
@@ -136,6 +139,7 @@ module servo_hle (
                     if (cd_img_mount) begin
                         disc_state <= audio_cd_in_tray ? AUDIO : CDI;
                         com_state <= PROVIDE_B0_10;
+                        tray_state <= CLOSED;
                         quirk_force_mode_fault <= 1;
                         $display("Update of disc state");
                     end

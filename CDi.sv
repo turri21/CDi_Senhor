@@ -234,6 +234,7 @@ module emu (
         "P2O[12],SERVO Audio CD,No,Yes;",
         "P2O[17],Disable VCD pixel clock,No,Yes;",
         "P2O[18],Activate VCD filter,Yes,No;",
+        "P2O[19],CD image live update,No,Yes;",
 
         "P3,Hardware Config;",
         "P3-;",
@@ -312,10 +313,19 @@ module emu (
 
     wire [ 64:0] hps_rtc;
 
+    // To reduce to a single clock cycle
+    bit          cd_media_change_q;
+    bit          nvram_media_change_q;
+
     // Flag which becomes active for some time when an NvRAM image is mounted
-    wire         nvram_img_mount = nvram_media_change && img_size != 0;
+    wire         nvram_img_mount = nvram_media_change && !nvram_media_change_q && img_size != 0;
     // Flag which becomes active for some time when an NvRAM image is mounted
-    wire         cd_img_mount = cd_media_change && img_size != 0;
+    wire         cd_img_mount = cd_media_change && !cd_media_change_q && img_size != 0;
+
+    always_ff @(posedge clk_sys) begin
+        cd_media_change_q <= cd_media_change;
+        nvram_media_change_q <= nvram_media_change;
+    end
 
 `ifndef VERILATOR
     hps_io #(
@@ -567,9 +577,19 @@ module emu (
         end
     end
 
+    // Latch which is set, when CD reading was performed at least once
+    // If set, we must perform a reset when changing the disc
+    // If not set, we can change the image even with a closed tray while keeping the machine running
+    bit cd_hps_req_during_power_cycle;
+
     assign prepare_sdram = cditop_reset;
     always_ff @(posedge clk_sys) begin
-        cditop_reset <= RESET || status[0] || buttons[1] || ioctl_download || !ram_zero_done || (nvram_img_mount && enable_reset_on_nvram_img_mount);
+        cditop_reset <= RESET || status[0] || buttons[1] || ioctl_download || !ram_zero_done ||
+                (nvram_img_mount && enable_reset_on_nvram_img_mount) || 
+                (cd_img_mount && cd_hps_req_during_power_cycle && tray_is_closed && enable_reset_on_cd_img_mount);
+
+        if (cditop_reset) cd_hps_req_during_power_cycle <= 0;
+        else if (cd_hps_req) cd_hps_req_during_power_cycle <= 1;
     end
 
     sdram sdram (
@@ -707,6 +727,7 @@ module emu (
     wire overclock_pointing_device = 1;
     wire [1:0] debug_force_video_plane = 0;
     wire enable_reset_on_nvram_img_mount = 0;
+    wire enable_reset_on_cd_img_mount = 0;
     wire [1:0] debug_limited_to_full = 0;
     wire audio_cd_in_tray = 0;
     wire config_disable_cpu_starve = 1;
@@ -725,6 +746,7 @@ module emu (
     wire overclock_pointing_device = status[5];
     wire [1:0] debug_force_video_plane = status[7:6];
     wire enable_reset_on_nvram_img_mount = !status[8];
+    wire enable_reset_on_cd_img_mount = !status[19];
     wire [1:0] debug_limited_to_full = status[10:9];
     wire config_disable_cpu_starve = status[11];
     wire audio_cd_in_tray = status[12];
@@ -905,8 +927,10 @@ module emu (
         .cd_data(cd_data),
         .cd_sector_tick(cd_sector_tick),
         .cd_sector_delivered(cd_sector_delivered),
-        .cd_img_mount(cd_img_mount),
+
+        .cd_img_mount  (cd_img_mount),
         .cd_img_mounted(cd_img_mounted),
+        .tray_is_closed,
 
         .audio_left (AUDIO_L),
         .audio_right(AUDIO_R),
@@ -964,6 +988,8 @@ module emu (
 
     // Is set, if CD image is mounted and usable
     bit cd_img_mounted = 0;
+
+    wire tray_is_closed;
 
     // Used to detect changes of OSD_STATUS
     bit OSD_STATUS_q;

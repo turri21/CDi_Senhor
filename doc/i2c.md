@@ -132,6 +132,43 @@ Write SLAVE 01 0000 0 1 1 Z2
 -- I2C DATA Write 38     W2
 -- I2C DATA Write c0     Z2 but altered. bit 6 and 7 are always set? Only symbols
 
+## Examples from model 210/05
+
+### No button pressed
+
+Read operation. What does it mean?
+The lower nibble of the first byte always seems to change
+with every read.
+
+    0x80 0x00
+    0x86 0x00
+    0x85 0x00
+    0x83 0x00
+    0x81 0x00
+    0x87 0x00
+    0x86 0x00
+    0x84 0x00
+    0x83 0x00
+    0x81 0x00
+    0x87 0x00
+    0x86 0x00
+    0x84 0x00
+    0x82 0x00
+    0x81 0x00
+    0x87 0x00
+    
+Is this a press on play?
+
+    0x07 0x20
+
+Is this a press on stop?
+
+    0x07 0x04
+
+This is Eject then
+
+    0x07 0x08
+
 ## Examples from model 210/20
 
 ### Empty Display

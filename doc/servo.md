@@ -39,6 +39,19 @@ Now Eject is pressed again to close the tray
     B0 00 00 25 afterwards
     B0 00 04 25 settled
 
+### Open tray pushed in
+
+    b0 00 03 23 No disc? Closing?
+    b0 00 03 24 No disc? Closed
+    b0 00 00 25 Unknown disc? Closed again? Or spinning up?
+    b0 00 04 25 CDI, Closed
+
+### Closed tray ripped open by force
+
+    b0 00 03 25 No disc? Closed but wanting to open? Stopping spindle?
+    b0 00 03 28 Opening
+    b0 00 03 21 Reached end position, Open
+    b0 00 03 21 Again?
 
 ### With Audio CD in closed tray
 
@@ -253,7 +266,7 @@ Then a pause of 40ms
 
     MOSI 0xAA AA AA AA AA  requested by SERVO
     MISO 0x03 B0 00 00 0B
-    
+
 Then a pause of 347ms
 
     MOSI 0xAA AA AA AA AA  requested by SERVO
@@ -292,7 +305,7 @@ After 360ms
     MOSI 0xAA AA AA AA AA requested by SERVO
     MISO 0xAB B0 00 04 0E
 
-After 60ms 
+After 60ms
 
     MOSI 0xE1 00 02 13 requested by SLAVE
     MISO 0x55 C3 01 05

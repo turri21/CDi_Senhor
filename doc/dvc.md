@@ -25,6 +25,8 @@ There are different chipsets available
 
 ## Timing of events
 
+### FMV
+
 The green book is not very clear about the timing of the OS events.
 This is a measurement (using soundcard) of the UART on the top channel
 and video on the bottom.
@@ -34,6 +36,13 @@ When the application is getting a PIC event, a character is printed.
 
 It clearly shows that the PIC event is more related to the start of a picture
 and not the finished display of one.
+
+### FMA
+
+MA_TRIG_DEC is occurring without much delay before samples are provided to the DAC.
+If there is a decoding delay, it is about 4ms and therefore can be ignored.
+
+This means that the timing of MA_TRIG_DEC can be compared in software to check for synchronization.
 
 ## Green Book
 
@@ -333,18 +342,34 @@ Memory Map
 
   FMA (no source code available?)
 
+    00e5029a MA_Play
     00e502fe Stream Number transferred to register
     00e504f0 IRQ Routine
     00e5120c FMA Status 3002 is read here (ANDed with 0x38?)
+    00e50e6a DMA Transfer to FMA
     
     00dfb8f0 FMA Driver state? (A2)
-
+    00dfb3e0 FMA Driver state? (A2)
     00dfb730 FMA Driver state? (A2)
-    (0x120,A2) Interrupt enable mirror (written to 0x301c)
-    (0x12c,A2) ?
-    (0x13b,A2) ?
-    (0x150,A2) Interrupt state from 0x301a stored here?
-    (0x0,A2) Address of FMA (must be 00e03000)
+
+    long* (0x8e,A2)
+    long* (0x96,A2)
+    long* (0x114,A2)
+    short* (0x120,A2) Interrupt enable mirror (written to 0x301c)
+    long* (0x122,A2) DMA memory Address?
+    long* (0x126,A2) DMA something? Length in bytes?
+    short* (0x12a,A2) Written after DMA transfer
+    char* (0x12c,A2) ?
+    long* (0x12e,A2) DMA memory address for something of size 0xc?
+    char* (0x137,A2)
+    char* (0x139,A2)
+    char* (0x13a,A2) ?
+    char* (0x13b,A2) ?
+    char* (0x140,A2)
+    long* (0x14c,A2)
+    short* (0x150,A2) Interrupt state from 0x301a stored here?
+    char* (0x152,A2)
+    long*  (0x000,A2) Address of FMA (must be 00e03000)
 
 
 V_BufStat

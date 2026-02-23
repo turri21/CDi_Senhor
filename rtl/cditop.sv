@@ -71,8 +71,9 @@ module cditop (
     input cd_sector_delivered,
     output cd_stop_sector_delivery,
 
-    input cd_img_mount,
-    input cd_img_mounted,
+    input  cd_img_mount,
+    input  cd_img_mounted,
+    output tray_is_closed,
 
     output signed [15:0] audio_left,
     output signed [15:0] audio_right,
@@ -608,7 +609,8 @@ module cditop (
         .quirk_force_mode_fault(quirk_force_mode_fault),
         .audio_cd_in_tray,
         .cd_img_mount(cd_img_mount),
-        .cd_img_mounted(cd_img_mounted)
+        .cd_img_mounted(cd_img_mounted),
+        .tray_is_closed
     );
 
     always_comb begin
@@ -663,7 +665,39 @@ module cditop (
     // Only for gtkwave to align video images with the signals in the waveform
     int frame_index  /*verilator public_flat_rw*/;
 
-    // Tool to observe variables in fdrvs1 driver code
+    // Tool to observe variables in madriv module
+    struct {
+        bit [31:0] dma_addr;    // 0x122
+        bit [15:0] irq_stat;    // 0x120
+        bit [15:0] irq_enable;  // 0x150
+    } madriv = '{default: 0};
+    bit [23:0] madriv_static  /*verilator public_flat_rw*/ = 24'hdfb770;
+
+    always @(posedge clk30) begin
+        if (madriv_static != 0 && bus_ack && write_strobe) begin
+            if (addr_byte == madriv_static + 24'h122) begin
+                madriv.dma_addr[31:16] = cpu_data;
+                $display("dma_addr = %x", {cpu_data, madriv.dma_addr[15:0]});
+            end
+
+            if (addr_byte == madriv_static + 24'h124) begin
+                madriv.dma_addr[15:0] = cpu_data;
+                $display("dma_addr = %x", {madriv.dma_addr[31:16], cpu_data});
+            end
+
+            if (addr_byte == madriv_static + 24'h0150) begin
+                madriv.irq_stat = cpu_data;
+                $display("irq_stat = %x", cpu_data);
+            end
+
+            if (addr_byte == madriv_static + 24'h0120) begin
+                madriv.irq_enable = cpu_data;
+                $display("irq_enable = %x", cpu_data);
+            end
+        end
+    end
+
+    // Tool to observe variables in fdrvs1 module
     struct {
         bit [7:0] V_StepDone; // 0x17a char*
         bit [7:0] V_BufStat;  // 0x17b char*

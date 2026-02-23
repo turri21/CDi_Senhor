@@ -442,12 +442,15 @@ enum SttFunction {
     MA_Trigger = 0x0126,
     MA_SLink = 0x0127,
     MA_Jump = 0x0128,
+    MA_ReqSync = 0x0129,
 
     MV_Create = 0x0130,
     MV_Info = 0x0131,
     MV_Status = 0x0132,
 
     MA_Create = 0x0138,
+    MA_Status = 0x0139,
+    MA_Info = 0x013A,
 };
 
 const char *sttFunctionToString(const uint16_t stt) {
@@ -738,6 +741,8 @@ const char *sttFunctionToString(const uint16_t stt) {
         return "MA_SLink";
     case SttFunction::MA_Jump:
         return "MA_Jump";
+    case SttFunction::MA_ReqSync:
+        return "MA_ReqSync";
 
     case SttFunction::MV_Create:
         return "MV_Create";
@@ -748,7 +753,10 @@ const char *sttFunctionToString(const uint16_t stt) {
 
     case SttFunction::MA_Create:
         return "MA_Create";
-
+    case SttFunction::MA_Status:
+        return "MA_Status";
+    case SttFunction::MA_Info:
+        return "MA_Info";
     default:
         return "Unknown system call ";
     }
