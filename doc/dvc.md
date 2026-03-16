@@ -32,7 +32,7 @@ This is a measurement (using soundcard) of the UART on the top channel
 and video on the bottom.
 When the application is getting a PIC event, a character is printed.
 
-![PIC Event relative to picture display](vmpeg_pic_timing.png)
+![PIC Event relative to picture display](pic/vmpeg_pic_timing.png)
 
 It clearly shows that the PIC event is more related to the start of a picture
 and not the finished display of one.
