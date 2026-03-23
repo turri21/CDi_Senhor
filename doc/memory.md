@@ -20,16 +20,19 @@ I assume the ATTEX limits the DRAM to 0x27fffe as these do now follow.
     0x310000                SLAVE
     0x320000 to 0x323fff    NVRAM (according to mame)
 
-    0x400000 to 0x4ffbff    ROM but only 512kB so it ends 0x80000 -> MiSTer SDRAM 0x400000 to 0x47FFFF
-    0x4ffc00 to 0x4fffdf    MCD212 SystemIO (is this even used? at least not mentioned in MAME)
+    0x400000 to 0x4ffbff    ROM but only 512kB so it ends 0x80000                           -> MiSTer SDRAM 0x400000 to 0x47FFFF
+    0x4ffc00 to 0x4fffdf    MCD212 SystemIO (is this even used?)
     0x4fffe0 to 0x4fffff    MCD212 according to MAME, channels 1+2 according to datasheet
 
-    0xd00000 to 0xdfffff    DVC RAM block 1 (according to mame) 1MB -> MiSTer SDRAM 0x100000 to 0x1fffff
-    0xe40000 to 0xe5ffff    Philips VMPEG digital video cartridge ROM (128K vmpega.rom) -> MiSTer SDRAM 0x480000
-    0xe60000 to 0xe7ffff    Mirror of vmpega.rom (due to missing address line)
-    0xe80000 to 0xefffff    DVC RAM block 2 (according to mame) 512kB -> MiSTer SDRAM 0x200000 to 0x27ffff
+    0xd00000 to 0xdfffff    VMPEG System RAM (1MB)                                          -> MiSTer SDRAM 0x100000 to 0x1fffff
+    0xe00000 to 0xe01ffe    VMPEG VCD pixel clock selection latch (mirrored a lot)
+    0xe03000 to 0xe03024    VMPEG FMA (DSP56k via indirect access)
+    0xe04000 to 0xe040f4    VMPEG FMV (MCD251)
+    0xe40000 to 0xe5ffff    VMPEG ROM (128K vmpega.rom)     -> MiSTer SDRAM 0x480000
+    0xe60000 to 0xe7ffff    VMPEG ROM (mirrored)
+    0xe80000 to 0xefffff    VMPEG MCD251 Memory for Video decoding (512kB)                  -> MiSTer SDRAM 0x200000 to 0x27ffff
 
-    0xf00000 to 0xf00068    Dummy player shell which starts a CD-i application (by cdifan)
+    0xf00000 to 0xf00068    Dummy player shell which starts a CD-i application (by CD-i Fan)
 
 ## Bus Error
 
