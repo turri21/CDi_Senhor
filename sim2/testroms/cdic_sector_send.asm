@@ -22,7 +22,7 @@ main:
 	move.w #$2480,$303FFC ; Interrupt Vector
 	move.w #$002c,$303C00 ; Read Mode 1
 	move.l #$21080000,$303C02 ; Time Register
-	move.w #$8000,$303FFE ; Start the Read
+	move.w #$C000,$303FFE ; Start the Read
 
 	jsr waitforirq
 

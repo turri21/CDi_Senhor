@@ -17,5 +17,5 @@ fi
 echo "Will be named $release_filename"
 echo
 
-scp output_files/CDi.rbf root@mister:/media/fat/$release_filename
+sshpass -p 1 scp output_files/CDi.rbf root@mister:/media/fat/$release_filename
 echo "Created /media/fat/$release_filename on MiSTer !"

@@ -90,7 +90,7 @@ module cditop (
 
     parallelel_spi slave_servo_spi ();
 
-    (* keep *) (* noprune *) wire write_strobe  /*verilator public_flat_rd*/;
+    wire write_strobe  /*verilator public_flat_rd*/;
     wire as  /*verilator public_flat_rd*/;
     wire lds  /*verilator public_flat_rd*/;
     wire uds  /*verilator public_flat_rd*/;
@@ -100,20 +100,9 @@ module cditop (
     bit [15:0] data_in;
     wire [15:0] cpu_data_out;
     wire [23:1] addr;
-    (* keep *) (* noprune *) wire [23:0] addr_byte  /*verilator public_flat_rd*/ = {
-        addr[23:1], 1'b0
-    };
-    (* keep *) (* noprune *) wire [15:0] cpu_data  /*verilator public_flat_rd*/ = write_strobe ? cpu_data_out : data_in;
+    wire [23:0] addr_byte  /*verilator public_flat_rd*/ = {addr[23:1], 1'b0};
 
-    (* keep *) (* noprune *) bit write_strobe_q;
-    (* keep *) (* noprune *) bit [15:0] cpu_data_q;
-    (* keep *) (* noprune *) bit [23:0] addr_byte_q;
-
-    always_ff @(posedge clk30) begin
-        write_strobe_q <= write_strobe;
-        cpu_data_q <= cpu_data;
-        addr_byte_q <= addr_byte;
-    end
+    wire [15:0] cpu_data  /*verilator public_flat_rd*/ = write_strobe ? cpu_data_out : data_in;
 
     wire mcd212_bus_ack;
     bit cdic_bus_ack;
@@ -724,6 +713,7 @@ module cditop (
         bit [7:0] V_SyncDone;  // 0x12c char*
         bit [15:0] V_LCntr;  // 0xac
         bit [7:0] V_Frozen;  // 0xde char*
+        bit [31:0] V_PausedSCR; // 0x144
     } fdrvs1 = '{default: 0};
     bit [23:0] fdrvs1_static  /*verilator public_flat_rw*/ = 24'hdfb180;
     always @(posedge clk30) begin
@@ -889,6 +879,16 @@ module cditop (
             if (addr_byte == fdrvs1_static + 24'h102) begin
                 fdrvs1.V_Speed[15:0] = cpu_data;
                 $display("V_Speed = %x", {fdrvs1.V_Speed[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h144) begin
+                fdrvs1.V_PausedSCR[31:16] = cpu_data;
+                $display("V_PausedSCR = %x", {cpu_data, fdrvs1.V_PausedSCR[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h146) begin
+                fdrvs1.V_PausedSCR[15:0] = cpu_data;
+                $display("V_PausedSCR = %x", {fdrvs1.V_PausedSCR[31:16], cpu_data});
             end
         end
     end
