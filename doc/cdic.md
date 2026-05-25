@@ -276,37 +276,37 @@ The same, but *4 ! Cool
 
 ## Frog Feast
 
-[:cdic] ':maincpu' (0042A2D6): cdic_w: File Register = 0100 & ffff
-[:cdic] ':maincpu' (0042A2DC): cdic_w: Channel Register (MSW) = 0000 & ffff
-[:cdic] ':maincpu' (0042A2DC): cdic_w: Channel Register (LSW) = 0001 & ffff
-[:cdic] ':maincpu' (0042A2EC): cdic_w: Audio Channel Register = 0001 & ffff
-[:cdic] ':maincpu' (0042A304): cdic_w: Time Register (MSW) = 0035 & ffff
-[:cdic] ':maincpu' (0042A304): cdic_w: Time Register (LSW) = 4400 & ffff
+    [:cdic] ':maincpu' (0042A2D6): cdic_w: File Register = 0100 & ffff
+    [:cdic] ':maincpu' (0042A2DC): cdic_w: Channel Register (MSW) = 0000 & ffff
+    [:cdic] ':maincpu' (0042A2DC): cdic_w: Channel Register (LSW) = 0001 & ffff
+    [:cdic] ':maincpu' (0042A2EC): cdic_w: Audio Channel Register = 0001 & ffff
+    [:cdic] ':maincpu' (0042A304): cdic_w: Time Register (MSW) = 0035 & ffff
+    [:cdic] ':maincpu' (0042A304): cdic_w: Time Register (LSW) = 4400 & ffff
 
 
-CDIC CD Data 0500     0 00ff WE:0
-CDIC CD Data 0500     1 ffff WE:0
-CDIC CD Data 0500     2 ffff WE:0
-CDIC CD Data 0500     3 ffff WE:0
-CDIC CD Data 0500     4 ffff WE:0
-CDIC CD Data 0500     5 ff00 WE:0
-CDIC CD Data 0500     6 0035 WE:1 Time Code    Time Code
-CDIC CD Data 0501     7 4402 WE:1 Time Code     Mode 2
-CDIC CD Data 0502     8 0100 WE:1 File           Channel
-CDIC CD Data 0503     9 6411 WE:1 Submode Audio   Coding 8 bps, stereo
-CDIC CD Data 0504    10 0100 WE:1 Repeat Above
-CDIC CD Data 0505    11 6411 WE:1 Repeat Above
-Switching to Audio k8Bps k37Khz kStereo
-CDIC CD Data 1e00    12 0808 WE:1
-CDIC CD Data 1e01    13 0808 WE:1
-CDIC CD Data 1e02    14 0808 WE:1
-CDIC CD Data 1e03    15 0808 WE:1
-CDIC CD Data 1e04    16 0808 WE:1
-CDIC CD Data 1e05    17 0808 WE:1
-CDIC CD Data 1e06    18 0808 WE:1
-CDIC CD Data 1e07    19 0808 WE:1
-CDIC CD Data 1e08    20 00ff WE:1
-CDIC CD Data 1e09    21 0000 WE:1
+    CDIC CD Data 0500     0 00ff WE:0
+    CDIC CD Data 0500     1 ffff WE:0
+    CDIC CD Data 0500     2 ffff WE:0
+    CDIC CD Data 0500     3 ffff WE:0
+    CDIC CD Data 0500     4 ffff WE:0
+    CDIC CD Data 0500     5 ff00 WE:0
+    CDIC CD Data 0500     6 0035 WE:1 Time Code    Time Code
+    CDIC CD Data 0501     7 4402 WE:1 Time Code     Mode 2
+    CDIC CD Data 0502     8 0100 WE:1 File           Channel
+    CDIC CD Data 0503     9 6411 WE:1 Submode Audio   Coding 8 bps, stereo
+    CDIC CD Data 0504    10 0100 WE:1 Repeat Above
+    CDIC CD Data 0505    11 6411 WE:1 Repeat Above
+    Switching to Audio k8Bps k37Khz kStereo
+    CDIC CD Data 1e00    12 0808 WE:1
+    CDIC CD Data 1e01    13 0808 WE:1
+    CDIC CD Data 1e02    14 0808 WE:1
+    CDIC CD Data 1e03    15 0808 WE:1
+    CDIC CD Data 1e04    16 0808 WE:1
+    CDIC CD Data 1e05    17 0808 WE:1
+    CDIC CD Data 1e06    18 0808 WE:1
+    CDIC CD Data 1e07    19 0808 WE:1
+    CDIC CD Data 1e08    20 00ff WE:1
+    CDIC CD Data 1e09    21 0000 WE:1
 
 
 For Audio,

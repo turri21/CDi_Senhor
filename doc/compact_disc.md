@@ -59,8 +59,12 @@ SECTOR_CODING
 
 ### Dumping
 
-    $ cdrdao read-cd --read-raw --read-subchan rw_raw tocfile
-    $ cat tocfile
+    cdrdao read-cd --read-raw --read-subchan rw_raw tocfile
+    cat tocfile
+
+This image can be converted to a CHD file
+
+    chdman createcd -i mycd.toc -o mycd.chd
 
 ### Example TOC
 
