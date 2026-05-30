@@ -758,39 +758,6 @@ class CDi {
         if (time30mhz == 1300000)
             printf("Media change!\n");
 
-#ifdef SCC68070
-
-        if (dut.rootp->emu__DOT__cditop__DOT__as && !dut.rootp->emu__DOT__cditop__DOT__write_strobe &&
-            dut.rootp->emu__DOT__cditop__DOT__bus_ack && dut.rootp->emu__DOT__cditop__DOT__addr_byte < 0x60) {
-            switch (dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2) {
-            case 0: // Ignore Reset SP
-            case 1: // Ignore Reset PC
-                break;
-            case 2:
-                printf("Exception - Bus error\n");
-                break;
-            case 3:
-                printf("Exception - Address error\n");
-                break;
-            case 4:
-                printf("Exception - Illegal instruction\n");
-                status = 1;
-                break;
-            case 5:
-                printf("Exception - Division by zero\n");
-                status = 1;
-                break;
-            case 8:
-                printf("Exception - Privilege violation \n");
-                break;
-            default:
-                printf("Exception - %d ??? \n", dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2);
-                break;
-            }
-        }
-
-#endif
-
         dut.rootp->emu__DOT__nvram_media_change = (time30mhz == 2000);
         // Simulate CD data delivery from HPS
         if (dut.rootp->emu__DOT__cd_hps_req && dut.rootp->emu__DOT__cd_hps_ack == 0 &&
@@ -924,6 +891,36 @@ class CDi {
         if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__uart_tx_data_valid) {
             fputc(dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__uart_transmit_holding_register, f_uart);
             fflush(f_uart);
+        }
+
+        if (dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__trapd &&
+            dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__clkena_in) {
+            int vector = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__trap_vector;
+            switch (vector >> 2) {
+            case 0: // Ignore Reset SP
+            case 1: // Ignore Reset PC
+                break;
+            case 2:
+                printf("Exception - Bus error\n");
+                break;
+            case 3:
+                printf("Exception - Address error\n");
+                break;
+            case 4:
+                printf("Exception - Illegal instruction\n");
+                status = 1;
+                break;
+            case 5:
+                printf("Exception - Division by zero\n");
+                status = 1;
+                break;
+            case 8:
+                printf("Exception - Privilege violation \n");
+                break;
+            default:
+                printf("Exception - %d ??? \n", dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2);
+                break;
+            }
         }
 
         // Trace System Calls

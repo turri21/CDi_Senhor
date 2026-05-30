@@ -7761,14 +7761,14 @@ module tg68kdotc_kernel_0_2_2_2_2_2_0_0
   wire trap_trapv;
   wire trap_interrupt;
   wire trapmake;
-  wire trapd;
+  wire trapd /*verilator public_flat_rd*/ ;
   wire [7:0] trap_sr;
   wire make_trace;
   wire make_berr;
   wire usestackframe2;
   wire set_stop;
   wire stop;
-  wire [31:0] trap_vector;
+  wire [31:0] trap_vector /*verilator public_flat_rd*/ ;
   wire [31:0] trap_vector_vbr;
   wire [31:0] usp;
   wire [2:0] ipl_nr;
