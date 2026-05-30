@@ -1400,6 +1400,8 @@ int main(int argc, char **argv) {
     machine.dut.rootp->emu__DOT__config_auto_play = argc >= 3 ? 1 : 0;
     if (machine.dut.rootp->emu__DOT__config_auto_play) {
         fprintf(stderr, "Autoplay enabled!\n");
+    } else {
+        fprintf(stderr, "Autoplay disabled!\n");
     }
 
     while (status == 0 && !Verilated::gotFinish()) {

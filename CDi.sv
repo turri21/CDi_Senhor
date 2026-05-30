@@ -722,22 +722,22 @@ module emu (
 `endif
 
 `ifdef VERILATOR
-    bit debug_uart_fake_space  /*verilator public_flat_rw*/;
-    bit tvmode_ntsc  /*verilator public_flat_rw*/;
-    wire overclock_pointing_device = 1;
-    wire [1:0] debug_force_video_plane = 0;
-    wire enable_reset_on_nvram_img_mount = 0;
-    wire enable_reset_on_cd_img_mount = 0;
-    wire [1:0] debug_limited_to_full = 0;
-    wire audio_cd_in_tray = 0;
-    wire config_disable_cpu_starve = 1;
-    wire config_auto_play  /*verilator public_flat_rw*/ = 1;
+    bit debug_uart_fake_space  /*verilator public_flat_rw */;
+    bit tvmode_ntsc  /*verilator public_flat_rw */;
+    bit overclock_pointing_device = 1;
+    bit [1:0] debug_force_video_plane = 0;
+    bit enable_reset_on_nvram_img_mount = 0;
+    bit enable_reset_on_cd_img_mount = 0;
+    bit [1:0] debug_limited_to_full = 0;
+    bit audio_cd_in_tray = 0;
+    bit config_disable_cpu_starve = 1;
+    bit config_auto_play  /*verilator public_flat_rw */ = 1;
     bit config_disable_vmpeg = 0;
-    wire config_first_player_back_port = 0;
-    wire config_disable_seek_time = 1;
-    wire debug_disable_vcd_clock = 0;
-    wire debug_activate_vcd_filter = 1;
-    wire [2:0] pointing_dev_speed = 0;
+    bit config_first_player_back_port = 0;
+    bit config_disable_seek_time = 1;
+    bit debug_disable_vcd_clock = 0;
+    bit debug_activate_vcd_filter = 1;
+    bit [2:0] pointing_dev_speed = 0;
 `else
     // Status seems to be all zero after reset
     // Should be considered for defining the default
@@ -841,7 +841,7 @@ module emu (
     wire debug_irq_hangup;
 
     // TODO requires connection and testing with real photo diode
-    wire rc_eye  /*verilator public_flat_rw*/;
+    bit rc_eye  /*verilator public_flat_rw*/;
 
     ddr_if ddr_host ();
 
