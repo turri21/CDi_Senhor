@@ -20,13 +20,16 @@ main:
 	;move.w #$0027,$303C00 ; Fetch TOC
 
 	; Timer Register 
-	; move.l #$15220000,$303C02 Apprentice - Title Screen
+	move.l #$15248000,$303C02 Apprentice - Title Screen
 	; move.l #$19468000,$303C02 Apprentice - Level 1
-	move.l #$00030200,$303C02 Karaoke CD
+	; move.l #$00030200,$303C02 Karaoke CD
 
 	move.w #$C000,$303FFE ; Start the Read by setting bit 15 of the data buffer
 
 	jsr waitforirq
+
+	move.w #2000,d0
+	jsr wait
 
 	move.w #$0800,$303FFA ; Start playback
 

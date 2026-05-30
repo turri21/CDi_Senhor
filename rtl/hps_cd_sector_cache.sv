@@ -88,7 +88,12 @@ module hps_cd_sector_cache (
 
     // The CDIC implementation requires at least 3 clocks pause between valid data
     // This free running counter serves as timer to clock in data every 4 ticks
-    bit [1:0] cd_data_valid_pause_cnt = 0;
+    // There is also a problem with CDDA. It is possible to destroy the currently
+    // played audio data by being too fast here, depending on the time of playback.
+    // If there is latency in starting CDDA playback, samples are overwritten.
+    // This was an issue with the "Title Theme" of "The Apprentice".
+    // To fix this, the data rate should be matched with a real one.
+    bit [7:0] cd_data_valid_pause_cnt = 0;
 
     bit providing_data = 0;
 

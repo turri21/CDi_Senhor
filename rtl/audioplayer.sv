@@ -12,7 +12,6 @@ module audioplayer (
     output bit mem_rd,
     input [15:0] mem_data,
     input mem_ack,
-    input mem_ack_q,
 
     input start_playback,
     input stop_playback,
@@ -51,7 +50,6 @@ module audioplayer (
         .mem_data(mem_data),
         .mem_rd(mem_rd),
         .mem_ack(mem_ack),
-        .mem_ack_q(mem_ack_q),
 
         .out(xa_out),
         .sample_channel(xa_channel),

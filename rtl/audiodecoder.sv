@@ -17,7 +17,6 @@ module audiodecoder (
     output bit mem_rd,
     input [15:0] mem_data,
     input mem_ack,  // Flag indicates that the memory request was accepted
-    input mem_ack_q,  // Flag indicates that mem_data is valid
 
     audiostream.source out,
     output bit sample_channel,
@@ -53,7 +52,7 @@ module audiodecoder (
 
     assign idle = decoder_state == IDLE;
 
-
+    bit mem_ack_q;  // Flag indicates that mem_data is valid
     bit [13:0] data_addr;
     bit [13:0] block_addr;
     bit [4:0] group_cnt;  // 18 groups per sector
@@ -165,6 +164,7 @@ module audiodecoder (
 
     always_ff @(posedge clk) begin
         disable_audiomap <= 0;
+        mem_ack_q <= mem_ack;
 
         // catch overflow during simulation
         if (start_playback) assert (decoder_state == IDLE);

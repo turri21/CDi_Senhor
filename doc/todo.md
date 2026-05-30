@@ -15,9 +15,6 @@
 * Randomly no audio in Mad Dog McCree? Unclear reproduction
 * Check random audio video out of sync (e.g. Mad Dog McCree)
 * Check correct timing of DVC clipping functionality when scroll bit is reset
-* Regression of "The Apprentice"?
-    * The audio on the title screen sometimes has crackles. (~5% chance of occurrence)
-    * Start of regression unknown
 * Moving window homebrew test timing is broken with 260123
     * Was working in 260104. Also broken with 260116
     * Proposed fix with 40637f4904
@@ -47,7 +44,7 @@
 * Sound bugs on the police procedures disk?
 * Find a better solution for reducing CPU speed
 * Give a signal to the user when CPU data stalling occured
-* Find a better solution for CD data stalling (take a screenshot)
+* Find a better solution for CD data stalling (plugging USB devices)
     * PSX core seems to halt the whole machine to avoid this situation
 * Fix regression: Audio hiccups during Philips Logo in Burn:Cycle
     * A workaround is CPU overclocking
@@ -62,7 +59,6 @@
     * The ST flag is the issue here, causing a video mode change
 * Add SNAC support (IR remote + wired controller)
     * RC5 support is added. A test using real hardware is required.
-* CD+G
 * Check compatibility with CDs that have track index 2 as opposed to the usual 0 and 1
     * Possible discs? "Philips CDI Format Test Disc 1 (Europe)" and a disc by Zeneca Pharmaceuticals Group, "An Interactive Medical Program"
 * Possibly adding support for the Quizard arcade hardware

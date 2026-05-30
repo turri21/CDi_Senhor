@@ -297,7 +297,6 @@ module cditop (
     /*verilator tracing_off*/
     cdic cdic_inst (
         .clk(clk30),
-        .clk_audio(clk_audio),
         .reset,
         .address(addr),
         .din(cdic_dma_ack ? mcd212_dout : cpu_data_out),

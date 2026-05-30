@@ -9,7 +9,6 @@
 
 module cdic (
     input clk,
-    input clk_audio,
     input reset,
 
     // CPU interface
@@ -212,7 +211,6 @@ module cdic (
         .mem_data(mem_cdic_readout),
         .mem_rd(mem_cd_audio_rd),
         .mem_ack(mem_cd_audio_ack),
-        .mem_ack_q(mem_cd_audio_ack_q),
 
         .start_playback(audio_start_playback),
         .stop_playback(audio_stop_playback),

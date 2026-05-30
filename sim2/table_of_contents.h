@@ -154,3 +154,22 @@ void prepare_lucky_luke_europe_toc() {
 
     toc_entry_count = 57;
 }
+
+void prepare_artificial_audiocd_toc() {
+    toc_buffer[0] = {1, 1, 0, 60, 0};
+    toc_buffer[1] = {1, 1, 0, 60, 0};
+    toc_buffer[2] = {1, 1, 0, 60, 0};
+    toc_buffer[3] = {1, 2, 2, 0, 0};
+    toc_buffer[4] = {1, 2, 2, 0, 0};
+    toc_buffer[5] = {1, 2, 2, 0, 0};
+    toc_buffer[6] = {1, 160, 1, 0, 0};
+    toc_buffer[7] = {1, 160, 1, 0, 0};
+    toc_buffer[8] = {1, 160, 1, 0, 0};
+    toc_buffer[9] = {1, 161, 2, 0, 0};
+    toc_buffer[10] = {1, 161, 2, 0, 0};
+    toc_buffer[11] = {1, 161, 2, 0, 0};
+    toc_buffer[12] = {1, 162, 34, 25, 21};
+    toc_buffer[13] = {1, 162, 34, 25, 1};
+    toc_buffer[14] = {1, 162, 34, 25, 0};
+    toc_entry_count = 15;
+}

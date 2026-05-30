@@ -22,7 +22,7 @@
 
 #define SCC68070
 #define SLAVE
-#define TRACE
+// #define TRACE
 // #define SIMULATE_RC5
 
 #define PL_MPEG_IMPLEMENTATION
@@ -765,26 +765,31 @@ class CDi {
             assert(dut.rootp->emu__DOT__cd_hps_ack == 0);
             dut.rootp->emu__DOT__cd_hps_ack = 1;
 
-            uint32_t lba = dut.rootp->emu__DOT__cd_hps_lba;
+            int32_t lba = dut.rootp->emu__DOT__cd_hps_lba;
             uint32_t m_time = dut.rootp->emu__DOT__cditop__DOT__cdic_inst__DOT__time_register;
 
             uint32_t reference_lba = lba_from_time(m_time);
             // assert(lba == reference_lba);
             // assert(lba >= 150);
-
-            if (lba < 150)
-                lba += 150;
             uint32_t file_offset = (lba - 150) * kSectorSize;
 
-            printf("Request CD Sector %x %x %x\n", m_time, lba, file_offset);
+            if (lba >= 0) {
+                if (lba < 150)
+                    lba += 150;
 
-            int res = fseek(f_cd_bin, file_offset, SEEK_SET);
-            assert(res == 0);
+                printf("Request CD Sector %x %x %x\n", m_time, lba, file_offset);
 
-            res = fread(hps_buffer, 1, kSectorSize, f_cd_bin);
-            assert(res == kSectorSize);
+                int res = fseek(f_cd_bin, file_offset, SEEK_SET);
+                assert(res == 0);
 
-            check_scramble(lba, reinterpret_cast<uint8_t *>(hps_buffer));
+                res = fread(hps_buffer, 1, kSectorSize, f_cd_bin);
+                assert(res == kSectorSize);
+
+                check_scramble(lba, reinterpret_cast<uint8_t *>(hps_buffer));
+            } else {
+                // This is TOC area. Just zero all the data
+                memset(hps_buffer, 0, kSectorSize);
+            }
 
             // Subcode Q
             struct subcode &out = *reinterpret_cast<struct subcode *>(&hps_buffer[kSectorSize / 2]);
@@ -795,7 +800,7 @@ class CDi {
             // First we read the raw bytes
             file_offset = (lba - 150) * kSubcodeRWSize;
             if (f_sub_bin) {
-                res = fseek(f_sub_bin, file_offset, SEEK_SET);
+                int res = fseek(f_sub_bin, file_offset, SEEK_SET);
                 assert(res == 0);
                 res = fread(rw, 1, kSubcodeRWSize, f_sub_bin);
                 assert(res == kSubcodeRWSize);
@@ -918,7 +923,7 @@ class CDi {
                 printf("Exception - Privilege violation \n");
                 break;
             default:
-                printf("Exception - %d ??? \n", dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2);
+                // printf("Exception - %d ??? \n", dut.rootp->emu__DOT__cditop__DOT__addr_byte >> 2);
                 break;
             }
         }
@@ -1272,8 +1277,8 @@ class CDi {
 
         start = std::chrono::system_clock::now();
 #ifdef TRACE
-        do_trace = false;
-        fprintf(stderr, "Trace off!\n");
+        //do_trace = false;
+        //fprintf(stderr, "Trace off!\n");
 #endif
 
 #ifdef SIMULATE_RC5
@@ -1364,7 +1369,8 @@ int main(int argc, char **argv) {
         f_sub_bin = fopen("images/karaoke.sub", "rb");
         break;
     case 1:
-        f_cd_bin = fopen("images/braindead13.bin", "rb");
+        f_cd_bin = fopen("images/Apprentice_USA_single.bin", "rb");
+        prepare_artificial_audiocd_toc();
         break;
     case 2:
         f_cd_bin = fopen("images/LuckyLuke.bin", "rb");

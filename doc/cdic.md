@@ -10,7 +10,7 @@ Coming from https://github.com/cdifan/cdichips/blob/master/ims66490cdic.md
     1E00 - 27ff     Unknown ?      (0xa00 (2560) in size)   Word Adr 0f00
     2800 - 31FF 	ADPCM buffer 0 (0xa00 (2560) in size)   Word Adr 1400
     3200 - 3BFF 	ADPCM buffer 1 (0xa00 (2560) in size)   Word Adr 1900
-    3C00 - 3FFE 	Register area  (0x400 (1024) in size)
+    3C00 - 3FFE 	Register area  (0x400 (1024) in size)   Word Adr 1e00
 
 ### Registers
 
