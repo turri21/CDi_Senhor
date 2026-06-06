@@ -1,7 +1,6 @@
 // Include common routines
 #include <verilated.h>
 #include <verilated_fst_c.h>
-#include <verilated_vcd_c.h>
 
 // Include model header, generated from Verilating "top.v"
 #include "Vemu.h"

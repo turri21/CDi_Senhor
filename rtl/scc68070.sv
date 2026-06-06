@@ -95,8 +95,11 @@ module scc68070 (
 
     bit [15:0] internal_data_in;
 
-    // UART is from 0x1008 to 0x100D
-    wire soc_periph = internal_addr[31];
+    // According to the datasheet, the access is internal if
+    // SUPERVISOR==1 && A[31:30]==2'b10;
+    // everything else is external
+    // Supervisor mode can be extracted using FC2
+    wire soc_periph = internal_addr[31:30] == 2'b10 && fc[2];
 
     wire internal_lds = !internal_LDSn;
     wire internal_uds = !internal_UDSn;
@@ -206,7 +209,7 @@ module scc68070 (
         .data_in(internal_data_in),
         .IPL(~ipl),
         .IPL_autovector(autovector_q),
-        .berr(bus_err),
+        .berr(bus_err && !irq_ack),
         .addr_out(internal_addr),
         .FC(fc),
         .data_write(data_out),
