@@ -88,7 +88,7 @@ module cditop (
 
     wire reset;
 
-    parallelel_spi slave_servo_spi ();
+    parallel_spi slave_servo_spi ();
 
     wire write_strobe  /*verilator public_flat_rd*/;
     wire as  /*verilator public_flat_rd*/;
@@ -665,22 +665,22 @@ module cditop (
         if (madriv_static != 0 && bus_ack && write_strobe) begin
             if (addr_byte == madriv_static + 24'h122) begin
                 madriv.dma_addr[31:16] = cpu_data;
-                $display("dma_addr = %x", {cpu_data, madriv.dma_addr[15:0]});
+                $display("FMA dma_addr = %x", {cpu_data, madriv.dma_addr[15:0]});
             end
 
             if (addr_byte == madriv_static + 24'h124) begin
                 madriv.dma_addr[15:0] = cpu_data;
-                $display("dma_addr = %x", {madriv.dma_addr[31:16], cpu_data});
+                $display("FMA dma_addr = %x", {madriv.dma_addr[31:16], cpu_data});
             end
 
             if (addr_byte == madriv_static + 24'h0150) begin
                 madriv.irq_stat = cpu_data;
-                $display("irq_stat = %x", cpu_data);
+                $display("FMA irq_stat = %x", cpu_data);
             end
 
             if (addr_byte == madriv_static + 24'h0120) begin
                 madriv.irq_enable = cpu_data;
-                $display("irq_enable = %x", cpu_data);
+                $display("FMA irq_enable = %x", cpu_data);
             end
         end
     end
@@ -713,6 +713,7 @@ module cditop (
         bit [15:0] V_LCntr;  // 0xac
         bit [7:0] V_Frozen;  // 0xde char*
         bit [31:0] V_PausedSCR; // 0x144
+        bit [31:0] V_ChipSpd; // 0x196 long*
     } fdrvs1 = '{default: 0};
     bit [23:0] fdrvs1_static  /*verilator public_flat_rw*/ = 24'hdfb180;
     always @(posedge clk30) begin
@@ -721,173 +722,183 @@ module cditop (
 
             if (addr_byte == fdrvs1_static + 24'h0136) begin
                 fdrvs1.V_Status = cpu_data;
-                $display("V_Status = %d dez", cpu_data);
+                $display("FMV V_Status = %d dez", cpu_data);
             end
             if (addr_byte == fdrvs1_static + 24'h013c) begin
                 fdrvs1.V_SigStat = cpu_data;
-                $display("V_SigStat = %d dez", cpu_data);
+                $display("FMV V_SigStat = %d dez", cpu_data);
             end
             if (addr_byte == fdrvs1_static + 24'h016e) begin
                 fdrvs1.V_AsyStat = cpu_data;
-                $display("V_AsyStat = %x hex %d dez", cpu_data, cpu_data);
+                $display("FMV V_AsyStat = %x hex %d dez", cpu_data, cpu_data);
             end
             if (addr_byte == fdrvs1_static + 24'h0134) begin
                 fdrvs1.V_Stat = cpu_data;
-                $display("V_Stat = %d dez", cpu_data);
+                $display("FMV V_Stat = %d dez", cpu_data);
             end
             if (addr_byte == fdrvs1_static + 24'h0194) begin
                 fdrvs1.V_PRPA = cpu_data;
-                $display("V_PRPA = %d dez", cpu_data);
+                $display("FMV V_PRPA = %d dez", cpu_data);
             end
             if (addr_byte == fdrvs1_static + 24'h009a) begin
                 fdrvs1.V_PlayType = cpu_data;
-                $display("V_PlayType = %d dez", cpu_data);
+                $display("FMV V_PlayType = %d dez", cpu_data);
             end
 
             // I assume that fdrvs1_static is always aligned to words
             if (addr_byte == fdrvs1_static + 24'h017a && uds) begin  // Location is 0x17a -> high byte
                 fdrvs1.V_StepDone = cpu_data[15:8];
-                $display("V_StepDone = %d dez", cpu_data[15:8]);
+                $display("FMV V_StepDone = %d dez", cpu_data[15:8]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h017a && lds) begin  // Location is 0x17b -> low byte
                 fdrvs1.V_BufStat = cpu_data[7:0];
-                $display("V_BufStat = %d dez", cpu_data[7:0]);
+                $display("FMV V_BufStat = %d dez", cpu_data[7:0]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h012e && uds) begin  // Location is 0x12e -> high byte
                 fdrvs1.V_UpdFlag = cpu_data[15:8];
-                $display("V_UpdFlag = %d dez", cpu_data[15:8]);
+                $display("FMV V_UpdFlag = %d dez", cpu_data[15:8]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h017e && lds) begin  // Location is 0x17f -> low byte
                 fdrvs1.V_PicRt = cpu_data[7:0];
-                $display("V_PicRt = %d dez", cpu_data[7:0]);
+                $display("FMV V_PicRt = %d dez", cpu_data[7:0]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h00c8 && lds) begin  // Location is 0xc9 -> low byte
                 fdrvs1.V_Sync = cpu_data[7:0];
-                $display("V_Sync = %d dez", cpu_data[7:0]);
+                $display("FMV V_Sync = %d dez", cpu_data[7:0]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h012c && uds) begin  // Location is 0x12c -> high byte
                 fdrvs1.V_SyncDone = cpu_data[7:0];
-                $display("V_SyncDone = %d dez", cpu_data[7:0]);
+                $display("FMV V_SyncDone = %d dez", cpu_data[7:0]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h0de && uds) begin  // Location is 0xde -> high byte
                 fdrvs1.V_Frozen = cpu_data[7:0];
-                $display("V_Frozen = %d dez", cpu_data[7:0]);
+                $display("FMV V_Frozen = %d dez", cpu_data[7:0]);
             end
 
             if (addr_byte == fdrvs1_static + 24'h00ac) begin
                 fdrvs1.V_LCntr = cpu_data;
-                $display("V_LCntr = %x", cpu_data);
+                $display("FMV V_LCntr = %x", cpu_data);
             end
 
             if (addr_byte == fdrvs1_static + 24'h016a) begin
                 fdrvs1.V_Scroll = cpu_data;
-                $display("V_Scroll = %x", cpu_data);
+                $display("FMV V_Scroll = %x", cpu_data);
             end
 
             if (addr_byte == fdrvs1_static + 24'h016c) begin
                 fdrvs1.V_VCMD = cpu_data;
-                $display("V_VCMD = %x", cpu_data);
+                $display("FMV V_VCMD = %x", cpu_data);
             end
 
             if (addr_byte == fdrvs1_static + 24'h01c0) begin
                 fdrvs1.V_DTSVal = cpu_data;
-                $display("V_DTSVal = %x", cpu_data);
+                $display("FMV V_DTSVal = %x", cpu_data);
             end
 
             if (addr_byte == fdrvs1_static + 24'h0ca) begin
                 fdrvs1.V_SCR[31:16] = cpu_data;
-                $display("V_SCR = %x", {cpu_data, fdrvs1.V_SCR[15:0]});
+                $display("FMV V_SCR = %x", {cpu_data, fdrvs1.V_SCR[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0cc) begin
                 fdrvs1.V_SCR[15:0] = cpu_data;
-                $display("V_SCR = %x", {fdrvs1.V_SCR[31:16], cpu_data});
+                $display("FMV V_SCR = %x", {fdrvs1.V_SCR[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0e6) begin
                 fdrvs1.V_Window[31:16] = cpu_data;
-                $display("V_Window = %x", {cpu_data, fdrvs1.V_Window[15:0]});
+                $display("FMV V_Window = %x", {cpu_data, fdrvs1.V_Window[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0e8) begin
                 fdrvs1.V_Window[15:0] = cpu_data;
-                $display("V_Window = %x", {fdrvs1.V_Window[31:16], cpu_data});
+                $display("FMV V_Window = %x", {fdrvs1.V_Window[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0ea) begin
                 fdrvs1.V_DecOff[31:16] = cpu_data;
-                $display("V_DecOff = %x", {cpu_data, fdrvs1.V_DecOff[15:0]});
+                $display("FMV V_DecOff = %x", {cpu_data, fdrvs1.V_DecOff[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0ec) begin
                 fdrvs1.V_DecOff[15:0] = cpu_data;
-                $display("V_DecOff = %x", {fdrvs1.V_DecOff[31:16], cpu_data});
+                $display("FMV V_DecOff = %x", {fdrvs1.V_DecOff[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0ee) begin
                 fdrvs1.V_ScrOrg[31:16] = cpu_data;
-                $display("V_ScrOrg = %x", {cpu_data, fdrvs1.V_ScrOrg[15:0]});
+                $display("FMV V_ScrOrg = %x", {cpu_data, fdrvs1.V_ScrOrg[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0f0) begin
                 fdrvs1.V_ScrOrg[15:0] = cpu_data;
-                $display("V_ScrOrg = %x", {fdrvs1.V_ScrOrg[31:16], cpu_data});
+                $display("FMV V_ScrOrg = %x", {fdrvs1.V_ScrOrg[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0f2) begin
                 fdrvs1.V_ScrOff[31:16] = cpu_data;
-                $display("V_ScrOff = %x", {cpu_data, fdrvs1.V_ScrOff[15:0]});
+                $display("FMV V_ScrOff = %x", {cpu_data, fdrvs1.V_ScrOff[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h0f4) begin
                 fdrvs1.V_ScrOff[15:0] = cpu_data;
-                $display("V_ScrOff = %x", {fdrvs1.V_ScrOff[31:16], cpu_data});
+                $display("FMV V_ScrOff = %x", {fdrvs1.V_ScrOff[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h170) begin
                 fdrvs1.V_NISFnd[31:16] = cpu_data;
-                $display("V_NISFnd = %x", {cpu_data, fdrvs1.V_NISFnd[15:0]});
+                $display("FMV V_NISFnd = %x", {cpu_data, fdrvs1.V_NISFnd[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h172) begin
                 fdrvs1.V_NISFnd[15:0] = cpu_data;
-                $display("V_NISFnd = %x", {fdrvs1.V_NISFnd[31:16], cpu_data});
+                $display("FMV V_NISFnd = %x", {fdrvs1.V_NISFnd[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h180) begin
                 fdrvs1.V_PWI[31:16] = cpu_data;
-                $display("V_PWI = %x", {cpu_data, fdrvs1.V_PWI[15:0]});
+                $display("FMV V_PWI = %x", {cpu_data, fdrvs1.V_PWI[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h182) begin
                 fdrvs1.V_PWI[15:0] = cpu_data;
-                $display("V_PWI = %x", {fdrvs1.V_PWI[31:16], cpu_data});
+                $display("FMV V_PWI = %x", {fdrvs1.V_PWI[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h100) begin
                 fdrvs1.V_Speed[31:16] = cpu_data;
-                $display("V_Speed = %x", {cpu_data, fdrvs1.V_Speed[15:0]});
+                $display("FMV V_Speed = %x", {cpu_data, fdrvs1.V_Speed[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h102) begin
                 fdrvs1.V_Speed[15:0] = cpu_data;
-                $display("V_Speed = %x", {fdrvs1.V_Speed[31:16], cpu_data});
+                $display("FMV V_Speed = %x", {fdrvs1.V_Speed[31:16], cpu_data});
             end
 
             if (addr_byte == fdrvs1_static + 24'h144) begin
                 fdrvs1.V_PausedSCR[31:16] = cpu_data;
-                $display("V_PausedSCR = %x", {cpu_data, fdrvs1.V_PausedSCR[15:0]});
+                $display("FMV V_PausedSCR = %x", {cpu_data, fdrvs1.V_PausedSCR[15:0]});
             end
 
             if (addr_byte == fdrvs1_static + 24'h146) begin
                 fdrvs1.V_PausedSCR[15:0] = cpu_data;
-                $display("V_PausedSCR = %x", {fdrvs1.V_PausedSCR[31:16], cpu_data});
+                $display("FMV V_PausedSCR = %x", {fdrvs1.V_PausedSCR[31:16], cpu_data});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h196) begin
+                fdrvs1.V_ChipSpd[31:16] = cpu_data;
+                $display("FMV V_ChipSpd = %x", {cpu_data, fdrvs1.V_ChipSpd[15:0]});
+            end
+
+            if (addr_byte == fdrvs1_static + 24'h198) begin
+                fdrvs1.V_ChipSpd[15:0] = cpu_data;
+                $display("FMV V_ChipSpd = %x", {fdrvs1.V_ChipSpd[31:16], cpu_data});
             end
         end
     end

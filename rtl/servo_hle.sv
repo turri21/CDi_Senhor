@@ -2,7 +2,7 @@
 module servo_hle (
     input clk,
     input reset,
-    parallelel_spi.slave spi,
+    parallel_spi.slave spi,
     output bit quirk_force_mode_fault,
     input audio_cd_in_tray,
     input cd_img_mount,

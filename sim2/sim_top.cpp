@@ -1,5 +1,7 @@
 // Include common routines
+#include <string>
 #include <sys/types.h>
+#include <vector>
 #include <verilated.h>
 #include <verilated_fst_c.h>
 
@@ -340,7 +342,6 @@ class CDi {
 #endif
 
     uint32_t prevpc = 0;
-    uint32_t leave_sys_callpc = 0;
     SttFunction call_func;
 
     int pixel_index = 0;
@@ -502,7 +503,7 @@ class CDi {
 
     uint8_t cpu_memory_read_u8(uint32_t addr) {
         if (addr & 1)
-            return cpu_memory_read_u16(addr);
+            return cpu_memory_read_u16(addr & ~1);
         else
             return cpu_memory_read_u16(addr) >> 8;
     }
@@ -549,6 +550,83 @@ class CDi {
         printf("MVS_Stream %x\n", status.MVS_Stream);
         printf("MVS_PicRt %x\n", status.MVS_PicRt);
         printf("MVS_DSC %x\n", status.MVS_DSC);
+    }
+
+    struct Os9Module {
+        uint32_t addr;
+        uint32_t size;
+        std::string name;
+    };
+
+    std::vector<Os9Module> os9modules;
+
+    // Algorithm from cdiemu
+    void ScanForOs9Modules() {
+        constexpr uint32_t kMaxNameSize{40};
+        constexpr uint32_t kExpectedModuleId{0x4AFC};
+        constexpr uint32_t kExpectedSystemRev{0x0001};
+        constexpr uint32_t kModuleHeaderSize{0x30};
+
+        os9modules.clear();
+
+        auto scan_memory = [&](uint32_t start, uint32_t end) {
+            // for (uint32_t addr = 0x200000; addr <= 0x23ffff; addr += 2)
+            for (uint32_t addr = start; addr < end; addr += 2) {
+                // Check Module ID
+                if (cpu_memory_read_u16(addr) != kExpectedModuleId)
+                    continue;
+
+                // Check System Revision
+                if (cpu_memory_read_u16(addr + 2) != kExpectedSystemRev)
+                    continue;
+
+                // Check Module ID parity
+                uint16_t parity{0xffff};
+                for (uint32_t i = 0; i <= kModuleHeaderSize; i += 2) {
+                    parity ^= cpu_memory_read_u16(addr + i);
+                }
+                if (parity != 0x0000)
+                    continue;
+
+                // We assume a valid module, read the attributes
+
+                uint32_t module_size = cpu_memory_read_u32(addr + 4);
+                uint32_t module_name_addr = cpu_memory_read_u32(addr + 0xc);
+
+                struct Os9Module module;
+                module.addr = addr;
+                module.size = module_size;
+
+                for (int i = 0; i < kMaxNameSize; i++) {
+                    char c = cpu_memory_read_u8(addr + module_name_addr + i);
+                    if (c == 0)
+                        break;
+                    module.name.push_back(std::move(c));
+                }
+
+                printf("Found module at %x - %x %s\n", module.addr, module.addr + module.size, module.name.c_str());
+                os9modules.push_back(module);
+
+                // Skip the memory area of the module to make the scan faster
+                addr += module_size - 2;
+            }
+        };
+
+        scan_memory(0x000000, 0x080000); // Video Bank 0
+        scan_memory(0x200000, 0x280000); // Video Bank 1
+        scan_memory(0x400000, 0x4ffc00); // System ROM
+        scan_memory(0xd00000, 0xe00000); // VMPEG System RAM
+        scan_memory(0xe40000, 0xe60000); // VMPEG ROM
+    }
+
+    const char *ModuleNameAtAddress(uint32_t addr) {
+        for (const auto &mod : os9modules) {
+            if (addr >= mod.addr && addr < mod.addr + mod.size) {
+                return mod.name.c_str();
+            }
+        }
+
+        return "---";
     }
 
     void AnalyzeSyscall() {
@@ -600,8 +678,6 @@ class CDi {
         }
         printf("\n");
 
-        leave_sys_callpc = prevpc + 4;
-
         // SysDbg ? Just give up!
         if (static_cast<SystemCallType>(call) == SystemCallType::F_SysDbg) {
             fprintf(stderr, "System halted and debugger calted!\n");
@@ -624,6 +700,14 @@ class CDi {
     void lost_ride_pal() {
         if (frame_index > 150) {
             if ((frame_index % 40) == 10) {
+                press_button_signal = true;
+            }
+        }
+    }
+
+    void PressEvery5Frames() {
+        if (frame_index > 200) {
+            if ((frame_index % 5) == 1) {
                 press_button_signal = true;
             }
         }
@@ -710,20 +794,21 @@ class CDi {
         fclose(f);
     }
 
-    void printstate() {
+    void PrintCpuState() {
 #ifdef SCC68070
         uint32_t pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
         // d0 = dut.rootp->fx68k_tb__DOT__d0;
         memcpy(regfile, &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[0],
                sizeof(regfile));
 
-        printf("%08x ", pc);
+        printf("%s %08x ", ModuleNameAtAddress(pc), pc);
         for (int i = 0; i < 16; i++) {
             if (i == 8)
                 printf(" ");
             printf(" %08x", regfile[i]);
         }
-        printf("\n");
+        printf(" %02x%02x\n", dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flagssr,
+               dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flags);
 #endif
     }
 
@@ -934,6 +1019,7 @@ class CDi {
 
             uint32_t m_pc = dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__exe_pc;
 
+            // Catch Trap #0
             if (m_pc == 0x62c) {
                 AnalyzeSyscall();
             }
@@ -945,18 +1031,26 @@ class CDi {
                 dut.rootp->emu__DOT__cditop__DOT__fdrvs1_static = cpu_a[2];
             }
 
+            if (m_pc == 0x0e5029a) {
+                // We are at the beginning of MA_Play in madriv. This means that A2 contains madriv_static
+                uint32_t *cpu_a =
+                    &dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__regfile[8];
+                dut.rootp->emu__DOT__cditop__DOT__madriv_static = cpu_a[2];
+            }
+
 #if 0
             executing_dvc_rom_instructions = m_pc >= 0xe40000 && m_pc < 0xe7ffff;
 #endif
             if (print_instructions || executing_dvc_rom_instructions) {
-                printstate();
+                PrintCpuState();
             }
 
-            if (m_pc == leave_sys_callpc) {
-                printf("Return from Syscall %x %x  ",
-                       dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flags,
-                       dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flagssr);
-                printstate();
+            // Catch the instruction after the RTE in the kernel to return from Trap #0
+            if (prevpc == 0x0407fb2) {
+                printf("Return from Syscall %02x%02x  ",
+                       dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flagssr,
+                       dut.rootp->emu__DOT__cditop__DOT__scc68070_0__DOT__tg68__DOT__tg68kdotcinst__DOT__flags);
+                PrintCpuState();
                 AnalyzeSyscallReturn();
             }
 
@@ -987,12 +1081,13 @@ class CDi {
                 // space_ace_pal();
                 // braindead13_pal();
                 // lost_ride_pal();
+                // PressEvery5Frames();
             }
 #endif
 
             if (press_button_signal) {
                 press_button_signal = false;
-                release_button_frame = frame_index + 10;
+                release_button_frame = frame_index + 2;
                 printf("Press a button!\n");
                 fprintf(stderr, "Press a button!\n");
                 dut.rootp->emu__DOT__JOY0 = 0b10000;
@@ -1021,6 +1116,9 @@ class CDi {
                 mpeg_clk_calc_ticks30 = 0;
                 mpeg_clk_calc_ticks = 0;
 
+                if (frame_index == 120) {
+                    ScanForOs9Modules();
+                }
                 frame_index++;
                 dut.rootp->emu__DOT__cditop__DOT__frame_index = frame_index;
             }
@@ -1299,25 +1397,49 @@ class CDi {
     }
     /// @brief 1MB of Video RAM dumped
     /// Located in SDRAM at 0x000000
-    void dump_base_case_memory() {
+    void DumpBaseCaseMemory() {
         char filename[100];
-        sprintf(filename, "%d/video_ramdump.bin", instanceid);
+        sprintf(filename, "%d/video_ramdump_%d.bin", instanceid, frame_index);
         printf("Writing %s!\n", filename);
         FILE *f = fopen(filename, "wb");
         assert(f);
-        fwrite(&dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
+        int bytes = fwrite(&dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
+        assert(bytes == 1024 * 256 * 4);
+        fclose(f);
+    }
+
+    void LoadBaseCaseMemory() {
+        char filename[100];
+        sprintf(filename, "%d/video_ramdump.bin", instanceid);
+        printf("Reading %s!\n", filename);
+        FILE *f = fopen(filename, "rb");
+        assert(f);
+        int bytes = fread(&dut.rootp->emu__DOT__ram[0], 1, 1024 * 256 * 4, f);
+        assert(bytes == 1024 * 256 * 4);
         fclose(f);
     }
 
     /// @brief 1MB of DVC RAM dumped
     /// Located in SDRAM at 0x100000
-    void dump_dvc_sys_memory() {
+    void DumpDvcSysMemory() {
         char filename[100];
         sprintf(filename, "%d/dvc_ramdump.bin", instanceid);
         printf("Writing %s!\n", filename);
         FILE *f = fopen(filename, "wb");
         assert(f);
-        fwrite(&dut.rootp->emu__DOT__ram[0x100000 / 2], 1, 1024 * 256 * 4, f);
+        int bytes = fwrite(&dut.rootp->emu__DOT__ram[0x100000 / 2], 1, 1024 * 256 * 4, f);
+        assert(bytes == 1024 * 256 * 4);
+        fclose(f);
+    }
+
+    void LoadDvcSysMemory() {
+        char filename[100];
+        sprintf(filename, "%d/dvc_ramdump.bin", instanceid);
+        printf("Reading %s!\n", filename);
+        FILE *f = fopen(filename, "rb");
+        assert(f);
+        int bytes = fread(&dut.rootp->emu__DOT__ram[0x100000 / 2], 1, 1024 * 256 * 4, f);
+        assert(bytes == 1024 * 256 * 4);
         fclose(f);
     }
 
@@ -1371,8 +1493,7 @@ int main(int argc, char **argv) {
 
     switch (machineindex) {
     case 0:
-        f_cd_bin = fopen("images/karaoke.bin", "rb");
-        f_sub_bin = fopen("images/karaoke.sub", "rb");
+        f_cd_bin = fopen("images/addams.bin", "rb");
         break;
     case 1:
         f_cd_bin = fopen("images/aims_frogs.iso", "rb");
@@ -1423,8 +1544,8 @@ int main(int argc, char **argv) {
     machine.modelstep();
     machine.modelstep();
     machine.modelstep();
-    machine.dump_base_case_memory();
-    machine.dump_dvc_sys_memory();
+    machine.DumpBaseCaseMemory();
+    machine.DumpDvcSysMemory();
     machine.dump_slave_memory();
 
     fclose(f_cd_bin);

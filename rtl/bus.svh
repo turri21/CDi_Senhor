@@ -39,7 +39,7 @@ interface bytestream ();
     modport sink(input write, data);
 endinterface
 
-interface parallelel_spi ();
+interface parallel_spi ();
     bit [7:0] miso;
     bit [7:0] mosi;
     bit write;

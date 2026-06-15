@@ -30,7 +30,7 @@ module uc68hc05 (
     bytestream.sink serial_in,
     input tcap,
 
-    parallelel_spi.master spi,
+    parallel_spi.master spi,
     input quirk_force_mode_fault
 );
 
