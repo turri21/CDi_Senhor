@@ -3,7 +3,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    ram  (wxai!r) : ORIGIN = 0x00000000, LENGTH = 16584
+    ram  (wxai!r) : ORIGIN = 0x00000000, LENGTH = 17000
 }
 
 SECTIONS

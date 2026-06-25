@@ -51,6 +51,7 @@ main:
 	; #$05402000 Star Trek VI - Terre Inconnue (France) (Disc 1) - Good match for SEQHDR of High CPU Load scene
 	; #$00437300 Addams Family (Disc 2)
 	; #$01133900 Brain Dead 13 - Intro
+	; #$12224800 AIMS - Frogs and How they Live (mute on MiSTer?)
 
 	move.w #$002a,$303C00 ; Read Mode 2
 	move.w #$0100,$303C06 ; File Register

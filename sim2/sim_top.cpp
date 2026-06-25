@@ -1375,7 +1375,7 @@ int main(int argc, char **argv) {
         f_sub_bin = fopen("images/karaoke.sub", "rb");
         break;
     case 1:
-        f_cd_bin = fopen("images/Apprentice_USA_single.bin", "rb");
+        f_cd_bin = fopen("images/aims_frogs.iso", "rb");
         prepare_artificial_audiocd_toc();
         break;
     case 2:

@@ -19,8 +19,6 @@
     * Was working in 260104. Also broken with 260116
     * Proposed fix with 40637f4904
     * Will be broken again with the addition of frame synced updates
-* Add support for MPEG Layer I
-    * Affected disc is "AIMS - Learning About Ecology (1995)(AIMS Multimedia)(US)"
 * Frequency response of CDIC and MPEG audio output might not be 100% accurate
 * Add support for an emulated Peacekeeper Revolver Light Gun
 * "Uncover featuring Tatjana (Europe)" regressions?

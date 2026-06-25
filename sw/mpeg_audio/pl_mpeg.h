@@ -58,7 +58,7 @@ plm_* ......... the high-level interface, combining demuxer and decoders
 plm_buffer_* .. the data source used by all interfaces
 plm_demux_* ... the MPEG-PS demuxer
 plm_video_* ... the MPEG1 Video ("mpeg1") decoder
-plm_audio_* ... the MPEG1 Audio Layer II ("mp2") decoder
+plm_audio_* ... the MPEG1 Audio Layer I/II ("mp1"/"mp2") decoder
 
 
 With the high-level interface you have two options to decode video & audio:
@@ -118,7 +118,7 @@ data written to it in memory. This enables seeking in the already loaded data.
 
 There should be no need to use the lower level plm_demux_*, plm_video_* and 
 plm_audio_* functions, if all you want to do is read/decode an MPEG-PS file.
-However, if you get raw mpeg1video data or raw mp2 audio data from a different
+However, if you get raw mpeg1video data or raw mp1/mp2 audio data from a different
 source, these functions can be used to decode the raw data directly. Similarly, 
 if you only want to analyze an MPEG-PS file or extract raw video or audio
 packets from it, you can use the plm_demux_* functions.
@@ -218,8 +218,9 @@ typedef void(*plm_video_decode_callback)
 // Decoded Audio Samples
 // Samples are stored as normalized (-1, 1) float either interleaved, or if
 // PLM_AUDIO_SEPARATE_CHANNELS is defined, in two separate arrays.
-// The `count` is always PLM_AUDIO_SAMPLES_PER_FRAME and just there for
-// convenience.
+// The `count` is the number of decoded samples per channel in this frame.
+// MPEG Layer II frames have PLM_AUDIO_SAMPLES_PER_FRAME samples; Layer I
+// frames have 384 samples. The buffers are sized for the larger Layer II frame.
 
 #define PLM_AUDIO_SAMPLES_PER_FRAME 1152
 
@@ -750,7 +751,7 @@ void plm_frame_to_abgr(plm_frame_t *frame, uint8_t *dest, int stride);
 
 // -----------------------------------------------------------------------------
 // plm_audio public API
-// Decode MPEG-1 Audio Layer II ("mp2") data into raw samples
+// Decode MPEG-1 Audio Layer I/II ("mp1"/"mp2") data into raw samples
 
 
 // Create an audio decoder with a plm_buffer as source.
@@ -797,7 +798,7 @@ int plm_audio_has_ended(plm_audio_t *self);
 
 
 // Decode and return one "frame" of audio and advance the internal time by 
-// (PLM_AUDIO_SAMPLES_PER_FRAME/samplerate) seconds. The returned samples_t 
+// (samples->count/samplerate) seconds. The returned samples_t 
 // is valid until the next call of plm_audio_decode() or until the audio
 // decoder is destroyed.
 
@@ -2592,6 +2593,11 @@ static const short PLM_AUDIO_BIT_RATE[] = {
 	 8, 16, 24, 32, 40, 48,  56,  64,  80,  96, 112, 128, 144, 160  // MPEG-2
 };
 
+static const short PLM_AUDIO_BIT_RATE_LAYER_I[] = {
+	32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, // MPEG-1
+	32, 48, 56,  64,  80,  96, 112, 128, 144, 160, 176, 192, 224, 256  // MPEG-2
+};
+
 static const int PLM_AUDIO_SCALEFACTOR_BASE[] = {
 	0x02000000, 0x01965FEA, 0x01428A30
 };
@@ -2771,6 +2777,23 @@ static const plm_quantizer_spec_t PLM_AUDIO_QUANT_TAB[] = {
 	{ 65535, 0, 16 }   // 17
 };
 
+static const plm_quantizer_spec_t PLM_AUDIO_LAYER_I_QUANT_TAB[] = {
+	{     3, 0,  2 },  //  1
+	{     7, 0,  3 },  //  2
+	{    15, 0,  4 },  //  3
+	{    31, 0,  5 },  //  4
+	{    63, 0,  6 },  //  5
+	{   127, 0,  7 },  //  6
+	{   255, 0,  8 },  //  7
+	{   511, 0,  9 },  //  8
+	{  1023, 0, 10 },  //  9
+	{  2047, 0, 11 },  // 10
+	{  4095, 0, 12 },  // 11
+	{  8191, 0, 13 },  // 12
+	{ 16383, 0, 14 },  // 13
+	{ 32767, 0, 15 }   // 14
+};
+
 //#define SOFT_CONVOLVE
 
 struct plm_audio_t {
@@ -2784,6 +2807,7 @@ struct plm_audio_t {
 	int bound;
 	int v_pos;
 	int next_frame_data_size;
+	int samples_per_frame;
 	int has_header;
 	
 	plm_dma_buffer_t *buffer;
@@ -2804,8 +2828,12 @@ struct plm_audio_t {
 int plm_audio_find_frame_sync(plm_audio_t *self);
 int plm_audio_decode_header(plm_audio_t *self);
 void plm_audio_decode_frame(plm_audio_t *self);
+void plm_audio_decode_layer_i_frame(plm_audio_t *self);
+void plm_audio_decode_layer_ii_frame(plm_audio_t *self);
 const plm_quantizer_spec_t *plm_audio_read_allocation(plm_audio_t *self, int sb, int tab3);
-void plm_audio_read_samples(plm_audio_t *self, int ch, int sb, int part); 
+void plm_audio_read_samples(plm_audio_t *self, int ch, int sb, int part);
+void plm_audio_read_layer_i_sample(plm_audio_t *self, int ch, int sb);
+void plm_audio_synthesize_sample(plm_audio_t *self, int ss, int *out_pos);
 void plm_audio_idct36(int s[32][3], int ss, intsample_t *d, int dp);
 
 plm_audio_t *plm_audio_create_with_buffer(plm_dma_buffer_t *buffer) {
@@ -2814,6 +2842,7 @@ plm_audio_t *plm_audio_create_with_buffer(plm_dma_buffer_t *buffer) {
 	memset(self, 0, sizeof(plm_audio_t));
 
 	self->samples.count = PLM_AUDIO_SAMPLES_PER_FRAME;
+	self->samples_per_frame = PLM_AUDIO_SAMPLES_PER_FRAME;
 	self->buffer = buffer;
 	self->samplerate_index = 3; // Indicates 0
 
@@ -2873,7 +2902,8 @@ plm_samples_t *plm_audio_decode(plm_audio_t *self) {
 	
 	self->samples.time = self->time;
 
-	self->samples_decoded += PLM_AUDIO_SAMPLES_PER_FRAME;
+	self->samples.count = self->samples_per_frame;
+	self->samples_decoded += self->samples_per_frame;
 	self->time = self->samples_decoded / 
 		PLM_AUDIO_SAMPLE_RATE[self->samplerate_index];
 	
@@ -2885,7 +2915,7 @@ int plm_audio_find_frame_sync(plm_audio_t *self) {
 	for (i = fifo_ctrl->read_bit_index >> 3; i < fifo_ctrl->write_byte_index-1; i++) {
 		if (
 			self->buffer->bytes[i] == 0xFF &&
-			(self->buffer->bytes[i+1] & 0xFE) == 0xFC
+			(self->buffer->bytes[i+1] & 0xFC) == 0xFC
 		) {
 			fifo_ctrl->read_bit_index = ((i+1) << 3) + 3;
 			return TRUE;
@@ -2904,8 +2934,8 @@ int plm_audio_decode_header(plm_audio_t *self) {
 	int sync = plm_dma_buffer_read(self->buffer, 11);
 
 
-	// Attempt to resync if no syncword was found. This sucks balls. The MP2 
-	// stream contains a syncword just before every frame (11 bits set to 1).
+	// Attempt to resync if no syncword was found. This sucks balls. The MPEG
+	// audio stream contains a syncword just before every frame (11 bits set to 1).
 	// However, this syncword is not guaranteed to not occur elsewhere in the
 	// stream. So, if we have to resync, we also have to check if the header 
 	// (samplerate, bitrate) differs from the one we had before. This all
@@ -2923,13 +2953,13 @@ int plm_audio_decode_header(plm_audio_t *self) {
 
 	if (
 		self->version != PLM_AUDIO_MPEG_1 ||
-		self->layer != PLM_AUDIO_LAYER_II
+		(self->layer != PLM_AUDIO_LAYER_I && self->layer != PLM_AUDIO_LAYER_II)
 	) {
 		return 0;
 	}
 
 	int bitrate_index = plm_dma_buffer_read(self->buffer, 4) - 1;
-	if (bitrate_index > 13) {
+	if (bitrate_index < 0 || bitrate_index > 13) {
 		return 0;
 	}
 
@@ -2975,13 +3005,28 @@ int plm_audio_decode_header(plm_audio_t *self) {
 
 	// Compute frame size, check if we have enough data to decode the whole
 	// frame.
-	int bitrate = PLM_AUDIO_BIT_RATE[self->bitrate_index];
+	self->samples_per_frame = (self->layer == PLM_AUDIO_LAYER_I) ? 384 : 1152;
+	self->samples.count = self->samples_per_frame;
+	int bitrate = self->layer == PLM_AUDIO_LAYER_I
+		? PLM_AUDIO_BIT_RATE_LAYER_I[self->bitrate_index]
+		: PLM_AUDIO_BIT_RATE[self->bitrate_index];
 	int samplerate = PLM_AUDIO_SAMPLE_RATE[self->samplerate_index];
-	int frame_size = (144000 * bitrate / samplerate) + padding;
+	int frame_size = self->layer == PLM_AUDIO_LAYER_I
+		? (((12000 * bitrate / samplerate) + padding) << 2)
+		: ((144000 * bitrate / samplerate) + padding);
 	return frame_size - (hasCRC ? 6 : 4);
 }
 
 void plm_audio_decode_frame(plm_audio_t *self) {
+	if (self->layer == PLM_AUDIO_LAYER_I) {
+		plm_audio_decode_layer_i_frame(self);
+	}
+	else {
+		plm_audio_decode_layer_ii_frame(self);
+	}
+}
+
+void plm_audio_decode_layer_ii_frame(plm_audio_t *self) {
 	// Prepare the quantizer table lookups
 	int tab3 = 0;
 	int sblimit = 0;
@@ -3084,92 +3129,7 @@ void plm_audio_decode_frame(plm_audio_t *self) {
 
 			// Synthesis loop
 			for (int p = 0; p < 3; p++) {
-				// Shifting step
-				self->v_pos = (self->v_pos - 64) & 1023;
-
-				for (int ch = 0; ch < 2; ch++) {
-					plm_audio_idct36(self->sample[ch], p, self->V[ch], self->v_pos);
-
-					// Using hardware
-					intsample_t hw_U[32];
-
-					{
-						for (int i = 0; i < 32; ++i) {
-
-							int d_index = 512 - (self->v_pos >> 1);
-							int v_index = (self->v_pos % 128) >> 1;
-
-							// calculate the first 8
-							synth_window_mac->result=0;
-							synth_window_mac->addr = &self->V[ch][v_index+i];
-							synth_window_mac->index = d_index+i;
-
-							// step forward
-							v_index += 128*8;
-							d_index += 64*8;
-
-							// second 8 samples
-							d_index -= (512 - 32);
-							v_index = (128 - 32 + 1024) - v_index;
-							// CPU will stall here probably
-							synth_window_mac->addr = &self->V[ch][v_index+i];
-							synth_window_mac->index = d_index+i;
-							// CPU will stall here probably
-							hw_U[i] = synth_window_mac->result;
-							//*((volatile intsample_t *)OUTPORT)=hw_U[i];
-						}
-					}
-
-#ifdef SOFT_CONVOLVE
-
-					// With software for reference
-					// Build U, windowing, calculate output
-					memset(self->U, 0, sizeof(self->U));
-
-					int d_index = 512 - (self->v_pos >> 1);
-					int v_index = (self->v_pos % 128) >> 1;
-					while (v_index < 1024) {
-						for (int i = 0; i < 32; ++i) {
-							self->U[i] += self->D[d_index++] * self->V[ch][v_index++];
-						}
-						v_index += 128 - 32;
-						d_index += 64 - 32;
-					}
-
-					d_index -= (512 - 32);
-					v_index = (128 - 32 + 1024) - v_index;
-					while (v_index < 1024) {
-						for (int i = 0; i < 32; ++i) {
-							self->U[i] += self->D[d_index++] * self->V[ch][v_index++];
-						}
-
-						v_index += 128 - 32;
-						d_index += 64 - 32;
-					}
-
-					// Verify hardware results against software results
-					if (memcmp(hw_U, self->U,sizeof(hw_U)))
-					{
-						*((volatile uint8_t *)OUTPORT)=0x42;
-						//*((volatile uint8_t *)OUTPORT)=0x42;
-						for (int i = 0; i < 32; ++i) {
-							*((volatile uint32_t *)OUTPORT_L)=hw_U[i];
-							*((volatile uint32_t *)OUTPORT_R)=self->U[i];
-						}
-
-						for(;;);
-					}
-#endif
-					{
-						volatile struct io_audio_out *out_channel = (ch == 0)
-						? io_audio_out_left
-						: io_audio_out_right;
-						for (int j = 0; j < 32; j++) {
-							out_channel->sample = hw_U[j] / (0x10000);
-						}
-					}
-				} // End of synthesis channel loop
-				out_pos += 32;
+				plm_audio_synthesize_sample(self, p, &out_pos);
 			} // End of synthesis sub-block loop
 
 		} // Decoding of the granule finished
@@ -3178,7 +3138,60 @@ void plm_audio_decode_frame(plm_audio_t *self) {
 	plm_dma_buffer_align(self->buffer);
 }
 
+void plm_audio_decode_layer_i_frame(plm_audio_t *self) {
+	int sblimit = 32;
+	if (self->bound > sblimit) {
+		self->bound = sblimit;
+	}
+
+	for (int sb = 0; sb < self->bound; sb++) {
+		self->allocation[0][sb] = plm_audio_read_allocation(self, sb, -1);
+		self->allocation[1][sb] = plm_audio_read_allocation(self, sb, -1);
+	}
+
+	for (int sb = self->bound; sb < sblimit; sb++) {
+		self->allocation[0][sb] =
+			self->allocation[1][sb] =
+			plm_audio_read_allocation(self, sb, -1);
+	}
+
+	int channels = (self->mode == PLM_AUDIO_MODE_MONO) ? 1 : 2;
+	for (int sb = 0; sb < sblimit; sb++) {
+		for (int ch = 0; ch < channels; ch++) {
+			if (self->allocation[ch][sb]) {
+				self->scale_factor[ch][sb][0] = plm_dma_buffer_read(self->buffer, 6);
+			}
+		}
+		if (self->mode == PLM_AUDIO_MODE_MONO) {
+			self->scale_factor[1][sb][0] = self->scale_factor[0][sb][0];
+		}
+	}
+
+	int out_pos = 0;
+	for (int sample = 0; sample < 12; sample++) {
+		for (int sb = 0; sb < self->bound; sb++) {
+			plm_audio_read_layer_i_sample(self, 0, sb);
+			plm_audio_read_layer_i_sample(self, 1, sb);
+		}
+		for (int sb = self->bound; sb < sblimit; sb++) {
+			plm_audio_read_layer_i_sample(self, 0, sb);
+			self->sample[1][sb][0] = self->sample[0][sb][0];
+		}
+
+		plm_audio_synthesize_sample(self, 0, &out_pos);
+	}
+
+	plm_dma_buffer_align(self->buffer);
+}
+
 const plm_quantizer_spec_t *plm_audio_read_allocation(plm_audio_t *self, int sb, int tab3) {
+	if (tab3 < 0) {
+		int allocation = plm_dma_buffer_read(self->buffer, 4);
+		return (allocation && allocation < 15)
+			? (&PLM_AUDIO_LAYER_I_QUANT_TAB[allocation - 1])
+			: 0;
+	}
+
 	int tab4 = PLM_AUDIO_QUANT_LUT_STEP_3[tab3][sb];
 	int qtab = PLM_AUDIO_QUANT_LUT_STEP_4[tab4 & 15][plm_dma_buffer_read(self->buffer, tab4 >> 4)];
 	return qtab ? (&PLM_AUDIO_QUANT_TAB[qtab - 1]) : 0;
@@ -3234,6 +3247,123 @@ void plm_audio_read_samples(plm_audio_t *self, int ch, int sb, int part) {
 
 	val = (adj - sample[2]) * scale;
 	sample[2] = (val * (sf >> 12) + ((val * (sf & 4095) + 2048) >> 12)) >> 12;
+}
+
+void plm_audio_read_layer_i_sample(plm_audio_t *self, int ch, int sb) {
+	const plm_quantizer_spec_t *q = self->allocation[ch][sb];
+	int sf = self->scale_factor[ch][sb][0];
+	int val = 0;
+
+	if (!q) {
+		self->sample[ch][sb][0] = 0;
+		return;
+	}
+
+	if (sf == 63) {
+		sf = 0;
+	}
+	else {
+		int shift = (sf / 3) | 0;
+		sf = (PLM_AUDIO_SCALEFACTOR_BASE[sf % 3] + ((1 << shift) >> 1)) >> shift;
+	}
+
+	int sample = plm_dma_buffer_read(self->buffer, q->bits);
+	int adj = q->levels;
+	int scale = 65536 / (adj + 1);
+	adj = ((adj + 1) >> 1) - 1;
+
+	val = (adj - sample) * scale;
+	self->sample[ch][sb][0] =
+		(val * (sf >> 12) + ((val * (sf & 4095) + 2048) >> 12)) >> 12;
+}
+
+void plm_audio_synthesize_sample(plm_audio_t *self, int ss, int *out_pos) {
+	// Shifting step
+	self->v_pos = (self->v_pos - 64) & 1023;
+
+	for (int ch = 0; ch < 2; ch++) {
+		plm_audio_idct36(self->sample[ch], ss, self->V[ch], self->v_pos);
+
+		// Using hardware
+		intsample_t hw_U[32];
+
+		{
+			for (int i = 0; i < 32; ++i) {
+
+				int d_index = 512 - (self->v_pos >> 1);
+				int v_index = (self->v_pos % 128) >> 1;
+
+				// calculate the first 8
+				synth_window_mac->result=0;
+				synth_window_mac->addr = &self->V[ch][v_index+i];
+				synth_window_mac->index = d_index+i;
+
+				// step forward
+				v_index += 128*8;
+				d_index += 64*8;
+
+				// second 8 samples
+				d_index -= (512 - 32);
+				v_index = (128 - 32 + 1024) - v_index;
+				// CPU will stall here probably
+				synth_window_mac->addr = &self->V[ch][v_index+i];
+				synth_window_mac->index = d_index+i;
+				// CPU will stall here probably
+				hw_U[i] = synth_window_mac->result;
+				//*((volatile intsample_t *)OUTPORT)=hw_U[i];
+			}
+		}
+
+#ifdef SOFT_CONVOLVE
+
+		// With software for reference
+		// Build U, windowing, calculate output
+		memset(self->U, 0, sizeof(self->U));
+
+		int d_index = 512 - (self->v_pos >> 1);
+		int v_index = (self->v_pos % 128) >> 1;
+		while (v_index < 1024) {
+			for (int i = 0; i < 32; ++i) {
+				self->U[i] += self->D[d_index++] * self->V[ch][v_index++];
+			}
+			v_index += 128 - 32;
+			d_index += 64 - 32;
+		}
+
+		d_index -= (512 - 32);
+		v_index = (128 - 32 + 1024) - v_index;
+		while (v_index < 1024) {
+			for (int i = 0; i < 32; ++i) {
+				self->U[i] += self->D[d_index++] * self->V[ch][v_index++];
+			}
+
+			v_index += 128 - 32;
+			d_index += 64 - 32;
+		}
+
+		// Verify hardware results against software results
+		if (memcmp(hw_U, self->U,sizeof(hw_U)))
+		{
+			*((volatile uint8_t *)OUTPORT)=0x42;
+			//*((volatile uint8_t *)OUTPORT)=0x42;
+			for (int i = 0; i < 32; ++i) {
+				*((volatile uint32_t *)OUTPORT_L)=hw_U[i];
+				*((volatile uint32_t *)OUTPORT_R)=self->U[i];
+			}
+
+			for(;;);
+		}
+#endif
+		{
+			volatile struct io_audio_out *out_channel = (ch == 0)
+			? io_audio_out_left
+			: io_audio_out_right;
+			for (int j = 0; j < 32; j++) {
+				out_channel->sample = hw_U[j] / (0x10000);
+			}
+		}
+	} // End of synthesis channel loop
+	out_pos += 32;
 }
 
 void plm_audio_idct36(int s[32][3], int ss, intsample_t *d, int dp)
