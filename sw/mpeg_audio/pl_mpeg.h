@@ -2928,7 +2928,18 @@ plm_samples_t *plm_audio_decode(plm_audio_t *self) {
         return NULL;
     }
 
+    // To avoid accidental detection of frame headers inside of superfluous
+    // data, we keep note here on the amount of data we should skip
+    int bit_index_next_frame_header =
+        fifo_ctrl->read_bit_index + (self->next_frame_data_size << 3);
+
     plm_audio_decode_frame(self);
+
+    if (fifo_ctrl->read_bit_index < bit_index_next_frame_header) {
+        plm_dma_buffer_skip(self->buffer, bit_index_next_frame_header -
+                                              fifo_ctrl->read_bit_index);
+    }
+
     self->next_frame_data_size = 0;
 
     self->samples.time = self->time;
@@ -2945,8 +2956,18 @@ int plm_audio_find_frame_sync(plm_audio_t *self) {
     size_t i;
     for (i = fifo_ctrl->read_bit_index >> 3;
          i < fifo_ctrl->write_byte_index - 1; i++) {
-        if (self->buffer->bytes[i] == 0xFF &&
-            (self->buffer->bytes[i + 1] & 0xFC) == 0xFC) {
+        if (
+            // Ensure first 8 bytes of sync word are set
+            self->buffer->bytes[i] == 0xFF &&
+            // Ensure next 4 bytes of sync words are set,
+            // MPEG ID == 1 and Layer either 1 or 2
+            (self->buffer->bytes[i + 1] & 0xFC) == 0xFC &&
+            // Ensure layer != 0
+            (self->buffer->bytes[i + 1] & 0x06) != 0x00 &&
+            // Ensure bitrate index != 0xf
+            (self->buffer->bytes[i + 2] & 0xF0) != 0xF0 &&
+            // Ensure sampling frequency != 3
+            (self->buffer->bytes[i + 2] & 0x0C) != 0x0C) {
             fifo_ctrl->read_bit_index = ((i + 1) << 3) + 3;
             return TRUE;
         }
