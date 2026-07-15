@@ -28,12 +28,15 @@ There are different chipsets available
 Periods in certain time systems. Since this can be totally confusing,
 here some notes.
 
-            33 bit   32 bit   16 bit       
-            90 khz   45 kHz   703.125 Hz   30 MHz
-    25 Hz   3600     1800     28.125       1200000
-    30 Hz   3000     1500     23.43        1000000
-    50 Hz   1800     900      14.0625      600000
-    60 Hz   1500     750      11.71875     500000
+                 33 bit   32 bit   16 bit       
+                 90 khz   45 kHz   703.125 Hz   30 MHz
+    1  23.98 Hz  3753.75  1876.88  29.326       1251251
+    2  24 Hz     3750     1875     29.297       1250000
+    3  25 Hz     3600     1800     28.125       1200000
+    4  29.97 Hz  3003     1501.5   23.46        1001001
+    5  30 Hz     3000     1500     23.43        1000000
+    6  50 Hz     1800     900      14.0625      600000
+    8  60 Hz     1500     750      11.71875     500000
 
 Some registers and variables
 

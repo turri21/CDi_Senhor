@@ -26,8 +26,8 @@
     * For some reason, it seems to be absent on other models with different hardware, like the 450/00
     * The problem can be fixed by overclocking the CPU
 * Burn:Cycle - Random flickery animated text in front of the "Psychic Roulette" credit card terminal
-    * This actually happens on the real machine. I also thought this might be a CPU speed issue, considering that
-      the flickering disappears if the CPU is slightly overclocked.
+    * This actually happens on the real machine. I also thought this might be a CPU speed issue, considering
+      that the flickering disappears if the CPU is slightly overclocked.
 * Flashback: The audio and video during the intro are asynchronous
     * This curiously happens on the real machine as well and doesn't even depend on 50 or 60 Hz
     * It seems to be an oversight by the developers when the game was ported to CD-i

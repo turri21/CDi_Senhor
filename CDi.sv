@@ -730,11 +730,11 @@ module emu (
     bit enable_reset_on_cd_img_mount = 0;
     bit [1:0] debug_limited_to_full = 0;
     bit audio_cd_in_tray  /*verilator public_flat_rw */ = 0;
-    bit config_disable_cpu_starve = 1;
+    bit config_disable_cpu_starve  /*verilator public_flat_rw */ = 1;
     bit config_auto_play  /*verilator public_flat_rw */ = 1;
     bit config_disable_vmpeg = 0;
     bit config_first_player_back_port = 0;
-    bit config_disable_seek_time = 1;
+    bit config_disable_seek_time  /*verilator public_flat_rw */ = 1;
     bit debug_disable_vcd_clock = 0;
     bit debug_activate_vcd_filter = 1;
     bit [2:0] pointing_dev_speed = 0;
