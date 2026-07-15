@@ -23,7 +23,7 @@
 
 #define SCC68070
 #define SLAVE
-// #define TRACE
+#define TRACE
 // #define SIMULATE_RC5
 
 #define PL_MPEG_IMPLEMENTATION
@@ -128,7 +128,8 @@ template <typename T, typename U> constexpr T BIT(T x, U n) noexcept {
     return (x >> n) & T(1);
 }
 
-bool press_button_signal{false};
+bool press_button1_signal{false};
+bool press_button2_signal{false};
 bool print_instructions{false};
 
 void SignalHandler(int signum, siginfo_t *info, void *context) {
@@ -142,7 +143,7 @@ void SignalHandler(int signum, siginfo_t *info, void *context) {
     case SIGUSR1:
         // Press a button
         // example: killall -s USR1 Vemu
-        press_button_signal = true;
+        press_button1_signal = true;
         break;
     case SIGUSR2:
         // example: killall -s USR2 Vemu
@@ -700,7 +701,7 @@ class CDi {
     void lost_ride_pal() {
         if (frame_index > 150) {
             if ((frame_index % 40) == 10) {
-                press_button_signal = true;
+                press_button1_signal = true;
             }
         }
     }
@@ -708,7 +709,35 @@ class CDi {
     void PressEvery5Frames() {
         if (frame_index > 200) {
             if ((frame_index % 5) == 1) {
-                press_button_signal = true;
+                press_button1_signal = true;
+            }
+        }
+    }
+
+    void chaos_control_germany() {
+
+        if (frame_index > 1030) {
+            dut.rootp->emu__DOT__config_disable_seek_time = 0;
+            dut.rootp->emu__DOT__config_disable_cpu_starve = 0;
+
+            if ((frame_index % 100) == 10) {
+                press_button2_signal = true;
+            }
+
+            if ((frame_index % 100) == 30) {
+                press_button2_signal = true;
+            }
+
+            if ((frame_index % 100) == 50) {
+                press_button1_signal = true;
+            }
+
+            if ((frame_index % 100) == 70) {
+                press_button1_signal = true;
+            }
+        } else if (frame_index > 150) {
+            if ((frame_index % 20) == 10) {
+                press_button1_signal = true;
             }
         }
     }
@@ -718,15 +747,15 @@ class CDi {
         switch (frame_index) {
         case 154:
             // Skip Philips Intro
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         case 414:
             // Skip SUPERCLUB company logo
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         case 460:
             // Skip game intro
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         }
     }
@@ -736,11 +765,11 @@ class CDi {
         switch (frame_index) {
         case 250:
             // Skip Philips Intro
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         case 300:
             // Skip ICDI company logo
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         case 313:
 #ifdef TRACE
@@ -754,7 +783,7 @@ class CDi {
             break;
         case 460: // TODO index might be wrong
             // Skip game intro
-            press_button_signal = true;
+            press_button1_signal = true;
             break;
         }
     }
@@ -1082,20 +1111,29 @@ class CDi {
                 // braindead13_pal();
                 // lost_ride_pal();
                 // PressEvery5Frames();
+                // chaos_control_germany();
             }
 #endif
 
-            if (press_button_signal) {
-                press_button_signal = false;
-                release_button_frame = frame_index + 2;
-                printf("Press a button!\n");
-                fprintf(stderr, "Press a button!\n");
-                dut.rootp->emu__DOT__JOY0 = 0b10000;
+            if (press_button1_signal) {
+                press_button1_signal = false;
+                release_button_frame = frame_index + 3;
+                printf("Press Button 1!\n");
+                fprintf(stderr, "Press Button 1!\n");
+                dut.rootp->emu__DOT__JOY0 |= 0b010000;
+            }
+
+            if (press_button2_signal) {
+                press_button2_signal = false;
+                release_button_frame = frame_index + 3;
+                printf("Press Button 2!\n");
+                fprintf(stderr, "Press Button 2!\n");
+                dut.rootp->emu__DOT__JOY0 |= 0b100000;
             }
 
             if (release_button_frame == frame_index) {
-                printf("Release a button!\n");
-                fprintf(stderr, "Release a button!\n");
+                printf("Release buttons!\n");
+                fprintf(stderr, "Release buttons!\n");
                 dut.rootp->emu__DOT__JOY0 = 0b00000;
             }
 

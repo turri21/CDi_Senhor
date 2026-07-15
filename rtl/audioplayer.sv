@@ -55,7 +55,6 @@ module audioplayer (
         .sample_channel(xa_channel),
 
         .start_playback(decoder_start),
-        .stop_playback(stop_playback),
         .cdda_mode,
         .playback_coding_out(current_active_coding),
         .playback_addr(playback_request_addr),
@@ -197,7 +196,7 @@ module audioplayer (
                 finished_buffer_playback_latched <= 1;
             end
 
-            if (finished_buffer_playback || stop_playback) begin
+            if (finished_buffer_playback) begin
                 finished_buffer_playback_latched <= 0;
             end
 
